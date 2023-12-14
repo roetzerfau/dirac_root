@@ -35,7 +35,7 @@ using namespace dealii;
 
 constexpr unsigned int nof_scalar_fields{2};
 constexpr unsigned int dimension_omega{2};
-constexpr unsigned int refinement{3};
+constexpr unsigned int refinement{4};
 constexpr unsigned int p_degree{1};
 
 template <int dim_omega, int dim_sigma> class CouplingLaplace {
@@ -73,6 +73,12 @@ constexpr double beta = 1;
 
 template <int dim_omega> bool isOnSigma(Point<dim_omega> p) {
   if ((p[1] >= -0.5 && p[1] <= 0.5) && (p[0] == 0))
+    return true;
+  else
+    return false;
+}
+template <int dim_omega> bool isOnSigma_boundary(Point<dim_omega> p) {
+  if ((p[1] == -0.5 || p[1] == 0.5) && (p[0] == 0))
     return true;
   else
     return false;
@@ -216,6 +222,7 @@ void CouplingLaplace<dim_omega, dim_sigma>::assemble_system() {
       dof_indices_per_component;
   std::array<std::set<types::global_dof_index>, nof_scalar_fields>
       dof_indices_sigma;
+  std::array<types::global_dof_index, nof_scalar_fields> dof_index_midpoint;
 
   std::vector<typename DoFHandler<dim_omega>::face_iterator> faces;
   for (const auto &cell : dof_handler.active_cell_iterators()) {
@@ -250,8 +257,11 @@ void CouplingLaplace<dim_omega, dim_sigma>::assemble_system() {
           push = push && true;
         } else
           push = push && false;
-        if ((p[1] == -0.5 || p[1] == 0.5) && (p[0] == 0)) {
+        if (PrescribedSolution::isOnSigma_boundary(p)) {
           dof_indices_boundary_sigma[component_i].insert(local_dof_indices[i]);
+        }
+        if (p[0] == 0 && p[1] == 0) {
+          dof_index_midpoint[component_i] = local_dof_indices[i];
         }
       }
       if (push) {
@@ -379,8 +389,12 @@ void CouplingLaplace<dim_omega, dim_sigma>::assemble_system() {
   std::map<types::global_dof_index, double> boundary_values_sigma;
   for (types::global_dof_index i :
        dof_indices_boundary_sigma[concentration_mu.component]) {
-    boundary_values_sigma.insert(std::make_pair(i, 1.0));
+    boundary_values_sigma.insert(std::make_pair(i, 0.0));
   }
+
+  std::map<types::global_dof_index, double> midpoint_value_sigma;
+  midpoint_value_sigma.insert(
+      std::make_pair(dof_index_midpoint[concentration_mu.component], 1));
 
   std::map<types::global_dof_index, double> dirac_extend_zero;
   for (types::global_dof_index i :
@@ -402,6 +416,8 @@ void CouplingLaplace<dim_omega, dim_sigma>::assemble_system() {
                                      solution, system_rhs);
   MatrixTools::apply_boundary_values(dirac_extend_zero, system_matrix, solution,
                                      system_rhs);
+  MatrixTools::apply_boundary_values(midpoint_value_sigma, system_matrix,
+                                     solution, system_rhs);
 }
 template <int dim_omega, int dim_sigma>
 void CouplingLaplace<dim_omega, dim_sigma>::solve() {
@@ -451,10 +467,8 @@ void CouplingLaplace<dim_omega, dim_sigma>::run() {
 
 int main() {
 
-  {
-    CouplingLaplace<dimension_omega, 1> laplace_problem_2d;
-    laplace_problem_2d.run();
-  }
+  CouplingLaplace<dimension_omega, 1> laplace_problem_2d;
+  laplace_problem_2d.run();
 
   return 0;
 }
