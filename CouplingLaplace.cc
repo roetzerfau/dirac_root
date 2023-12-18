@@ -36,7 +36,7 @@ using namespace dealii;
 constexpr unsigned int nof_scalar_fields{2};
 constexpr unsigned int dimension_omega{2};
 constexpr unsigned int refinement{4};
-constexpr unsigned int p_degree{1};
+constexpr unsigned int p_degree{2};
 
 template <int dim_omega, int dim_sigma> class CouplingLaplace {
 public:
@@ -65,23 +65,49 @@ private:
   Vector<double> system_rhs;
   double distance_between_grid_points;
 
-  double g = 1;
+  double g = 1.0;
 };
 namespace PrescribedSolution {
-constexpr double alpha = 0.3;
-constexpr double beta = 1;
+constexpr double boundary1 = -0.5;
+constexpr double boundary2 = 0.5;
 
 template <int dim_omega> bool isOnSigma(Point<dim_omega> p) {
-  if ((p[1] >= -0.5 && p[1] <= 0.5) && (p[0] == 0))
-    return true;
+  bool return_value = true;
+  if (p[0] >= boundary1 && p[0] <= boundary2)
+    return_value = return_value && true;
   else
-    return false;
+    return_value = return_value && false;
+  for (unsigned int i = 1; i < dim_omega; i++) {
+    if (p[i] == 0)
+      return_value = return_value && true;
+    else
+      return_value = return_value && false;
+  }
+  return return_value;
 }
 template <int dim_omega> bool isOnSigma_boundary(Point<dim_omega> p) {
-  if ((p[1] == -0.5 || p[1] == 0.5) && (p[0] == 0))
-    return true;
+  bool return_value = true;
+  if (p[0] == boundary1 || p[0] == boundary2)
+    return_value = return_value && true;
   else
-    return false;
+    return_value = return_value && false;
+  for (unsigned int i = 1; i < dim_omega; i++) {
+    if (p[i] == 0)
+      return_value = return_value && true;
+    else
+      return_value = return_value && false;
+  }
+  return return_value;
+}
+template <int dim_omega> bool isMidPoint(Point<dim_omega> p) {
+  bool return_value = true;
+  for (unsigned int i = 0; i < dim_omega; i++) {
+    if (p[i] == 0)
+      return_value = return_value && true;
+    else
+      return_value = return_value && false;
+  }
+  return return_value;
 }
 template <int dim_omega> class F_Omega : public Function<dim_omega> {
 public:
@@ -129,7 +155,7 @@ double
 BoundaryValues_Omega<dim_omega>::value(const Point<dim_omega> & /*p*/,
                                        const unsigned int component) const {
   if (component == 0)
-    return 0.0; // p.square();
+    return 0.0;
   else
     return 0.0; //
 }
@@ -196,7 +222,9 @@ void CouplingLaplace<dim_omega, dim_sigma>::assemble_system() {
   const unsigned int dofs_per_cell = fe.n_dofs_per_cell();
   const unsigned int dofs_per_face = fe.n_dofs_per_face();
   std::cout << "fe.n_dofs_per_face() " << fe.n_dofs_per_face()
-            << " dofs_per_cell  " << dofs_per_cell << std::endl;
+            << " dofs_per_cell  " << dofs_per_cell << " fe.n_dofs_per_line() "
+            << fe.n_dofs_per_line() << " fe.n_dofs_per_vertex() "
+            << fe.n_dofs_per_vertex() << std::endl;
 
   FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
   Vector<double> cell_rhs(dofs_per_cell);
@@ -225,6 +253,8 @@ void CouplingLaplace<dim_omega, dim_sigma>::assemble_system() {
   std::array<types::global_dof_index, nof_scalar_fields> dof_index_midpoint;
 
   std::vector<typename DoFHandler<dim_omega>::face_iterator> faces;
+  std::vector<typename DoFHandler<dim_omega>::active_line_iterator> lines;
+
   for (const auto &cell : dof_handler.active_cell_iterators()) {
     fe_values.reinit(cell);
     for (const typename DoFHandler<dim_omega>::face_iterator &face :
@@ -248,8 +278,7 @@ void CouplingLaplace<dim_omega, dim_sigma>::assemble_system() {
         const unsigned int component_i = fe.system_to_component_index(i).first;
 
         dof_indices_per_component[component_i].insert(local_dof_indices[i]);
-
-        if (PrescribedSolution::isOnSigma(p)) {
+        if (PrescribedSolution::isOnSigma<dim_omega>(p)) {
           dof_indices_sigma_cell[component_i].push_back(local_dof_indices[i]);
           dof_indices_sigma_cell_v2.push_back(local_dof_indices[i]);
 
@@ -257,10 +286,10 @@ void CouplingLaplace<dim_omega, dim_sigma>::assemble_system() {
           push = push && true;
         } else
           push = push && false;
-        if (PrescribedSolution::isOnSigma_boundary(p)) {
+        if (PrescribedSolution::isOnSigma_boundary<dim_omega>(p)) {
           dof_indices_boundary_sigma[component_i].insert(local_dof_indices[i]);
         }
-        if (p[0] == 0 && p[1] == 0) {
+        if (PrescribedSolution::isMidPoint<dim_omega>(p)) {
           dof_index_midpoint[component_i] = local_dof_indices[i];
         }
       }
@@ -286,20 +315,23 @@ void CouplingLaplace<dim_omega, dim_sigma>::assemble_system() {
         // fe.system_to_component_index(i).first;
         for (const unsigned int j : fe_values.dof_indices()) {
           // const unsigned int component_j =
-          // fe.system_to_component_index(j).first;
+          //   fe.system_to_component_index(j).first;
 
           cell_matrix(i, j) +=
               fe_values[concentration_u].gradient(i, q_index) // grad phi_i(x_q)
-                  * fe_values[concentration_u].gradient(
-                        j, q_index)        // grad phi_j(x_q)
-                  * fe_values.JxW(q_index) // dx
-              - g *
-                    (fe_values[concentration_mu].value(i, q_index) -
-                     fe_values[concentration_u].value(i, q_index)) //
-                    * fe_values[concentration_u].value(j, q_index) *
-                    fe_values.JxW(q_index);
+              *
+              fe_values[concentration_u].gradient(j, q_index) // grad phi_j(x_q)
+              * fe_values.JxW(q_index);                       // dx
+
+          double value = -g *
+                         (fe_values[concentration_mu].value(j, q_index) -
+                          fe_values[concentration_u].value(j, q_index)) *
+                         fe_values[concentration_u].value(i, q_index) *
+                         fe_values.JxW(q_index);
+          cell_matrix(i, j) += value;
         }
         const auto &x_q = fe_values.quadrature_point(q_index);
+
         cell_rhs(i) += fe_values.shape_value(i, q_index) *
                        f_omega.value(x_q) *    // f(x_q)
                        fe_values.JxW(q_index); // dx;
@@ -330,6 +362,8 @@ void CouplingLaplace<dim_omega, dim_sigma>::assemble_system() {
 
     std::cout << std::endl;
   }
+  std::cout << "----------------" << std::endl;
+
   for (std::vector<types::global_dof_index> cell_sigma :
        dof_indices_sigma_per_cells) {
     triangulation_sigma.clear();
@@ -357,16 +391,23 @@ void CouplingLaplace<dim_omega, dim_sigma>::assemble_system() {
       for (const unsigned int q_index :
            fe_values_sigma.quadrature_point_indices()) {
         for (const unsigned int i : fe_values_sigma.dof_indices()) {
+          // const unsigned int component_i =
+          //    fe_sigma.system_to_component_index(i).first;
           for (const unsigned int j : fe_values_sigma.dof_indices()) {
+            //  const unsigned int component_j =
+            //    fe_sigma.system_to_component_index(j).first;
             cell_matrix(i, j) +=
                 ((fe_values_sigma[concentration_mu].gradient(i, q_index) *
                   fe_values_sigma[concentration_mu].gradient(j, q_index))) *
-                    fe_values_sigma.JxW(q_index) -
-                g *
-                    (fe_values_sigma[concentration_u].value(i, q_index) -
-                     fe_values_sigma[concentration_mu].value(i, q_index)) //
-                    * fe_values[concentration_mu].value(j, q_index) *
-                    fe_values.JxW(q_index);
+                fe_values_sigma.JxW(q_index);
+
+            double value =
+                -g *
+                (fe_values_sigma[concentration_u].value(j, q_index) -
+                 fe_values_sigma[concentration_mu].value(j, q_index)) *
+                fe_values[concentration_mu].value(i, q_index) *
+                fe_values.JxW(q_index);
+            cell_matrix(i, j) += value;
           }
           const auto &x_q = fe_values_sigma.quadrature_point(q_index);
           cell_rhs(i) +=
@@ -381,6 +422,7 @@ void CouplingLaplace<dim_omega, dim_sigma>::assemble_system() {
           system_matrix.add(local_dof_indices[i], local_dof_indices[j],
                             cell_matrix(i, j));
         }
+
         system_rhs(local_dof_indices[i]) += cell_rhs(i);
       }
     }
@@ -391,6 +433,11 @@ void CouplingLaplace<dim_omega, dim_sigma>::assemble_system() {
        dof_indices_boundary_sigma[concentration_mu.component]) {
     boundary_values_sigma.insert(std::make_pair(i, 0.0));
   }
+
+  std::cout << "midpoint: ";
+  for (types::global_dof_index i : dof_index_midpoint)
+    std::cout << i << " ";
+  std::cout << std::endl;
 
   std::map<types::global_dof_index, double> midpoint_value_sigma;
   midpoint_value_sigma.insert(
@@ -447,10 +494,10 @@ void CouplingLaplace<dim_omega, dim_sigma>::output_results() const {
   std::ofstream output("couplingLaplace_solution.vtk");
   data_out.write_vtk(output);
 
-  MatrixOut matrix_out;
-  std::ofstream out("system.vtk");
-  matrix_out.build_patches(system_matrix, "system");
-  matrix_out.write_vtk(out);
+  /* MatrixOut matrix_out;
+   std::ofstream out("system.vtk");
+   matrix_out.build_patches(system_matrix, "system");
+   matrix_out.write_vtk(out);*/
 }
 
 template <int dim_omega, int dim_sigma>
