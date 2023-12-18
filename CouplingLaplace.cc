@@ -34,9 +34,9 @@
 using namespace dealii;
 
 constexpr unsigned int nof_scalar_fields{2};
-constexpr unsigned int dimension_omega{2};
+constexpr unsigned int dimension_omega{3};
 constexpr unsigned int refinement{4};
-constexpr unsigned int p_degree{2};
+constexpr unsigned int p_degree{1};
 
 template <int dim_omega, int dim_sigma> class CouplingLaplace {
 public:
@@ -220,7 +220,6 @@ void CouplingLaplace<dim_omega, dim_sigma>::assemble_system() {
                                     update_JxW_values);
 
   const unsigned int dofs_per_cell = fe.n_dofs_per_cell();
-  const unsigned int dofs_per_face = fe.n_dofs_per_face();
   std::cout << "fe.n_dofs_per_face() " << fe.n_dofs_per_face()
             << " dofs_per_cell  " << dofs_per_cell << " fe.n_dofs_per_line() "
             << fe.n_dofs_per_line() << " fe.n_dofs_per_vertex() "
@@ -255,9 +254,11 @@ void CouplingLaplace<dim_omega, dim_sigma>::assemble_system() {
   std::vector<typename DoFHandler<dim_omega>::face_iterator> faces;
   std::vector<typename DoFHandler<dim_omega>::active_line_iterator> lines;
 
+
   for (const auto &cell : dof_handler.active_cell_iterators()) {
     fe_values.reinit(cell);
-    for (const typename DoFHandler<dim_omega>::face_iterator &face :
+
+    /*for (const typename DoFHandler<dim_omega>::face_iterator &face :
          cell->face_iterators()) {
       if (std::find(faces.begin(), faces.end(), face) == faces.end())
         faces.push_back(face);
@@ -266,6 +267,26 @@ void CouplingLaplace<dim_omega, dim_sigma>::assemble_system() {
 
       std::vector<types::global_dof_index> local_dof_indices(dofs_per_face);
       face->get_dof_indices(local_dof_indices);
+*/
+
+     for (unsigned int l = 0; l < cell->n_lines(); l++) {
+
+      const typename DoFHandler<dim_omega>::active_line_iterator line =
+          cell->line(l);
+
+      if (std::find(lines.begin(), lines.end(), line) == lines.end())
+        lines.push_back(line);
+      else
+        continue;  
+
+
+
+      std::vector<types::global_dof_index> local_dof_indices(
+          fe.n_dofs_per_line() + fe.n_dofs_per_vertex() * 2);
+      line->get_dof_indices(local_dof_indices);
+
+
+
 
       std::array<std::vector<types::global_dof_index>, nof_scalar_fields>
           dof_indices_sigma_cell;
