@@ -41,13 +41,13 @@
 #include <deal.II/numerics/vector_tools.h>
 
 using namespace dealii;
-double g = 0;
+double g = 1;
 double w = numbers::PI * 3 / 2;
 
 constexpr unsigned int nof_scalar_fields{2};
 constexpr unsigned int dimension_omega{2};
 constexpr unsigned int dimension_sigma{1};
-constexpr unsigned int constructed_solution{2};
+constexpr unsigned int constructed_solution{1};
 
 const FEValuesExtractors::Scalar concentration_u(0);
 const FEValuesExtractors::Scalar concentration_mu(1);
@@ -547,25 +547,13 @@ void CouplingLaplace<dim_omega, dim_sigma>::assemble_system() {
       break;
     }
   }
+  MatrixTools::apply_boundary_values(boundary_values_sigma, system_matrix,
+                                     solution, system_rhs, true);
+
 
   std::map<types::global_dof_index, double> midpoint_value_sigma;
   midpoint_value_sigma.insert(
       std::make_pair(dof_index_midpoint[concentration_mu.component], 1));
-
-  // Extend Sigma
-  std::map<types::global_dof_index, double> dirac_extend_zero;
-  for (types::global_dof_index i :
-       dof_indices_per_component[concentration_mu.component]) {
-    if (dof_indices_sigma[concentration_mu.component].find(i) ==
-        dof_indices_sigma[concentration_mu.component].end()) {
-      dirac_extend_zero.insert(std::make_pair(i, 1.0));
-    }
-  }
-  MatrixTools::apply_boundary_values(dirac_extend_zero, system_matrix, solution,
-                                     system_rhs, false);
-
-  MatrixTools::apply_boundary_values(boundary_values_sigma, system_matrix,
-                                     solution, system_rhs, false);
 
   // Boundary Omega
   std::map<types::global_dof_index, double> boundary_values_omega;
@@ -575,10 +563,36 @@ void CouplingLaplace<dim_omega, dim_sigma>::assemble_system() {
       boundary_values_omega);
   MatrixTools::apply_boundary_values(boundary_values_omega, system_matrix,
                                      solution, system_rhs, true);
+
+ // Extend Sigma
+/* std::map<types::global_dof_index, double> dirac_extend_zero;
+  for (types::global_dof_index i :
+       dof_indices_per_component[concentration_mu.component]) {
+    if (dof_indices_sigma[concentration_mu.component].find(i) ==
+        dof_indices_sigma[concentration_mu.component].end()) {
+      dirac_extend_zero.insert(std::make_pair(i, 0.0));
+    }
+  }
+  MatrixTools::apply_boundary_values(dirac_extend_zero, system_matrix, solution,
+                                     system_rhs, false);*/
+                               
+
+ /*for(types::global_dof_index i :
+  dof_indices_per_component[concentration_mu.component])
+  {
+    if (dof_indices_sigma[concentration_mu.component].find(i) ==
+         dof_indices_sigma[concentration_mu.component].end())
+         {
+          system_matrix.set(i,i,1);
+          system_rhs[i] = 0;
+         }
+
+  }
+*/
 }
 template <int dim_omega, int dim_sigma>
 void CouplingLaplace<dim_omega, dim_sigma>::solve() {
-  SolverControl solver_control(10000, 1e-12);
+  SolverControl solver_control(50000, 1e-12);
   SolverCG<Vector<double>> solver(solver_control); // SolverCG    SolverBicgstab
   solver.solve(system_matrix, solution, system_rhs, PreconditionIdentity());
 
@@ -666,9 +680,9 @@ int main() {
 
   CouplingLaplace<dimension_omega, dimension_sigma> *laplace_problem_2d;
 
-  const unsigned int p_degree[1] = {1};
+  const unsigned int p_degree[3] = {1, 2, 3};
   constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);
-  const unsigned int refinement[3] = {3, 4, 5};
+  const unsigned int refinement[5] = {3,4,5,6,7};
   constexpr unsigned int refinement_size =
       sizeof(refinement) / sizeof(refinement[0]);
 
@@ -689,7 +703,7 @@ int main() {
   std::ofstream myfile;
   myfile.open("convergence_results.txt");
   for (unsigned int f = 0; f < nof_scalar_fields; f++) {
-    myfile << "refinement/p_degree ";
+    myfile << "refinement/p_degree, ";
     for (unsigned int p = 0; p < p_degree_size; p++) {
       myfile << p_degree[p] << ",";
     }
@@ -704,11 +718,12 @@ int main() {
         if (r != 0) {
           const double rate =
               std::log2(results[p][r - 1][f] / results[p][r][f]);
-          myfile << "( " << rate << ")";
-          std::cout << "( " << rate << ")";
+          myfile << " (" << rate << ")";
+          std::cout << " (" << rate << ")";
         }
 
         myfile << ",";
+        std::cout<<",";
       }
       myfile << std::endl;
       std::cout << std::endl;
