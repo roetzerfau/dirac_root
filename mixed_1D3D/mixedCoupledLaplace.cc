@@ -74,18 +74,20 @@ using namespace dealii;
 double g = 1;
 double w = numbers::PI * 3 / 2;
 
-constexpr unsigned int nof_scalar_fields{2};
+constexpr unsigned int nof_scalar_fields{1};
 constexpr unsigned int dimension_omega{2};
 constexpr unsigned int dimension_sigma{1};
 constexpr unsigned int constructed_solution{2};
-constexpr unsigned int concentration_base{0};
+constexpr unsigned int concentration_base{1};
 
-const FEValuesExtractors::Scalar concentration_u(0);
-const FEValuesExtractors::Scalar concentration_mu(1);
+/*
+const FEValuesExtractors::Scalar concentration_u();
+//const FEValuesExtractors::Scalar concentration_mu(1);
 const FEValuesExtractors::Vector velocity_P(nof_scalar_fields);
-const FEValuesExtractors::Vector velocity_p(nof_scalar_fields+dimension_omega);
-
-
+//const FEValuesExtractors::Vector velocity_p(nof_scalar_fields+dimension_omega);
+*/
+const FEValuesExtractors::Vector velocity_P(0);
+const FEValuesExtractors::Scalar concentration_u(dimension_omega);
 
 
 template <int dim_omega, int dim_sigma> class MixedCoupledLaplace {
@@ -427,11 +429,88 @@ void ExactSolution<dim_omega>::vector_value(const Point<dim_omega> &p,
   }
 
 
+//Tut20 -----------------
+
+constexpr double alpha = 0.3;
+    constexpr double beta  = 1;
+
+
+    template <int dim_omega>
+    class RightHandSide : public Function<dim_omega>
+    {
+    public:
+      RightHandSide()
+        : Function<dim_omega>(1)
+      {}
+
+      virtual double value(const Point<dim_omega>  &p,
+                           const unsigned int component = 0) const override;
+    };
+
+
+
+    template <int dim_omega>
+    class PressureBoundaryValues : public Function<dim_omega>
+    {
+    public:
+      PressureBoundaryValues()
+        : Function<dim_omega>(1)
+      {}
+
+      virtual double value(const Point<dim_omega>  &p,
+                           const unsigned int component = 0) const override;
+    };
+
+
+
+
+    // And then we also have to define these respective functions, of
+    // course. Given our discussion in the introduction of how the solution
+    // should look, the following computations should be straightforward:
+    template <int dim_omega>
+    double RightHandSide<dim_omega>::value(const Point<dim_omega> & /*p*/,
+                                     const unsigned int /*component*/) const
+    {
+      return 0;
+    }
+
+
+
+    template <int dim_omega>
+    double
+    PressureBoundaryValues<dim_omega>::value(const Point<dim_omega> &p,
+                                       const unsigned int /*component*/) const
+    {
+      return -(alpha * p[0] * p[1] * p[1] / 2 + beta * p[0] -
+               alpha * p[0] * p[0] * p[0] / 6);
+    }
+
+
+
+   /* template <int dim>
+    void ExactSolution<dim>::vector_value(const Point<dim> &p,
+                                          Vector<double>   &values) const
+    {
+      AssertDimension(values.size(), dim + 1);
+
+      values(0) = alpha * p[1] * p[1] / 2 + beta - alpha * p[0] * p[0] / 2;
+      values(1) = alpha * p[0] * p[1];
+      values(2) = -(alpha * p[0] * p[1] * p[1] / 2 + beta * p[0] -
+                    alpha * p[0] * p[0] * p[0] / 6);
+    }
+*/
+
+
+
+
+
+
 } // namespace PrescribedSolution
-//DG
+//DG fe(FE_Q<dim_omega>(p_degree + 1)^nof_scalar_fields, FE_RaviartThomas<dim_omega>(p_degree)),
+//fe(FESystem<dim_omega>(FE_Q<dim_omega>(p_degree + 1), nof_scalar_fields), FESystem<dim_omega>(FE_RaviartThomas<dim_omega>(p_degree)))
 template <int dim_omega, int dim_sigma>
 MixedCoupledLaplace<dim_omega, dim_sigma>::MixedCoupledLaplace(unsigned int _p_degree)
-    : p_degree(_p_degree), fe(FE_Q<dim_omega>(p_degree + 1)^nof_scalar_fields, FE_RaviartThomas<dim_omega>(p_degree)),//fe(FESystem<dim_omega>(FE_Q<dim_omega>(p_degree + 1), nof_scalar_fields), FESystem<dim_omega>(FE_RaviartThomas<dim_omega>(p_degree))),
+    : p_degree(_p_degree), fe( FESystem<dim_omega>(FE_RaviartThomas<dim_omega>(p_degree)), FESystem<dim_omega>(FE_Q<dim_omega>(p_degree), nof_scalar_fields)),
       dof_handler(triangulation),
       fe_sigma(FE_Q<dim_sigma>(p_degree+1) ^ nof_scalar_fields),
       dof_handler_sigma(triangulation_sigma) {}
@@ -524,8 +603,8 @@ void MixedCoupledLaplace<dim_omega, dim_sigma>::assemble_system() {
   const unsigned int n_face_q_points = face_quadrature_formula.size();
 
 
-    //const PrescribedSolution::RightHandSide<dim_omega> right_hand_side;
-    const PrescribedSolution::PressureBoundaryValues_Omega<dim_omega> pressure_boundary_values;
+    const PrescribedSolution::RightHandSide<dim_omega> right_hand_side;
+    const PrescribedSolution::PressureBoundaryValues<dim_omega> pressure_boundary_values;
     const PrescribedSolution::KInverse<dim_omega> k_inverse;
 
     std::vector<double>         rhs_values(n_q_points);
@@ -564,7 +643,9 @@ void MixedCoupledLaplace<dim_omega, dim_sigma>::assemble_system() {
       for(types::global_dof_index ind: local_dof_indices)
         std::cout<<ind<<std::endl;
     }*/
-
+   std::cout<<dof_handler.get_fe().base_element(0).get_name()<<std::endl;
+   std::cout<<dof_handler.get_fe().base_element(1).get_name()<<std::endl;
+  std::cout<<"concentration_base "<<dof_handler.get_fe().base_element(concentration_base).get_name()<<std::endl;
     std::vector<Point<dim_omega>> unit_support_points_FE_Q(fe.n_dofs_per_cell());
     unit_support_points_FE_Q =  dof_handler.get_fe().base_element(concentration_base).get_unit_support_points();
     std::vector<std::pair< std::pair< unsigned int, unsigned int >, unsigned int >> dof_table(dof_handler.n_dofs());
@@ -687,93 +768,84 @@ void MixedCoupledLaplace<dim_omega, dim_sigma>::assemble_system() {
       fe_values.get_mapping(), fe,
       update_values | update_gradients | update_quadrature_points |
           update_JxW_values);*/
+    const FEValuesExtractors::Vector velocities(0);
+    const FEValuesExtractors::Scalar pressure(dim_omega);
+    FullMatrix<double> local_matrix(dofs_per_cell, dofs_per_cell);
+    Vector<double>     local_rhs(dofs_per_cell);
+    std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
   //"----------start loops-----------------"
-  for (const auto &cell : dof_handler.active_cell_iterators()) {
-    fe_values.reinit(cell);
-    cell_matrix = 0;
-    cell_rhs = 0;
+ for (const auto &cell : dof_handler.active_cell_iterators())
+  {
+        fe_values.reinit(cell);
 
-    std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
-    cell->get_dof_indices(local_dof_indices);
+        local_matrix = 0;
+        local_rhs    = 0;
 
-    for (const unsigned int q_index : fe_values.quadrature_point_indices()) {
-      for (const unsigned int i :
-           fe_values.dof_indices()) { // testfunction phi_j
-      //const unsigned int component_i = fe.system_to_component_index(i).first;
-        //unsigned int component_i = dof_handler.get_fe().base_element(concentration_base).system_to_component_index(within_base_).first;
-        
-        const Tensor<1, dim_omega> phi_i_u = fe_values[velocity_P].value(i, q_index);
-        const double div_phi_i_u = fe_values[velocity_P].divergence(i, q_index);
-        const double phi_i_p     = fe_values[concentration_u].value(i, q_index);
-       
-        for (const unsigned int j :
-             fe_values.dof_indices()) { // j kommt von u_h sum over u_j phi_j
+        right_hand_side.value_list(fe_values.get_quadrature_points(),
+                                   rhs_values);
+        k_inverse.value_list(fe_values.get_quadrature_points(),
+                             k_inverse_values);
 
-          /*cell_matrix(i, j) +=
-              fe_values[concentration_u].gradient(i, q_index) // grad phi_i(x_q)
-              *
-              fe_values[concentration_u].gradient(j, q_index) // grad phi_j(x_q)
-              * fe_values.JxW(q_index);                       // dx
-              */
-          const Tensor<1, dim_omega> phi_j_u =
-                    fe_values[velocity_P].value(j, q_index);
+        for (unsigned int q = 0; q < n_q_points; ++q)
+          for (unsigned int i = 0; i < dofs_per_cell; ++i)
+            {
+              const Tensor<1, dim_omega> phi_i_u = fe_values[velocities].value(i, q);
+              const double div_phi_i_u = fe_values[velocities].divergence(i, q);
+              const double phi_i_p     = fe_values[pressure].value(i, q);
+
+              for (unsigned int j = 0; j < dofs_per_cell; ++j)
+                {
+                  const Tensor<1, dim_omega> phi_j_u =
+                    fe_values[velocities].value(j, q);
                   const double div_phi_j_u =
-                    fe_values[velocity_P].divergence(j, q_index);
-                  const double phi_j_p = fe_values[concentration_u].value(j, q_index);
+                    fe_values[velocities].divergence(j, q);
+                  const double phi_j_p = fe_values[pressure].value(j, q);
 
-                cell_matrix(i, j) +=
-                    (phi_i_u * phi_j_u //* k_inverse_values[q] 
+                  local_matrix(i, j) +=
+                    (phi_i_u * k_inverse_values[q] * phi_j_u //
                      - phi_i_p * div_phi_j_u                 //
                      - div_phi_i_u * phi_j_p)                //
-                    * fe_values.JxW(q_index);
-                
+                    * fe_values.JxW(q);
+                }
 
+              local_rhs(i) += -phi_i_p * rhs_values[q] * fe_values.JxW(q);
+            }
 
-        }
-        const auto &x_q = fe_values.quadrature_point(q_index);
+        for (const auto &face : cell->face_iterators())
+          if (face->at_boundary())
+            {
+              fe_face_values.reinit(cell, face);
 
-        /*cell_rhs(i) += fe_values.shape_value(i, q_index) *
-                       f_omega.value(x_q, 0) * // f(x_q)
-                       fe_values.JxW(q_index);           // dx;
-                       */
-        cell_rhs(i) += -phi_i_p * f_omega.value(x_q, 0) * fe_values.JxW(q_index);
-      }
-    }
+              pressure_boundary_values.value_list(
+                fe_face_values.get_quadrature_points(), boundary_values);
 
+              for (unsigned int q = 0; q < n_face_q_points; ++q)
+                for (unsigned int i = 0; i < dofs_per_cell; ++i)
+                  local_rhs(i) += -(fe_face_values[velocities].value(i, q) * //
+                                    fe_face_values.normal_vector(q) *        //
+                                    boundary_values[q] *                     //
+                                    fe_face_values.JxW(q));
+            }
 
-
-    for (const auto &face : cell->face_iterators())
-      if (face->at_boundary())
-        {
-          fe_face_values.reinit(cell, face);
-
-          pressure_boundary_values.value_list(
-            fe_face_values.get_quadrature_points(), boundary_values);
-
-          for (unsigned int q = 0; q < n_face_q_points; ++q)
-            for (unsigned int i = 0; i < dofs_per_cell; ++i)
-              cell_rhs(i) += -(fe_face_values[velocity_P].value(i, q) * //
-                                fe_face_values.normal_vector(q) *        //
-                                boundary_values[q] *                     //
-                                fe_face_values.JxW(q));
-        }
-
-
-
-    for (const unsigned int i : fe_values.dof_indices()) {
-
-      for (const unsigned int j : fe_values.dof_indices()) {
-
-       system_matrix.add(local_dof_indices[i], local_dof_indices[j],
-                        cell_matrix(i, j));
-      }
-
-      system_rhs(local_dof_indices[i]) += cell_rhs(i);
-    }
+        // The final step in the loop over all cells is to transfer local
+        // contributions into the global matrix and right hand side
+        // vector. Note that we use exactly the same interface as in previous
+        // examples, although we now use block matrices and vectors instead of
+        // the regular ones. In other words, to the outside world, block
+        // objects have the same interface as matrices and vectors, but they
+        // additionally allow to access individual blocks.
+        cell->get_dof_indices(local_dof_indices);
+        for (unsigned int i = 0; i < dofs_per_cell; ++i)
+          for (unsigned int j = 0; j < dofs_per_cell; ++j)
+            system_matrix.add(local_dof_indices[i],
+                              local_dof_indices[j],
+                              local_matrix(i, j));
+        for (unsigned int i = 0; i < dofs_per_cell; ++i)
+          system_rhs(local_dof_indices[i]) += local_rhs(i);
+      
   }
-
-
+  
 
   /*for (std::vector<types::global_dof_index> cell_sigma :
        dof_indices_sigma_per_cells) {
@@ -1019,20 +1091,19 @@ template <int dim_omega, int dim_sigma>
 void MixedCoupledLaplace<dim_omega, dim_sigma>::output_results() const {
 
 
-  std::vector<std::string> solution_names(1, "concentration_u");
-  solution_names.emplace_back("concentration_mu");
-  solution_names.emplace_back( "concentration_P");
-  solution_names.emplace_back( "concentration_P");
+  std::vector<std::string> solution_names(2, "Velocity_P");
+  solution_names.emplace_back("concentration_u");
+
   //if ( nof_scalar_fields== 2)
     //solution_names.emplace_back("concentration_mu");
 
 
    std::vector<DataComponentInterpretation::DataComponentInterpretation> 
-   interpretation(2, DataComponentInterpretation::component_is_scalar);
+   interpretation(2, DataComponentInterpretation::component_is_part_of_vector);
   //interpretation.push_back(DataComponentInterpretation::component_is_scalar);
   //interpretation.push_back(DataComponentInterpretation::component_is_scalar);
-  interpretation.push_back(DataComponentInterpretation::component_is_part_of_vector);
-   interpretation.push_back(DataComponentInterpretation::component_is_part_of_vector);
+  interpretation.push_back(DataComponentInterpretation::component_is_scalar);
+   //interpretation.push_back(DataComponentInterpretation::component_is_part_of_vector);
 
   DataOut<dim_omega> data_out;
   data_out.add_data_vector(dof_handler,
@@ -1078,9 +1149,9 @@ int main() {
 
   MixedCoupledLaplace<dimension_omega, dimension_sigma> *laplace_problem_2d;
 
-  const unsigned int p_degree[1] = {0};
+  const unsigned int p_degree[1] = {1};
   constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);
-  const unsigned int refinement[1] = {1};
+  const unsigned int refinement[1] = {3};
   constexpr unsigned int refinement_size =
       sizeof(refinement) / sizeof(refinement[0]);
 
