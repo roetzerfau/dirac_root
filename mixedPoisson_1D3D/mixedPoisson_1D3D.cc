@@ -78,11 +78,11 @@ namespace Step20
     Triangulation<dim>  triangulation;
     const FESystem<dim> fe;
     DoFHandler<dim>     dof_handler;
-/*
+
     Triangulation<dim_omega> triangulation_omega;
     FESystem<dim_omega> fe_omega;
     DoFHandler<dim_omega> dof_handler_omega;
-*/
+
 
     BlockSparsityPattern      sparsity_pattern;
     BlockSparseMatrix<double> system_matrix;
@@ -577,7 +577,7 @@ template <int dim> bool isMidPoint(Point<dim> p) {
 
 
 
-/*
+
 
 for(std::vector<types::global_dof_index> cell_omega :
        dof_indices_sigma_per_cells) {
@@ -660,7 +660,7 @@ for(std::vector<types::global_dof_index> cell_omega :
     }
   }
 
-*/
+
 
 
 
