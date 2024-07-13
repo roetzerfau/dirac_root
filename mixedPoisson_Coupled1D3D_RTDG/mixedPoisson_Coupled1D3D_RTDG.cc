@@ -30,6 +30,9 @@
 #include <deal.II/base/tensor_function.h>
 #include <deal.II/lac/sparse_direct.h>
 #include <deal.II/base/timer.h>
+#include <deal.II/fe/fe_interface_values.h>
+#include <deal.II/meshworker/mesh_loop.h>
+#include <deal.II/lac/trilinos_solver.h>
 
 namespace Step20
 {
@@ -44,15 +47,17 @@ namespace Step20
   constexpr unsigned int dimension_omega{1};
   constexpr unsigned int constructed_solution{2};
   constexpr unsigned int concentration_base{2}; //1
-  constexpr unsigned int p_degree{1};
+  constexpr unsigned int p_degree{0};
   
   //constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);
   constexpr unsigned int refinement{4};
 
+  constexpr unsigned int eta = 5;
+
 
   const FEValuesExtractors::Vector velocities(0);
   // const FEValuesExtractors::Scalar velocity_omega(dimension_Omega);
-  const FEValuesExtractors::Scalar pressure(dimension_Omega + 1);
+  const FEValuesExtractors::Scalar pressure(dimension_Omega);
   // const FEValuesExtractors::Scalar pressure_omega(dimension_Omega + 2);
 
  const FEValuesExtractors::Scalar velocity_omega(0);
@@ -119,6 +124,73 @@ namespace Step20
   };
 
 
+  template <int dim>
+  struct ScratchData
+  {
+    ScratchData(const Mapping<dim>        &mapping,
+                const FiniteElement<dim>  &fe,
+                const Quadrature<dim>     &quadrature,
+                const Quadrature<dim - 1> &quadrature_face,
+                const UpdateFlags          update_flags = update_values |
+                                                 update_gradients |
+                                                 update_quadrature_points |
+                                                 update_JxW_values,
+                const UpdateFlags interface_update_flags =
+                  update_values | update_gradients | update_quadrature_points |
+                  update_JxW_values | update_normal_vectors)
+      : fe_values(mapping, fe, quadrature, update_flags)
+      , fe_interface_values(mapping,
+                            fe,
+                            quadrature_face,
+                            interface_update_flags)
+    {}
+
+
+    ScratchData(const ScratchData<dim> &scratch_data)
+      : fe_values(scratch_data.fe_values.get_mapping(),
+                  scratch_data.fe_values.get_fe(),
+                  scratch_data.fe_values.get_quadrature(),
+                  scratch_data.fe_values.get_update_flags())
+      , fe_interface_values(scratch_data.fe_interface_values.get_mapping(),
+                            scratch_data.fe_interface_values.get_fe(),
+                            scratch_data.fe_interface_values.get_quadrature(),
+                            scratch_data.fe_interface_values.get_update_flags())
+    {}
+
+    FEValues<dim>          fe_values;
+    FEInterfaceValues<dim> fe_interface_values;
+  };
+
+
+
+  struct CopyDataFace
+  {
+    FullMatrix<double>                   cell_matrix;
+    std::vector<types::global_dof_index> joint_dof_indices;
+  };
+
+
+
+  struct CopyData
+  {
+    FullMatrix<double>                   cell_matrix;
+    Vector<double>                       cell_rhs;
+    std::vector<types::global_dof_index> local_dof_indices;
+    std::vector<CopyDataFace>            face_data;
+
+    template <class Iterator>
+    void reinit(const Iterator &cell, unsigned int dofs_per_cell)
+    {
+      cell_matrix.reinit(dofs_per_cell, dofs_per_cell);
+      cell_rhs.reinit(dofs_per_cell);
+
+      local_dof_indices.resize(dofs_per_cell);
+      cell->get_dof_indices(local_dof_indices);
+    }
+  };
+
+
+
   namespace PrescribedSolution
   {
     constexpr double alpha = 0.3;
@@ -180,7 +252,8 @@ namespace Step20
     {
     public:
       ExactSolution()
-        : Function<dim>(dim + nof_scalar_fields)
+        //: Function<dim>(dim + nof_scalar_fields)
+        : Function<dim>(dim + 1)
       {}
 
       virtual void vector_value(const Point<dim> &p,
@@ -222,14 +295,14 @@ namespace Step20
     void ExactSolution<dim>::vector_value(const Point<dim> &p,
                                           Vector<double>   &values) const
     {
-      AssertDimension(values.size(), dim + nof_scalar_fields);
+      //AssertDimension(values.size(), dim + nof_scalar_fields);
 
       values(0) = alpha * p[1] * p[1] / 2 + beta - alpha * p[0] * p[0] / 2;
       values(1) = alpha * p[0] * p[1];
-      values(2) = 0;
-      values(3) = -(alpha * p[0] * p[1] * p[1] / 2 + beta * p[0] -
+     // values(2) = 0;
+      values(2) = -(alpha * p[0] * p[1] * p[1] / 2 + beta * p[0] -
                     alpha * p[0] * p[0] * p[0] / 6);
-      values(4) = 0;
+     // values(4) = 0;
     }
 
     template <int dim>
@@ -326,7 +399,7 @@ template <int dim> bool isMidPoint(Point<dim> p) {
   template <int dim, int dim_omega>
   MixedLaplaceProblem<dim, dim_omega>::MixedLaplaceProblem(const unsigned int _degree)
     : degree(_degree)
-    , fe(FE_RaviartThomas<dim>(degree), FE_DGQ<dim>(degree), FE_DGQ<dim>(degree), FE_DGQ<dim>(degree))//FE_DGQ<dim>(degree)^dim
+    , fe(FESystem<dim>(FE_DGQ<dim>(degree), dim), FE_DGQ<dim>(degree))// FE_RaviartThomas<dim>(degree)    FESystem<dim>(FE_DGQ<dim>(degree), dim)
     , dof_handler(triangulation) 
     , fe_omega(FE_DGQ<dim_omega>(degree), FE_DGQ<dim_omega>(degree))
     , dof_handler_omega(triangulation_omega){}
@@ -346,8 +419,8 @@ template <int dim> bool isMidPoint(Point<dim> p) {
       DoFTools::count_dofs_per_fe_component(dof_handler);
   for(unsigned int i = 0; i < dofs_per_component.size(); i++)
   std::cout<<"dofs_per_component " <<dofs_per_component[i]<<std::endl;
-    const unsigned int n_u = dofs_per_component[0]  +  dofs_per_component[dim],
-                       n_p = dofs_per_component[dim +1 ] + dofs_per_component[dim +2];
+    const unsigned int n_u = dofs_per_component[0] * dim ,// +  dofs_per_component[dim]
+                       n_p = dofs_per_component[dim] ;//+ dofs_per_component[dim +2]
 
     std::cout << "Number of active cells: " << triangulation.n_active_cells()
               << std::endl
@@ -375,7 +448,8 @@ template <int dim> bool isMidPoint(Point<dim> p) {
   template <int dim, int dim_omega>
   void MixedLaplaceProblem<dim, dim_omega>::assemble_system()
   {
-   const QGauss<dim>     quadrature_formula(degree + 2);
+   const QGauss<dim>     quadrature_formula(degree + 1);
+   const QGauss<dim - 1> face_quadrature_formula(degree + 1);
 
       // Define custom quadrature points and weights
     std::vector<Point<dim>> my_quadrature_points = {Point<dim>(0.0,0.0), Point<dim>(0.5,0.5), Point<dim>(1,1)};
@@ -384,19 +458,24 @@ template <int dim> bool isMidPoint(Point<dim> p) {
     // Create custom quadrature rule
    //const Quadrature<dim> quadrature_formula(my_quadrature_points, my_quadrature_weights);
 
-
-
-    const QGauss<dim - 1> face_quadrature_formula(degree + 2);
-
     FEValues<dim>     fe_values(fe,
                             quadrature_formula,
                             update_values | update_gradients |
                               update_quadrature_points | update_JxW_values);
+
+    
     FEFaceValues<dim> fe_face_values(fe,
                                      face_quadrature_formula,
-                                     update_values | update_normal_vectors |
+                                     update_values |  update_gradients | update_normal_vectors |
                                        update_quadrature_points |
                                        update_JxW_values);
+    const Mapping<dim> &mapping = fe_values.get_mapping();    
+    //const UpdateFlags interface_update_flags=              ;
+    FEInterfaceValues<dim>  fe_interface_values(mapping,
+                            fe,
+                            face_quadrature_formula,
+                            update_values | update_gradients | update_quadrature_points |
+                    update_JxW_values | update_normal_vectors);
 
     const unsigned int dofs_per_cell   = fe.n_dofs_per_cell();
     const unsigned int n_q_points      = quadrature_formula.size();
@@ -416,7 +495,7 @@ template <int dim> bool isMidPoint(Point<dim> p) {
     std::vector<Point<dim>> unit_support_points_FE_Q(fe.n_dofs_per_cell());
 
     std::vector<std::pair< std::pair< unsigned int, unsigned int >, unsigned int >> dof_table(dof_handler.n_dofs());
-    const Mapping<dim> &mapping = fe_values.get_mapping();
+    
     for (const auto &cell : dof_handler.active_cell_iterators())
     {
        std::vector<types::global_dof_index> local_dof_indices(fe.n_dofs_per_cell());
@@ -453,111 +532,6 @@ template <int dim> bool isMidPoint(Point<dim> p) {
 
 
 
-    /*for(unsigned int i = 0; i < dof_table.size(); i++)
-    {
-      std::cout<<i<<" "<<dof_table[i].first.first<<std::endl;
-    }*/
-
-
-
-
-
-
-
-  /*std::cout<<"------------Start dof support points"<<std::endl;
-  std::vector<typename DoFHandler<dim>::face_iterator> faces;
-  std::vector<typename DoFHandler<dim>::active_line_iterator> lines;
-
-  for (const auto &cell : dof_handler.active_cell_iterators()) {
-    fe_values.reinit(cell);
-
-    for (unsigned int l = 0; l < cell->n_lines(); l++) {
-
-      const typename DoFHandler<dim>::active_line_iterator line =
-          cell->line(l);
-
-      if (std::find(lines.begin(), lines.end(), line) == lines.end())
-        lines.push_back(line);
-      else
-        continue;
-
-      std::vector<types::global_dof_index> local_dof_indices(
-          fe.n_dofs_per_line() + fe.n_dofs_per_vertex() * 2);
-
-      line->get_dof_indices(local_dof_indices);
-     // std::cout<<"fe.n_dofs_per_line() "<<fe.n_dofs_per_line()<< "  fe.n_dofs_per_vertex() "<< fe.n_dofs_per_vertex()<<std::endl;
-     // for(types::global_dof_index ind: local_dof_indices)
-     // std::cout<<ind<<std::endl;
-     
-      std::array<std::vector<types::global_dof_index>, nof_scalar_fields>
-          dof_indices_sigma_cell;
-      std::vector<types::global_dof_index> dof_indices_sigma_cell_v2;
-
-      bool push = true;
-     // std::cout<<"local_dof_indices.size() "<<local_dof_indices.size()<<std::endl;
-      for (unsigned int i = 0; i < local_dof_indices.size(); i++) {
-        unsigned int index = local_dof_indices[i];
-        Point<dim> p = support_points[index];
-        const unsigned int base = dof_table[index].first.first;
-        const unsigned int within_base_ = dof_table[index].second; //fe.system_to_component_index(i).first;  dof_handler.get_fe().system_to_base_index(i)
-
-        
-        if(base == concentration_base)
-        {
-          unsigned int component_i = dof_handler.get_fe().base_element(base).system_to_component_index(within_base_).first;
-         // std::cout<<"dof "<<i<<" point "<<p <<" base "<<base<<" "<<" within_base_ "<<within_base_<<" "<<component_i<<std::endl;
-          dof_indices_per_component[component_i].insert(local_dof_indices[i]);
-          if (PrescribedSolution::isOnSigma<dim>(p)) {
-            dof_indices_sigma_cell[component_i].push_back(local_dof_indices[i]);
-            dof_indices_sigma_cell_v2.push_back(local_dof_indices[i]);
-
-            dof_indices_sigma[component_i].insert(local_dof_indices[i]);
-            push = push && true;
-          } else
-            push = push && false;
-          if (PrescribedSolution::isOnSigma_boundary<dim>(p)) {
-            dof_indices_boundary_sigma[component_i].insert(local_dof_indices[i]);
-          }
-          if (PrescribedSolution::isMidPoint<dim>(p)) {
-            dof_index_midpoint[component_i] = local_dof_indices[i];
-          }
-        }
-      }
-      if (push) {
-        dof_indices_sigma_per_cells_comp.push_back(dof_indices_sigma_cell);
-        dof_indices_sigma_per_cells.push_back(dof_indices_sigma_cell_v2);
-      }
-    }
-  }
-  std::cout<<"Loop ende.--------------------"<<std::endl;
-*/
-
-
-
-Point<dim> midpoint(0,0);
-double min_distance = std::numeric_limits<double>::max();
-std::vector<Point<dim>> next_point;
-for(unsigned int i = 0; i < support_points.size(); i++)
-{
-
-  double distance= support_points[i].distance(midpoint);
-  if (distance > 0 && distance <= min_distance)
-  {
-      if(distance < min_distance)
-        next_point.clear();
-
-      min_distance = distance;
-      next_point.push_back(support_points[i]);
-      
-  }
-}
-/*std::cout<<"size "<<next_point.size()<<std::endl;
-for(unsigned int i = 0; i < next_point.size(); i++)
-std::cout<<next_point[i]<<" | ";
-std::cout<<std::endl;*/
-
-
-
     FullMatrix<double> local_matrix(dofs_per_cell, dofs_per_cell);
     Vector<double>     local_rhs(dofs_per_cell);
 
@@ -587,13 +561,14 @@ std::cout<<std::endl;*/
                              k_inverse_values);
 
         for (unsigned int q = 0; q < n_q_points; ++q)
+        {
           for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {
               const Tensor<1, dim> phi_i_u = fe_values[velocities].value(i, q);
               const double div_phi_i_u = fe_values[velocities].divergence(i, q);
               const double phi_i_p     = fe_values[pressure].value(i, q);
-
-            //  const double phi_i_p_omega = fe_values[pressure_omega].value(i, q);
+              const Tensor<1, dim> grad_phi_i_p = fe_values[pressure].gradient(i, q);
+            /// const double phi_i_p_omega = fe_values[pressure_omega].value(i, q);
             //  const double phi_i_u_omega = fe_values[velocity_omega].value(i, q);
 
               for (unsigned int j = 0; j < dofs_per_cell; ++j)
@@ -601,38 +576,91 @@ std::cout<<std::endl;*/
                   const Tensor<1, dim> phi_j_u = fe_values[velocities].value(j, q);
                   const double div_phi_j_u =  fe_values[velocities].divergence(j, q);
                   const double phi_j_p = fe_values[pressure].value(j, q);
-
+                  const Tensor<1, dim> grad_phi_j_p = fe_values[pressure].gradient(j, q);
                //   const double phi_j_p_omega  =  fe_values[pressure_omega].value(j, q);
                 //  const double phi_j_u_omega  =  fe_values[velocity_omega].value(j, q);
 
                   local_matrix(i, j) +=
-                    (phi_i_u * k_inverse_values[q] * phi_j_u //
-                     - phi_i_p * div_phi_j_u                 //
-                     - div_phi_i_u * phi_j_p                //
+                    (phi_j_u * k_inverse_values[q] * phi_i_u //
+                     - phi_j_p * div_phi_i_u                 //
+                    // - div_phi_i_u * phi_j_p                //
+                    -  phi_j_u * grad_phi_i_p
+
+
                     // + phi_i_p_omega * phi_j_p_omega 
                    //  + phi_i_u_omega * phi_j_u_omega
                    )
                     * fe_values.JxW(q);
                 }
 
-              local_rhs(i) += -phi_i_p * rhs_values[q] * fe_values.JxW(q);
+              local_rhs(i) += phi_i_p * rhs_values[q] * fe_values.JxW(q);
             }
+         }
+
+
+
 
         for (const auto &face : cell->face_iterators())
+        {
+          unsigned int face_index = cell->face_iterator_to_index(face);
+          fe_face_values.reinit(cell, face);
+          fe_interface_values.reinit(cell, face_index);
+          
+           
           if (face->at_boundary())
-            {
-              fe_face_values.reinit(cell, face);
-
+          {
+           // std::cout<<face_index<<std::endl;
               pressure_boundary_values.value_list(
                 fe_face_values.get_quadrature_points(), boundary_values);
 
               for (unsigned int q = 0; q < n_face_q_points; ++q)
+              {
                 for (unsigned int i = 0; i < dofs_per_cell; ++i)
-                  local_rhs(i) += -(fe_face_values[velocities].value(i, q) * //
-                                    fe_face_values.normal_vector(q) *        //
-                                    boundary_values[q] *                     //
-                                    fe_face_values.JxW(q));
+                {
+                 local_rhs(i) +=  -fe_face_values[velocities].value(i, q) * 
+                                    fe_face_values.normal_vector(q) *        
+                                    boundary_values[q] *                     
+                                    fe_face_values.JxW(q)  
+
+                                    + eta/cell->diameter() * boundary_values[q] * 
+                                            fe_face_values[pressure].value(i,q) * fe_face_values.JxW(q);
+
+                  for(unsigned int j = 0; j < dofs_per_cell; j++)
+                  {
+                    local_matrix(i, j) += (fe_values[velocities].value(j,q) * fe_face_values.normal_vector(q) 
+                                          + (eta/cell->diameter()) * fe_values[pressure].value(j,q))
+                                         * fe_values[pressure].value(i,q)  * fe_face_values.JxW(q);                       
+                  }
+                }
+              }
+
             }
+            else
+            {         
+              const unsigned int n_dofs  = fe_interface_values.n_current_interface_dofs();
+              for (unsigned int q = 0; q < fe_interface_values.get_quadrature_points().size(); ++q)
+              {
+                for (unsigned int i = 0; i < n_dofs; ++i)
+                {
+                   //std::cout<<fe_interface_values[pressure].value(1,i,q)<<" | "<<fe_face_values[pressure].value(i,q)<<std::endl;
+                  for (unsigned int j = 0; j < n_dofs; ++j)
+                  {
+                   
+                    local_matrix(i, j) += fe_interface_values[pressure].average_of_values(j,q) *  
+                                          fe_interface_values[velocities].value(1,i,q) * fe_face_values.normal_vector(q)  * fe_face_values.JxW(q)
+                                          +
+                                          (fe_interface_values[velocities].average_of_values(j,q) * fe_face_values.normal_vector(q) 
+                                          + (eta/cell->diameter()) * fe_interface_values[pressure].jump_in_values(j,q)) 
+                                          * fe_interface_values[pressure].value(1,i,q)  * fe_face_values.JxW(q);                                                                                      
+                  }
+                }
+              }
+            }
+
+          }
+
+
+
 
 
         cell->get_dof_indices(local_dof_indices);
@@ -669,13 +697,6 @@ std::cout<<"percomp"<<std::endl;
 for(unsigned int i = 0; i< dofs_per_component.size(); i++)
   std::cout<<dofs_per_component[i]<<std::endl;
 */
-
-
-
-
-
-
-
 
 
 
@@ -872,7 +893,7 @@ std::cout<<"------"<<std::endl;
     }
 
 
-
+/*
 std::cout<<"set ii "<<std::endl;
 
 for(unsigned int i = 0; i < dof_table.size(); i++)
@@ -893,6 +914,7 @@ for(unsigned int i = 0; i < dof_table.size(); i++)
   }
 
 }
+*/
 //system_matrix.print(std::cout);
 
 
@@ -1025,6 +1047,18 @@ for(std::vector<types::global_dof_index> cell_omega :
       std::cout << "done (" << timer.cpu_time() << "s)" << std::endl;
 
 /*
+    TrilinosWrappers::SolverDirect solver;
+        TrilinosWrappers::MPI::Vector completely_distributed_solution(system_rhs);
+        solver.solve(system_matrix,
+                 completely_distributed_solution,
+                 system_rhs);
+
+   // constraints.distribute(completely_distributed_solution);
+    solution = completely_distributed_solution;
+    */
+
+
+/*
     const auto &M = system_matrix.block(0, 0);
     const auto &B = system_matrix.block(0, 1);
 
@@ -1081,10 +1115,13 @@ for(std::vector<types::global_dof_index> cell_omega :
 /*     const ComponentSelectFunction<dim> pressure_mask(dim, dim + nof_scalar_fields);
     const ComponentSelectFunction<dim> velocity_mask(std::make_pair(0, dim),
                                                      dim + nof_scalar_fields); */
-    const ComponentSelectFunction<dim> pressure_mask(dim + 1, dim + nof_scalar_fields);
+  /*  const ComponentSelectFunction<dim> pressure_mask(dim + 1, dim + nof_scalar_fields);
     const ComponentSelectFunction<dim> velocity_mask(std::make_pair(0, dim),
-                                                     dim + nof_scalar_fields);
+                                                     dim + nof_scalar_fields);*/
 
+   const ComponentSelectFunction<dim> pressure_mask(dim, dim + 1);
+    const ComponentSelectFunction<dim> velocity_mask(std::make_pair(0, dim),
+                                                     dim + 1);
     PrescribedSolution::ExactSolution<dim> exact_solution;
     Vector<double> cellwise_errors(triangulation.n_active_cells());
 
@@ -1124,15 +1161,16 @@ for(std::vector<types::global_dof_index> cell_omega :
   void MixedLaplaceProblem<dim, dim_omega>::output_results() const
   {
     std::vector<std::string> solution_names(dim, "Q");
-    solution_names.emplace_back("q");
-    solution_names.emplace_back("U");    
-    solution_names.emplace_back("u");   
+    solution_names.emplace_back("U");
+    //solution_names.emplace_back("q");
+   // solution_names.emplace_back("U");    
+    //solution_names.emplace_back("u");   
     std::vector<DataComponentInterpretation::DataComponentInterpretation>
       interpretation(dim,
                      DataComponentInterpretation::component_is_part_of_vector);
     interpretation.push_back(DataComponentInterpretation::component_is_scalar);
-    interpretation.push_back(DataComponentInterpretation::component_is_scalar);
-    interpretation.push_back(DataComponentInterpretation::component_is_scalar);
+   // interpretation.push_back(DataComponentInterpretation::component_is_scalar);
+    //interpretation.push_back(DataComponentInterpretation::component_is_scalar);
 
     DataOut<dim> data_out;
     data_out.add_data_vector(dof_handler,
@@ -1146,7 +1184,7 @@ for(std::vector<types::global_dof_index> cell_omega :
     data_out.write_vtu(output);
 
 //---------------omega------------------------------------
-    BlockVector<double> solution_omega;
+   /* BlockVector<double> solution_omega;
     const std::vector<types::global_dof_index> dofs_per_component_omega =
       DoFTools::count_dofs_per_fe_component(dof_handler_omega);
     for(unsigned int i = 0; i < dofs_per_component_omega.size(); i++)
@@ -1177,6 +1215,7 @@ for(std::vector<types::global_dof_index> cell_omega :
 
     std::ofstream output_omega("solution_omega.vtu");
     data_out_omega.write_vtu(output_omega);
+    */
   }
 
 
