@@ -548,6 +548,182 @@ template <int dim> bool isMidPoint(Point<dim> p) {
     std::vector<Tensor<2, dim>> k_inverse_values(n_q_points);
 
 
+//TODO man muss das nicht unbedingt mit dem worker machen, man kann das auch per hand machen wie beim LDG tutorial
+    const auto cell_worker = [&](const Iterator   &cell,
+                                 ScratchData<dim> &scratch_data,
+                                 CopyData         &copy_data) {
+      const unsigned int n_dofs =
+        scratch_data.fe_values.get_fe().n_dofs_per_cell();
+      copy_data.reinit(cell, n_dofs);
+      scratch_data.fe_values.reinit(cell);
+
+      const auto &q_points = scratch_data.fe_values.get_quadrature_points();
+
+      const FEValues<dim>       &fe_v = scratch_data.fe_values;
+      const std::vector<double> &JxW  = fe_v.get_JxW_values();
+
+      // We solve a homogeneous equation, thus no right hand side shows up in
+      // the cell term.  What's left is integrating the matrix entries.
+      for (unsigned int point = 0; point < fe_v.n_quadrature_points; ++point)
+        {
+          auto beta_q = beta(q_points[point]);
+          for (unsigned int i = 0; i < n_dofs; ++i)
+            for (unsigned int j = 0; j < n_dofs; ++j)
+              {
+                copy_data.cell_matrix(i, j) +=
+                  -beta_q                      // -\beta
+                  * fe_v.shape_grad(i, point)  // \nabla \phi_i
+                  * fe_v.shape_value(j, point) // \phi_j
+                  * JxW[point];                // dx
+              }
+        }
+    };
+
+    // This is the function called for boundary faces and consists of a normal
+    // integration using FEFaceValues. New is the logic to decide if the term
+    // goes into the system matrix (outflow) or the right-hand side (inflow).
+    const auto boundary_worker = [&](const Iterator     &cell,
+                                     const unsigned int &face_no,
+                                     ScratchData<dim>   &scratch_data,
+                                     CopyData           &copy_data) {
+      scratch_data.fe_interface_values.reinit(cell, face_no);
+      const FEFaceValuesBase<dim> &fe_face =
+        scratch_data.fe_interface_values.get_fe_face_values(0);
+
+      const auto &q_points = fe_face.get_quadrature_points();
+
+      const unsigned int n_facet_dofs = fe_face.get_fe().n_dofs_per_cell();
+      const std::vector<double>         &JxW     = fe_face.get_JxW_values();
+      const std::vector<Tensor<1, dim>> &normals = fe_face.get_normal_vectors();
+
+      std::vector<double> g(q_points.size());
+      boundary_function.value_list(q_points, g);
+
+      for (unsigned int point = 0; point < q_points.size(); ++point)
+        {
+          const double beta_dot_n = beta(q_points[point]) * normals[point];
+
+          if (beta_dot_n > 0)
+            {
+              for (unsigned int i = 0; i < n_facet_dofs; ++i)
+                for (unsigned int j = 0; j < n_facet_dofs; ++j)
+                  copy_data.cell_matrix(i, j) +=
+                    fe_face.shape_value(i, point)   // \phi_i
+                    * fe_face.shape_value(j, point) // \phi_j
+                    * beta_dot_n                    // \beta . n
+                    * JxW[point];                   // dx
+            }
+          else
+            for (unsigned int i = 0; i < n_facet_dofs; ++i)
+              copy_data.cell_rhs(i) += -fe_face.shape_value(i, point) // \phi_i
+                                       * g[point]                     // g
+                                       * beta_dot_n  // \beta . n
+                                       * JxW[point]; // dx
+        }
+    };
+
+    // This is the function called on interior faces. The arguments specify
+    // cells, face and subface indices (for adaptive refinement). We just pass
+    // them along to the reinit() function of FEInterfaceValues.
+    const auto face_worker = [&](const Iterator     &cell,
+                                 const unsigned int &f,
+                                 const unsigned int &sf,
+                                 const Iterator     &ncell,
+                                 const unsigned int &nf,
+                                 const unsigned int &nsf,
+                                 ScratchData<dim>   &scratch_data,
+                                 CopyData           &copy_data) {
+      FEInterfaceValues<dim> &fe_iv = scratch_data.fe_interface_values;
+      fe_iv.reinit(cell, f, sf, ncell, nf, nsf);
+      const auto &q_points = fe_iv.get_quadrature_points();
+
+      copy_data.face_data.emplace_back();
+      CopyDataFace &copy_data_face = copy_data.face_data.back();
+
+      const unsigned int n_dofs        = fe_iv.n_current_interface_dofs();
+      copy_data_face.joint_dof_indices = fe_iv.get_interface_dof_indices();
+
+      copy_data_face.cell_matrix.reinit(n_dofs, n_dofs);
+
+      const std::vector<double>         &JxW     = fe_iv.get_JxW_values();
+      const std::vector<Tensor<1, dim>> &normals = fe_iv.get_normal_vectors();
+
+      for (unsigned int qpoint = 0; qpoint < q_points.size(); ++qpoint)
+        {
+          const double beta_dot_n = beta(q_points[qpoint]) * normals[qpoint];
+          for (unsigned int i = 0; i < n_dofs; ++i)
+            for (unsigned int j = 0; j < n_dofs; ++j)
+              copy_data_face.cell_matrix(i, j) +=
+                fe_iv.jump_in_shape_values(i, qpoint) // [\phi_i]
+                *
+                fe_iv.shape_value((beta_dot_n > 0), j, qpoint) // phi_j^{upwind}
+                * beta_dot_n                                   // (\beta . n)
+                * JxW[qpoint];                                 // dx
+        }
+    };
+
+    // The following lambda function will handle copying the data from the
+    // cell and face assembly into the global matrix and right-hand side.
+    //
+    // While we would not need an AffineConstraints object, because there are
+    // no hanging node constraints in DG discretizations, we use an empty
+    // object here as this allows us to use its `copy_local_to_global`
+    // functionality.
+    const AffineConstraints<double> constraints;
+
+    const auto copier = [&](const CopyData &c) {
+      constraints.distribute_local_to_global(c.cell_matrix,
+                                             c.cell_rhs,
+                                             c.local_dof_indices,
+                                             system_matrix,
+                                             right_hand_side);
+
+      for (const auto &cdf : c.face_data)
+        {
+          constraints.distribute_local_to_global(cdf.cell_matrix,
+                                                 cdf.joint_dof_indices,
+                                                 system_matrix);
+        }
+    };
+
+    ScratchData<dim> scratch_data(mapping, fe, quadrature, quadrature_face);
+    CopyData         copy_data;
+
+    // Here, we finally handle the assembly. We pass in ScratchData and
+    // CopyData objects, the lambda functions from above, an specify that we
+    // want to assemble interior faces once.
+    MeshWorker::mesh_loop(dof_handler.begin_active(),
+                          dof_handler.end(),
+                          cell_worker,
+                          copier,
+                          scratch_data,
+                          copy_data,
+                          MeshWorker::assemble_own_cells |
+                            MeshWorker::assemble_boundary_faces |
+                            MeshWorker::assemble_own_interior_faces_once,
+                          boundary_worker,
+                          face_worker);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     for (const auto &cell : dof_handler.active_cell_iterators())
       {
         fe_values.reinit(cell);
