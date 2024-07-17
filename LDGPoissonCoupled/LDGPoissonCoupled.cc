@@ -52,7 +52,7 @@
 #include <deal.II/lac/trilinos_sparse_matrix.h>
 #include <deal.II/lac/trilinos_vector.h>
 #include <deal.II/lac/trilinos_solver.h>
-
+#include <deal.II/non_matching/fe_values.h>
 
 
 
@@ -241,8 +241,11 @@ void dof_omega_to_Omega(const DoFHandler<_dim>  &dof_handler,
 
 
   std::vector<Point<dim>> support_points;
+  std::vector<Point<dim_omega>> support_points_omega;
+  std::vector<Point<dim_omega>> unit_support_points_omega;
   unsigned int start_VectorField_omega;
   unsigned int start_Potential_omega;
+  unsigned int start_Potential;
 };
 
 
@@ -251,7 +254,7 @@ LDGPoissonProblem<dim, dim_omega>::
 LDGPoissonProblem(const unsigned int degree,
                   const unsigned int n_refine)
   :
-  degree(degree),
+  degree(degree),   
   n_refine(n_refine),
   fe( FESystem<dim>(FE_DGQ<dim>(degree), dim), FE_DGQ<dim>(degree),  FE_DGQ<dim>(degree), FE_DGQ<dim>(degree)),
   fe_omega( FESystem<dim_omega>(FE_DGQ<dim_omega>(degree), dim_omega), FE_DGQ<dim_omega>(degree)),
@@ -342,7 +345,7 @@ make_dofs()
   const std::vector<types::global_dof_index> dofs_per_component =
     DoFTools::count_dofs_per_fe_component(dof_handler);
     
-
+unsigned int n_dofs_Potential =  dofs_per_component[dim + dim_omega];
      
           
 /*
@@ -387,6 +390,7 @@ make_dofs()
 
   start_VectorField_omega = dim * dofs_per_component[0];
   start_Potential_omega = n_vector_field + dofs_per_component[dim + dim_omega];
+   start_Potential = n_vector_field;
 
 
   constraints.clear();
@@ -398,37 +402,59 @@ make_dofs()
     DoFTools::make_flux_sparsity_pattern(dof_handler,
                                        dsp);   
   std::cout<<"dof_handler_omega.n_dofs() "<<dof_handler_omega.n_dofs()<<std::endl;
- for(unsigned int i = start_VectorField_omega; i < start_VectorField_omega + dof_handler_omega.n_dofs() ; i++)
+    const std::vector<types::global_dof_index> dofs_per_component_omega =
+    DoFTools::count_dofs_per_fe_component(dof_handler_omega);
+  unsigned int n_dofs_VectorField_omega = dofs_per_component_omega[0];
+  unsigned int n_dofs_Potential_omega = dofs_per_component_omega[1];
+ for(unsigned int i = start_VectorField_omega; i < start_VectorField_omega +n_dofs_VectorField_omega ; i++)
   {
-     for(unsigned int j = start_VectorField_omega; j < start_VectorField_omega + dof_handler_omega.n_dofs() ; j++)
+     for(unsigned int j = start_VectorField_omega; j < start_VectorField_omega + n_dofs_VectorField_omega ; j++)
       {
         dsp.add(i,j);
       }
   }
 
-    for(unsigned int i = start_Potential_omega; i < start_Potential_omega + dof_handler_omega.n_dofs() ; i++)
+    for(unsigned int i = start_Potential_omega; i < start_Potential_omega + n_dofs_Potential_omega ; i++)
   {
-     for(unsigned int j = start_Potential_omega; j < start_Potential_omega + dof_handler_omega.n_dofs() ; j++)
+     for(unsigned int j = start_Potential_omega; j < start_Potential_omega + n_dofs_Potential_omega ; j++)
       {
         dsp.add(i,j);
       }
   }
 
-  for(unsigned int i = start_Potential_omega; i < start_Potential_omega + dof_handler_omega.n_dofs() ; i++)
+  for(unsigned int i = start_Potential_omega; i < start_Potential_omega +n_dofs_Potential_omega ; i++)
   {
-      for(unsigned int j = start_VectorField_omega; j < start_VectorField_omega + dof_handler_omega.n_dofs() ; j++)
+      for(unsigned int j = start_VectorField_omega; j < start_VectorField_omega + n_dofs_VectorField_omega ; j++)
       {
         dsp.add(i,j);
       }
   }
-   for(unsigned int i = start_VectorField_omega; i < start_VectorField_omega + dof_handler_omega.n_dofs() ; i++)
+   for(unsigned int i = start_VectorField_omega; i < start_VectorField_omega + n_dofs_VectorField_omega ; i++)
   {
-      for(unsigned int j = start_Potential_omega; j < start_Potential_omega + dof_handler_omega.n_dofs() ; j++)
+      for(unsigned int j = start_Potential_omega; j < start_Potential_omega + n_dofs_Potential_omega ; j++)
       {
         dsp.add(i,j);
       }
   }
-                                       
+
+//COUPLING
+for(unsigned int i = start_Potential_omega; i < start_Potential_omega +n_dofs_Potential_omega ; i++)
+  {
+      for(unsigned int j = start_Potential; j < start_Potential + n_dofs_Potential ; j++)
+      {
+        dsp.add(i,j);
+      }
+  }
+
+  for(unsigned int i = start_Potential; i < start_Potential + n_dofs_Potential ; i++)
+  {
+      for(unsigned int j = start_Potential_omega; j < start_Potential_omega + n_dofs_Potential_omega ; j++)
+      {
+        dsp.add(i,j);
+      }
+  }
+        
+                                  
   //DoFTools::make_sparsity_pattern(dof_handler, dsp, constraints,false);
   sparsity_pattern.copy_from(dsp);
   system_matrix.reinit(sparsity_pattern);
@@ -475,7 +501,7 @@ assemble_system()
                                                   face_quadrature_formula,
                                                   face_update_flags);
   
-  const Mapping<dim> &mapping = fe_values.get_mapping();      
+      
 
   FullMatrix<double>      local_matrix(dofs_per_cell,dofs_per_cell);
   Vector<double>          local_vector(dofs_per_cell);
@@ -486,6 +512,8 @@ assemble_system()
   FullMatrix<double>      ve_ui_matrix(dofs_per_cell, dofs_per_cell);
   FullMatrix<double>      ve_ue_matrix(dofs_per_cell, dofs_per_cell);
 
+
+    const Mapping<dim> &mapping = fe_values.get_mapping();  
     support_points.resize(dof_handler.n_dofs());
 
     std::vector<Point<dim>> unit_support_points_FE_Q(fe.n_dofs_per_cell());
@@ -692,6 +720,43 @@ assemble_system()
   FullMatrix<double>      ve_ui_matrix_omega(dofs_per_cell_omega, dofs_per_cell_omega);
   FullMatrix<double>      ve_ue_matrix_omega(dofs_per_cell_omega, dofs_per_cell_omega);
 
+
+
+/*
+    const Mapping<dim> &mapping = fe_values.get_mapping();  
+    support_points.resize(dof_handler.n_dofs());
+
+    std::vector<Point<dim>> unit_support_points_FE_Q(fe.n_dofs_per_cell());
+
+    std::vector<std::pair< std::pair< unsigned int, unsigned int >, unsigned int >> dof_table(dof_handler.n_dofs());
+    
+    for (const auto &cell : dof_handler.active_cell_iterators())
+    {
+       std::vector<types::global_dof_index> local_dof_indices(fe.n_dofs_per_cell());
+        std::vector<Point<dim>> cell_support_points(fe.n_dofs_per_cell());
+        cell->get_dof_indices( local_dof_indices);
+        for (unsigned int i = 0; i < fe.n_dofs_per_cell(); ++i)
+        {
+            dof_table[local_dof_indices[i]] = dof_handler.get_fe().system_to_base_index(i);
+                const unsigned int base =
+            dof_table[local_dof_indices[i]].first.first;
+
+            const unsigned int within_base_  =
+            dof_table[local_dof_indices[i]].second; // same as above
+                
+
+            unit_support_points_FE_Q =  dof_handler.get_fe().base_element(base).get_unit_support_points();
+            for(unsigned int j = 0; j < unit_support_points_FE_Q.size(); j++)
+               cell_support_points[j] = mapping.transform_unit_to_real_cell(cell, unit_support_points_FE_Q[j]);
+
+            support_points[local_dof_indices[i]] = cell_support_points[within_base_];
+        }
+    
+    }
+*/
+
+
+
  typename DoFHandler<dim_omega>::active_cell_iterator
  cell_omega = dof_handler_omega.begin_active(),
  endc_omega = dof_handler_omega.end();
@@ -832,6 +897,150 @@ assemble_system()
         
     }
 
+
+
+
+    //coupling
+  
+  FullMatrix<double>      V_U_matrix_coupling(dofs_per_cell, dofs_per_cell);
+  FullMatrix<double>      v_U_matrix_coupling(dofs_per_cell_omega, dofs_per_cell);
+  FullMatrix<double>      V_u_matrix_coupling(dofs_per_cell, dofs_per_cell_omega);
+  FullMatrix<double>      v_u_matrix_coupling(dofs_per_cell_omega, dofs_per_cell_omega);
+
+  cell_omega = dof_handler_omega.begin_active();
+  endc_omega = dof_handler_omega.end();
+
+  for (; cell_omega!=endc_omega; ++cell_omega)
+  {
+      fe_values_omega.reinit(cell_omega);
+      cell_omega->get_dof_indices(local_dof_indices_omega);
+      dof_omega_to_Omega(dof_handler_omega, local_dof_indices_omega);
+
+      std::vector<Point<dim_omega>> quadrature_points_omega = fe_values_omega.get_quadrature_points();
+
+      for(unsigned int p = 0; p < quadrature_points_omega.size(); p++)
+      {
+        Point<dim_omega> quadrature_point_omega = quadrature_points_omega[p];
+       // std::cout<<quadrature_point_omega<<" ";
+        Point<dim> quadrature_point = Point<dim>(quadrature_point_omega[0], 0.1);
+        auto cell = GridTools::find_active_cell_around_point(dof_handler, quadrature_point);
+        
+        
+        fe_values.reinit(cell);
+        cell->get_dof_indices(local_dof_indices);
+
+        Point<dim> quadrature_point_mapped_cell =  mapping.transform_real_to_unit_cell(cell,quadrature_point);
+        std::cout<<quadrature_point<<" | "<<quadrature_point_mapped_cell<< std::endl;
+        
+        std::vector<Point<dim>> my_quadrature_points = {quadrature_point_mapped_cell};
+         std::vector<double> my_quadrature_weights = {1};
+         const Quadrature<dim> my_quadrature_formula(my_quadrature_points, my_quadrature_weights);
+
+        FEValues<dim> fe_values_coupling(fe, my_quadrature_formula, update_flags);
+        fe_values_coupling.reinit(cell);
+
+
+      /*  for (unsigned int i = 0; i < fe.dofs_per_cell; ++i)
+            std::cout << "N_" << i << " = " << fe_values_coupling[Potential].value(i,0) << std::endl;*/
+  	  V_U_matrix_coupling = 0;
+      v_U_matrix_coupling = 0;
+      V_u_matrix_coupling = 0;
+      v_u_matrix_coupling = 0;
+      for(unsigned int i = 0; i < dofs_per_cell; i++)
+      {
+         for(unsigned int j = 0; j < dofs_per_cell; j++)
+         {  
+          V_U_matrix_coupling(i,j) += fe_values_coupling[Potential].value(i,0) * fe_values_coupling[Potential].value(j,0) * fe_values_omega.JxW(p);
+         }
+      }
+      constraints.distribute_local_to_global(V_U_matrix_coupling,
+                                         local_dof_indices,
+                                         local_dof_indices,
+                                         system_matrix);
+
+      for(unsigned int i = 0; i < dofs_per_cell_omega; i++)
+      {
+         for(unsigned int j = 0; j < dofs_per_cell; j++)
+         {  
+          v_U_matrix_coupling(i,j) += - fe_values_omega[Potential_omega].value(i,p) * fe_values_coupling[Potential].value(j,0) * fe_values_omega.JxW(p);
+         }
+      }
+      constraints.distribute_local_to_global(v_U_matrix_coupling,
+                                         local_dof_indices_omega,
+                                         local_dof_indices,
+                                         system_matrix);    
+
+    
+      for(unsigned int i = 0; i < dofs_per_cell; i++)
+      {
+         for(unsigned int j = 0; j < dofs_per_cell_omega; j++)
+         {  
+          V_u_matrix_coupling(i,j) += - fe_values_omega[Potential_omega].value(j,p) * fe_values_coupling[Potential].value(i,0) * fe_values_omega.JxW(p);
+         }
+      }
+      constraints.distribute_local_to_global(V_u_matrix_coupling,                                      
+                                         local_dof_indices,
+                                         local_dof_indices_omega,
+                                         system_matrix);    
+
+      for(unsigned int i = 0; i < dofs_per_cell_omega; i++)
+            {
+              for(unsigned int j = 0; j < dofs_per_cell_omega; j++)
+              {  
+                v_u_matrix_coupling(i,j) += fe_values_omega[Potential_omega].value(j,p) * fe_values_omega[Potential_omega].value(i,p) * fe_values_omega.JxW(p);
+              }
+            }
+            constraints.distribute_local_to_global(v_u_matrix_coupling,                                      
+                                              local_dof_indices_omega,
+                                              local_dof_indices_omega,
+                                              system_matrix);    
+
+        
+        
+        /*std::cout<<"cell "<<cell<<std::endl;
+        std::cout << "The point (" << query_point[0] << ", " << query_point[1] << ") is in cell with vertices: " << std::endl;
+        for (unsigned int v = 0; v < GeometryInfo<2>::vertices_per_cell; ++v)
+        {
+            std::cout << "  (" << cell->vertex(v)[0] << ", " << cell->vertex(v)[1] << ")" << std::endl;
+        }*/
+          /*typename DoFHandler<dim>::active_cell_iterator
+          cell = dof_handler.begin_active(),
+          endc = dof_handler.end();
+         for (; cell!=endc; ++cell)
+          {
+            fe_values.reinit(cell);
+            Point<dim> quadrature_point_mapped_cell =  mapping.transform_real_to_unit_cell(cell,quadrature_point);
+            std::cout<<quadrature_point_omega<<" | "<<quadrature_point_mapped_cell<< std::endl;
+            
+            
+            
+            // std::vector<double> shape_values(fe.dofs_per_cell);
+            // fe_values.get_function_values(shape_values);
+
+            // std::cout << "Shape function values at point (" 
+            //           << point << "):" << std::endl;
+            // for (unsigned int i = 0; i < shape_values.size(); ++i)
+            //     std::cout << "N_" << i << " = " << shape_values[i] << std::endl;
+          }*/
+
+
+
+
+
+       /* std::vector<Point<dim>> my_quadrature_points = {quadrature_point };
+        std::vector<double> my_quadrature_weights = {1};
+        const Quadrature<dim> my_quadrature_formula(my_quadrature_points, my_quadrature_weights);
+        FEValues<dim> fe_values_coupling(fe, my_quadrature_formula, update_flags);
+
+       
+          typename DoFHandler<dim>::active_cell_iterator
+          cell = dof_handler.begin_active(),
+          endc = dof_handler.end();
+          */
+
+      }
+    //std::cout<<std::endl;
+  }
 
 
 
@@ -1599,7 +1808,7 @@ int main(int argc, char *argv[])
                                                           numbers::invalid_unsigned_int);
 
       unsigned int degree = 1;
-      unsigned int n_refine =3;
+      unsigned int n_refine =4;
       LDGPoissonProblem<2,1>    Poisson(degree, n_refine);
       Poisson.run();
 
