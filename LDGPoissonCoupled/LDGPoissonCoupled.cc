@@ -54,12 +54,66 @@
 #include <deal.II/lac/trilinos_solver.h>
 
 
+
+
+
+
+
+
+#include <deal.II/base/quadrature_lib.h>
+#include <deal.II/base/function.h>
+
+#include <deal.II/lac/block_vector.h>
+#include <deal.II/lac/full_matrix.h>
+#include <deal.II/lac/block_sparse_matrix.h>
+#include <deal.II/lac/solver_cg.h>
+#include <deal.II/lac/precondition.h>
+
+#include <deal.II/lac/linear_operator.h>
+#include <deal.II/lac/packaged_operation.h>
+
+#include <deal.II/grid/tria.h>
+#include <deal.II/grid/grid_generator.h>
+#include <deal.II/dofs/dof_handler.h>
+#include <deal.II/dofs/dof_renumbering.h>
+#include <deal.II/dofs/dof_tools.h>
+#include <deal.II/fe/fe_dgq.h>
+#include <deal.II/fe/fe_system.h>
+#include <deal.II/fe/fe_values.h>
+#include <deal.II/numerics/vector_tools.h>
+#include <deal.II/numerics/data_out.h>
+#include <deal.II/fe/fe_q.h>
+
+#include <fstream>
+#include <iostream>
+#include <deal.II/fe/fe_raviart_thomas.h>
+#include <deal.II/base/tensor_function.h>
+#include <deal.II/lac/sparse_direct.h>
+#include <deal.II/base/timer.h>
+#include <deal.II/fe/fe_interface_values.h>
+#include <deal.II/meshworker/mesh_loop.h>
+#include <deal.II/lac/trilinos_solver.h>
+
+
+
+
+
+
+
+
+
+
+
 #include "Functions.cc"
 
 using namespace dealii;
 
 const FEValuesExtractors::Vector VectorField(0);
 const FEValuesExtractors::Scalar Potential(3);
+
+const FEValuesExtractors::Vector VectorField_omega(0);
+const FEValuesExtractors::Scalar Potential_omega(1);
+
 const unsigned int dimension_gap = 1;
 
 
@@ -94,27 +148,38 @@ private:
   void assemble_Neumann_boundary_terms(const FEFaceValues<dim>    &face_fe,
                                        FullMatrix<double>         &local_matrix,
                                        Vector<double>             &local_vector);
-
-  void assemble_Dirichlet_boundary_terms(const FEFaceValues<dim>  &face_fe,
+ 
+  template<int _dim>
+  void assemble_Dirichlet_boundary_terms(const FEFaceValues<_dim>  &face_fe,
                                          FullMatrix<double>       &local_matrix,
                                          Vector<double>           &local_vector,
-                                         const double              &h);
-
-  void assemble_flux_terms(const FEFaceValuesBase<dim>  &fe_face_values,
-                           const FEFaceValuesBase<dim>  &fe_neighbor_face_values,
+                                         const double              &h,
+                                          const Function<_dim>        &Dirichlet_bc_function,
+                                          const FEValuesExtractors::Vector VectorField, 
+                                          const FEValuesExtractors::Scalar Potential);
+  template<int _dim>
+  void assemble_flux_terms(const FEFaceValuesBase<_dim>  &fe_face_values,
+                           const FEFaceValuesBase<_dim>  &fe_neighbor_face_values,
                            FullMatrix<double>           &vi_ui_matrix,
                            FullMatrix<double>           &vi_ue_matrix,
                            FullMatrix<double>           &ve_ui_matrix,
                            FullMatrix<double>           &ve_ue_matrix,
-                           const double                  &h);
+                           const double                  &h,
+                           const FEValuesExtractors::Vector VectorField, 
+                           const FEValuesExtractors::Scalar Potential);
 
   void distribute_local_flux_to_global(
-    const FullMatrix<double> &vi_ui_matrix,
-    const FullMatrix<double> &vi_ue_matrix,
-    const FullMatrix<double> &ve_ui_matrix,
-    const FullMatrix<double> &ve_ue_matrix,
+     FullMatrix<double> &vi_ui_matrix,
+     FullMatrix<double> &vi_ue_matrix,
+     FullMatrix<double> &ve_ui_matrix,
+     FullMatrix<double> &ve_ue_matrix,
     const std::vector<types::global_dof_index> &local_dof_indices,
     const std::vector<types::global_dof_index> &local_neighbor_dof_indices);
+
+template<int _dim>
+void dof_omega_to_Omega(const DoFHandler<_dim>  &dof_handler,
+                        std::vector<types::global_dof_index> &local_dof_indices_omega);
+
 
   void solve();
 
@@ -144,11 +209,22 @@ private:
 
   AffineConstraints<double>                       constraints;
 
-  SparsityPattern                                 sparsity_pattern;
+  /*  SparsityPattern                                 sparsity_pattern;
 
-  TrilinosWrappers::SparseMatrix                  system_matrix;
-  TrilinosWrappers::MPI::Vector                   solution;
-  TrilinosWrappers::MPI::Vector                   system_rhs;
+    SparseMatrix                  system_matrix;
+   Vector                   solution;
+   Vector                   system_rhs;*/
+    /*BlockSparsityPattern      sparsity_pattern;
+    BlockSparseMatrix<double> system_matrix;
+
+    BlockVector<double> solution;
+    BlockVector<double> system_rhs;*/
+
+  SparsityPattern      sparsity_pattern;
+  SparseMatrix<double> system_matrix;
+ 
+  Vector<double> solution;
+  Vector<double> system_rhs;
 
   ConditionalOStream                              pcout;
   TimerOutput                                     computing_timer;
@@ -160,7 +236,13 @@ private:
   const DirichletBoundaryValues<dim>    Dirichlet_bc_function;
   const TrueSolution<dim>               true_solution;
 
+  const RightHandSide_omega<dim_omega>              rhs_function_omega;
+  const DirichletBoundaryValues_omega<dim_omega>    Dirichlet_bc_function_omega;
+
+
   std::vector<Point<dim>> support_points;
+  unsigned int start_VectorField_omega;
+  unsigned int start_Potential_omega;
 };
 
 
@@ -176,14 +258,16 @@ LDGPoissonProblem(const unsigned int degree,
   dof_handler(triangulation),
   dof_handler_omega(triangulation_omega),
   pcout(std::cout),
-  computing_timer(MPI_COMM_WORLD,
+  computing_timer(
                  pcout,
                   TimerOutput::summary,
                   TimerOutput::wall_times),
   solver_control(1),
   solver(solver_control),
   rhs_function(),
-  Dirichlet_bc_function()
+  Dirichlet_bc_function(),
+  rhs_function_omega(),
+  Dirichlet_bc_function_omega()
 {
 }
 
@@ -242,51 +326,56 @@ make_dofs()
   TimerOutput::Scope t(computing_timer, "setup");
 
   dof_handler.distribute_dofs(fe);
-
   DoFRenumbering::component_wise(dof_handler);
 
+  dof_handler_omega.distribute_dofs(fe_omega);
+  DoFRenumbering::component_wise(dof_handler_omega);
 
-  IndexSet locally_owned_dofs = dof_handler.locally_owned_dofs();
+
+/*  IndexSet locally_owned_dofs = dof_handler.locally_owned_dofs();
 
 
   IndexSet locally_relevant_dofs;
   DoFTools::extract_locally_relevant_dofs(dof_handler,
                                           locally_relevant_dofs);
-
+*/
   const std::vector<types::global_dof_index> dofs_per_component =
     DoFTools::count_dofs_per_fe_component(dof_handler);
+    
 
-
-  constraints.clear();
-  constraints.close();
-
-
+     
+          
+/*
   DynamicSparsityPattern dsp(dof_handler.n_dofs());
   DoFTools::make_flux_sparsity_pattern(dof_handler,
                                        dsp);
 
   SparsityTools::distribute_sparsity_pattern(dsp,
-                                             dof_handler.locally_owned_dofs(),
-                                             MPI_COMM_WORLD,
+                                            // dof_handler.locally_owned_dofs(),
+                                            // MPI_COMM_WORLD,
                                              locally_relevant_dofs);
 
 
   system_matrix.reinit(locally_owned_dofs,
                        locally_owned_dofs,
-                       dsp,
-                       MPI_COMM_WORLD);
+                       dsp);
+                      // MPI_COMM_WORLD);
 
 
-  solution.reinit(locally_relevant_dofs,
-                                   MPI_COMM_WORLD);
+  solution.reinit(locally_relevant_dofs);
+                                  // MPI_COMM_WORLD);
 
   system_rhs.reinit(locally_owned_dofs,
-                    locally_relevant_dofs,
-                    MPI_COMM_WORLD,
-                    true);
+                    locally_relevant_dofs);
+                    //MPI_COMM_WORLD,
+                    //true);
+                    */
 
   const unsigned int n_vector_field = dim * dofs_per_component[0] + dim_omega * dofs_per_component[dim];
   const unsigned int n_potential = dofs_per_component[dim + dim_omega] + dofs_per_component[dim + dim_omega + 1];
+
+    for(unsigned int i = 0; i < dofs_per_component.size(); i++)
+  std::cout<<"dofs_per_component " <<dofs_per_component[i]<<std::endl;
 
   cout << "Number of active cells : "
         << triangulation.n_global_active_cells()
@@ -295,6 +384,59 @@ make_dofs()
         << dof_handler.n_dofs()
         << " (" << n_vector_field << " + " << n_potential << ")"
         << std::endl;
+
+  start_VectorField_omega = dim * dofs_per_component[0];
+  start_Potential_omega = n_vector_field + dofs_per_component[dim + dim_omega];
+
+
+  constraints.clear();
+  constraints.close();
+
+//  const std::vector<types::global_dof_index> block_sizes = {n_vector_field, n_potential};
+    DynamicSparsityPattern dsp(dof_handler.n_dofs());
+  //BlockDynamicSparsityPattern dsp(block_sizes, block_sizes);
+    DoFTools::make_flux_sparsity_pattern(dof_handler,
+                                       dsp);   
+  std::cout<<"dof_handler_omega.n_dofs() "<<dof_handler_omega.n_dofs()<<std::endl;
+ for(unsigned int i = start_VectorField_omega; i < start_VectorField_omega + dof_handler_omega.n_dofs() ; i++)
+  {
+     for(unsigned int j = start_VectorField_omega; j < start_VectorField_omega + dof_handler_omega.n_dofs() ; j++)
+      {
+        dsp.add(i,j);
+      }
+  }
+
+    for(unsigned int i = start_Potential_omega; i < start_Potential_omega + dof_handler_omega.n_dofs() ; i++)
+  {
+     for(unsigned int j = start_Potential_omega; j < start_Potential_omega + dof_handler_omega.n_dofs() ; j++)
+      {
+        dsp.add(i,j);
+      }
+  }
+
+  for(unsigned int i = start_Potential_omega; i < start_Potential_omega + dof_handler_omega.n_dofs() ; i++)
+  {
+      for(unsigned int j = start_VectorField_omega; j < start_VectorField_omega + dof_handler_omega.n_dofs() ; j++)
+      {
+        dsp.add(i,j);
+      }
+  }
+   for(unsigned int i = start_VectorField_omega; i < start_VectorField_omega + dof_handler_omega.n_dofs() ; i++)
+  {
+      for(unsigned int j = start_Potential_omega; j < start_Potential_omega + dof_handler_omega.n_dofs() ; j++)
+      {
+        dsp.add(i,j);
+      }
+  }
+                                       
+  //DoFTools::make_sparsity_pattern(dof_handler, dsp, constraints,false);
+  sparsity_pattern.copy_from(dsp);
+  system_matrix.reinit(sparsity_pattern);
+
+  solution.reinit(dof_handler.n_dofs());
+    system_rhs.reinit(dof_handler.n_dofs());
+
+
 }
 
 template <int dim, int dim_omega>
@@ -434,7 +576,10 @@ assemble_system()
                       assemble_Dirichlet_boundary_terms(fe_face_values,
                                                         local_matrix,
                                                         local_vector,
-                                                        h);
+                                                        h,
+                                                        Dirichlet_bc_function,
+                                                        VectorField,
+                                                        Potential);
                     }
                   else if (face->boundary_id() == Neumann)
                     {
@@ -482,7 +627,9 @@ assemble_system()
                                               vi_ue_matrix,
                                               ve_ui_matrix,
                                               ve_ue_matrix,
-                                              h);
+                                              h,
+                                              VectorField, 
+                                              Potential);
 
                           neighbor->get_dof_indices(local_neighbor_dof_indices);
 
@@ -512,7 +659,7 @@ assemble_system()
         }
     }
 
-
+ 
 
 
 
@@ -530,6 +677,7 @@ assemble_system()
                                                   face_update_flags);
 
   const unsigned int dofs_per_cell_omega = fe_omega.dofs_per_cell;
+  std::cout<<"dofOmega "<<dofs_per_cell_omega<<std::endl;
   std::vector<types::global_dof_index> local_dof_indices_omega(dofs_per_cell_omega);
   std::vector<types::global_dof_index>
   local_neighbor_dof_indices_omega(dofs_per_cell_omega);
@@ -544,123 +692,145 @@ assemble_system()
   FullMatrix<double>      ve_ui_matrix_omega(dofs_per_cell_omega, dofs_per_cell_omega);
   FullMatrix<double>      ve_ue_matrix_omega(dofs_per_cell_omega, dofs_per_cell_omega);
 
- // typename DoFHandler<dim>::active_cell_iterator
- // cell_omega = dof_handler_omega.begin_active(),
- // endc_omega = dof_handler_omega.end();
+ typename DoFHandler<dim_omega>::active_cell_iterator
+ cell_omega = dof_handler_omega.begin_active(),
+ endc_omega = dof_handler_omega.end();
 
-//   for (; cell_omega!=endc_omega; ++cell_omega)
-//     {
+  for (; cell_omega!=endc_omega; ++cell_omega)
+    {
       
-//         {
-
-//           local_matrix_omega = 0;
-//           local_vector_omega = 0;
-
-//           fe_values_omega.reinit(cell_omega);
-//           assemble_cell_terms_omega(fe_values_omega,
-//                               local_matrix_omega,
-//                               local_vector_omega);
 
 
-//           cell_omega->get_dof_indices(local_dof_indices_omega);
+          local_matrix_omega = 0;
+          local_vector_omega = 0;
 
-//           for (unsigned int face_no_omega=0;
-//                face_no_omega< GeometryInfo<dim_omega>::faces_per_cell;
-//                face_no_omega++)
-//             {
-//               typename DoFHandler<dim_omega>::face_iterator  face_omega =
-//                 cell_omega->face(face_no);
+          fe_values_omega.reinit(cell_omega);
+          assemble_cell_terms(fe_values_omega,
+                              local_matrix_omega,
+                              local_vector_omega,
+                              rhs_function_omega,
+                              VectorField_omega,
+                              Potential_omega);
 
-//               if (face_omega->at_boundary() )
-//                 {
-//                   fe_face_values_omega.reinit(cell_omega, face_no_omega);
 
-//                   if (face_omega->boundary_id() == Dirichlet)
-//                     {
+          cell_omega->get_dof_indices(local_dof_indices_omega);
+          /*for(unsigned l = 0; l < local_dof_indices_omega.size(); l++)
+            std::cout<<local_dof_indices_omega[l]<<" ";
+          std::cout<<std::endl;*/
+          dof_omega_to_Omega(dof_handler_omega, local_dof_indices_omega);
+          /*for(unsigned l = 0; l < local_dof_indices_omega.size(); l++)
+          {
+              std::cout<<local_dof_indices_omega[l]<<" ";
+             // local_dof_indices_omega[l] = 0;
+          }
+          */
+            
+       //   std::cout<<std::endl<<" ---ende-----"<<std::endl;
+          
 
-//                       double h = cell_omega->diameter();
-//                       assemble_Dirichlet_boundary_terms_omega(fe_face_values_omega,
-//                                                         local_matrix_omega,
-//                                                         local_vector_omega,
-//                                                         h);
-//                     }
-//                   /*else if (face_omega->boundary_id() == Neumann)
-//                     {
-//                       assemble_Neumann_boundary_terms(fe_face_values_omega,
-//                                                       local_matrix_omega,
-//                                                       local_vector_omega);
-//                     }*/
-//                   else
-//                     Assert(false, ExcNotImplemented() );
-//                 }
-//               else
-//                 {
+          for (unsigned int face_no_omega=0;
+               face_no_omega< GeometryInfo<dim_omega>::faces_per_cell;
+               face_no_omega++)
+            {
+           //   std::cout<<"face_no_omega "<<face_no_omega<<std::endl;
+              typename DoFHandler<dim_omega>::face_iterator  face_omega =
+                cell_omega->face(face_no_omega);
 
-//                   Assert(cell_omega->neighbor(face_no_omega).state() ==
-//                          IteratorState::valid,
-//                          ExcInternalError());
+              if (face_omega->at_boundary() )
+                {
+               //   std::cout<<"isboundary "<<std::endl;
+                  fe_face_values_omega.reinit(cell_omega, face_no_omega);
 
-//                   typename DoFHandler<dim>::cell_iterator neighbor_omega =
-//                     cell_omega->neighbor(face_no_omega);
+                  if (face_omega->boundary_id() == Dirichlet)
+                    {
+
+                      double h = cell_omega->diameter();
+                      assemble_Dirichlet_boundary_terms(fe_face_values_omega,
+                                                        local_matrix_omega,
+                                                        local_vector_omega,
+                                                        h,
+                                                        Dirichlet_bc_function_omega,
+                                                       VectorField_omega,
+                                                       Potential_omega);
+                    }
+                  /*else if (face_omega->boundary_id() == Neumann)
+                    {
+                      assemble_Neumann_boundary_terms(fe_face_values_omega,
+                                                      local_matrix_omega,
+                                                      local_vector_omega);
+                    }*/
+                  else
+                    Assert(false, ExcNotImplemented() );
+                }
+              else
+                {
+
+                  Assert(cell_omega->neighbor(face_no_omega).state() ==
+                         IteratorState::valid,
+                         ExcInternalError());
+
+                  typename DoFHandler<dim_omega>::cell_iterator neighbor_omega =
+                    cell_omega->neighbor(face_no_omega);
 
 
               
-//                       if (cell_omega->id() < neighbor_omega->id())
-//                         {
+                      if (cell_omega->id() < neighbor_omega->id())
+                        {
                  
-//                           const unsigned int neighbor_face_no_omega =
-//                             cell_omega->neighbor_of_neighbor(face_no_omega);
+                          const unsigned int neighbor_face_no_omega =
+                            cell_omega->neighbor_of_neighbor(face_no_omega);
 
-//                           vi_ui_matrix_omega = 0;
-//                           vi_ue_matrix_omega = 0;
-//                           ve_ui_matrix_omega = 0;
-//                           ve_ue_matrix_omega = 0;
+                          vi_ui_matrix_omega = 0;
+                          vi_ue_matrix_omega = 0;
+                          ve_ui_matrix_omega = 0;
+                          ve_ue_matrix_omega = 0;
 
-//                           fe_face_values_omega.reinit(cell_omega, face_no_omega);
-//                           fe_neighbor_face_values_omega.reinit(neighbor_omega,
-//                                                          neighbor_face_no_omega);
+                          fe_face_values_omega.reinit(cell_omega, face_no_omega);
+                          fe_neighbor_face_values_omega.reinit(neighbor_omega,
+                                                         neighbor_face_no_omega);
 
-//                           double h = std::min(cell_omega->diameter(),
-//                                               neighbor_omega->diameter());
+                          double h = std::min(cell_omega->diameter(),
+                                              neighbor_omega->diameter());
 
                         
-//                           assemble_flux_terms_omega(fe_face_values_omega,
-//                                               fe_neighbor_face_values_omega,
-//                                               vi_ui_matrix_omega,
-//                                               vi_ue_matrix_omega,
-//                                               ve_ui_matrix_omega,
-//                                               ve_ue_matrix_omega,
-//                                               h);
+                          assemble_flux_terms(fe_face_values_omega,
+                                              fe_neighbor_face_values_omega,
+                                              vi_ui_matrix_omega,
+                                              vi_ue_matrix_omega,
+                                              ve_ui_matrix_omega,
+                                              ve_ue_matrix_omega,
+                                              h,
+                                              VectorField_omega, 
+                                              Potential_omega);
+                         
+                          neighbor_omega->get_dof_indices(local_neighbor_dof_indices_omega);
+                          dof_omega_to_Omega(dof_handler_omega, local_neighbor_dof_indices_omega);
+                      
+                       
 
-//                           neighbor_omega->get_dof_indices(local_neighbor_dof_indices_omega);
-
-//                          /* distribute_local_flux_to_global(
-//                             vi_ui_matrix_omega,
-//                             vi_ue_matrix_omega,
-//                             ve_ui_matrix_omega,
-//                             ve_ue_matrix_omega,
-//                             local_dof_indices_omega,
-//                             local_neighbor_dof_indices_omega);*/
-
-
-//                         }
+                        distribute_local_flux_to_global(
+                            vi_ui_matrix_omega,
+                            vi_ue_matrix_omega,
+                            ve_ui_matrix_omega,
+                            ve_ue_matrix_omega,
+                            local_dof_indices_omega,
+                            local_neighbor_dof_indices_omega);
+                        }
                     
-//                 }
-//             }
-
-// /*
-//           constraints.distribute_local_to_global(local_matrix_omega,
-//                                                  local_dof_indices_omega,
-//                                                  system_matrix_omega);
-
-//           constraints.distribute_local_to_global(local_vector_omega,
-//                                                  local_dof_indices_omega,
-//                                                  system_rhs_omega);*/
-
-//         }
-//     }
+                }
+            }
 
 
+          constraints.distribute_local_to_global(local_matrix_omega,
+                                                 local_dof_indices_omega,
+                                                 system_matrix);
+
+          constraints.distribute_local_to_global(local_vector_omega,
+                                                 local_dof_indices_omega,
+                                                 system_rhs);
+
+        
+    }
 
 
 
@@ -688,7 +858,31 @@ assemble_system()
 
     }
 
+
 }
+
+
+
+template<int dim, int dim_omega>
+template<int _dim>
+void
+LDGPoissonProblem<dim, dim_omega>::dof_omega_to_Omega(const DoFHandler<_dim>  &dof_handler,
+                                                      std::vector<types::global_dof_index> &local_dof_indices_omega)
+{
+      const std::vector<types::global_dof_index> dofs_per_component =
+      DoFTools::count_dofs_per_fe_component(dof_handler);
+  for (unsigned int i = 0; i < local_dof_indices_omega.size(); ++i)
+  {
+    const unsigned int base_i =
+            dof_handler.get_fe().system_to_base_index(i).first.first;
+
+    local_dof_indices_omega[i] = base_i == 0 ? local_dof_indices_omega[i] + start_VectorField_omega : local_dof_indices_omega[i] - dofs_per_component[0] + start_Potential_omega;
+  }         
+}
+
+
+
+
 
 template<int dim, int dim_omega>
 template<int _dim>
@@ -746,13 +940,17 @@ assemble_cell_terms(
 
 
 template<int dim, int dim_omega>
+template<int _dim>
 void
 LDGPoissonProblem<dim, dim_omega>::
 assemble_Dirichlet_boundary_terms(
-  const FEFaceValues<dim>     &face_fe,
+  const FEFaceValues<_dim>     &face_fe,
   FullMatrix<double>          &local_matrix,
   Vector<double>              &local_vector,
-  const double                 &h)
+  const double                 &h,
+  const Function<_dim>        &Dirichlet_bc_function,
+  const FEValuesExtractors::Vector VectorField, 
+  const FEValuesExtractors::Scalar Potential)
 {
   const unsigned int dofs_per_cell     = face_fe.dofs_per_cell;
   const unsigned int n_q_points        = face_fe.n_quadrature_points;
@@ -768,12 +966,12 @@ assemble_Dirichlet_boundary_terms(
     {
       for (unsigned int i=0; i<dofs_per_cell; ++i)
         {
-          const Tensor<1, dim> psi_i_field     = face_fe[VectorField].value(i,q);
+          const Tensor<1, _dim> psi_i_field     = face_fe[VectorField].value(i,q);
           const double         psi_i_potential = face_fe[Potential].value(i,q);
 
           for (unsigned int j=0; j<dofs_per_cell; ++j)
             {
-              const Tensor<1, dim> psi_j_field    = face_fe[VectorField].value(j,q);
+              const Tensor<1, _dim> psi_j_field    = face_fe[VectorField].value(j,q);
               const double         psi_j_potential = face_fe[Potential].value(j,q);
 
 
@@ -843,24 +1041,28 @@ assemble_Neumann_boundary_terms(
 
 
 template<int dim, int dim_omega>
+template<int _dim>
 void
 LDGPoissonProblem<dim, dim_omega>::
 assemble_flux_terms(
-  const FEFaceValuesBase<dim>     &fe_face_values,
-  const FEFaceValuesBase<dim>     &fe_neighbor_face_values,
+  const FEFaceValuesBase<_dim>     &fe_face_values,
+  const FEFaceValuesBase<_dim>     &fe_neighbor_face_values,
   FullMatrix<double>              &vi_ui_matrix,
   FullMatrix<double>              &vi_ue_matrix,
   FullMatrix<double>              &ve_ui_matrix,
   FullMatrix<double>              &ve_ue_matrix,
-  const double                     &h)
+  const double                     &h,
+  const FEValuesExtractors::Vector VectorField, 
+  const FEValuesExtractors::Scalar Potential
+  )
 {
   const unsigned int n_face_points      = fe_face_values.n_quadrature_points;
   const unsigned int dofs_this_cell     = fe_face_values.dofs_per_cell;
   const unsigned int dofs_neighbor_cell = fe_neighbor_face_values.dofs_per_cell;
 
 
-  Point<dim> beta;
-  for (int i=0; i<dim; ++i)
+  Point<_dim> beta;
+  for (int i=0; i<_dim; ++i)
     beta(i) = 1.0;
   beta /= sqrt(beta.square() );
 
@@ -871,14 +1073,14 @@ assemble_flux_terms(
     {
       for (unsigned int i=0; i<dofs_this_cell; ++i)
         {
-          const Tensor<1,dim>  psi_i_field_minus  =
+          const Tensor<1,_dim>  psi_i_field_minus  =
             fe_face_values[VectorField].value(i,q);
           const double psi_i_potential_minus  =
             fe_face_values[Potential].value(i,q);
 
           for (unsigned int j=0; j<dofs_this_cell; ++j)
             {
-              const Tensor<1,dim> psi_j_field_minus   =
+              const Tensor<1,_dim> psi_j_field_minus   =
                 fe_face_values[VectorField].value(j,q);
               const double psi_j_potential_minus  =
                 fe_face_values[Potential].value(j,q);
@@ -912,7 +1114,7 @@ assemble_flux_terms(
 
           for (unsigned int j=0; j<dofs_neighbor_cell; ++j)
             {
-              const Tensor<1,dim> psi_j_field_plus    =
+              const Tensor<1,_dim> psi_j_field_plus    =
                 fe_neighbor_face_values[VectorField].value(j,q);
               const double            psi_j_potential_plus        =
                 fe_neighbor_face_values[Potential].value(j,q);
@@ -949,14 +1151,14 @@ assemble_flux_terms(
 
       for (unsigned int i=0; i<dofs_neighbor_cell; ++i)
         {
-          const Tensor<1,dim>  psi_i_field_plus =
+          const Tensor<1,_dim>  psi_i_field_plus =
             fe_neighbor_face_values[VectorField].value(i,q);
           const double         psi_i_potential_plus =
             fe_neighbor_face_values[Potential].value(i,q);
 
           for (unsigned int j=0; j<dofs_this_cell; ++j)
             {
-              const Tensor<1,dim> psi_j_field_minus               =
+              const Tensor<1,_dim> psi_j_field_minus               =
                 fe_face_values[VectorField].value(j,q);
               const double        psi_j_potential_minus       =
                 fe_face_values[Potential].value(j,q);
@@ -992,7 +1194,7 @@ assemble_flux_terms(
 
           for (unsigned int j=0; j<dofs_neighbor_cell; ++j)
             {
-              const Tensor<1,dim> psi_j_field_plus =
+              const Tensor<1,_dim> psi_j_field_plus =
                 fe_neighbor_face_values[VectorField].value(j,q);
               const double        psi_j_potential_plus =
                 fe_neighbor_face_values[Potential].value(j,q);
@@ -1065,27 +1267,73 @@ template<int dim, int dim_omega>
 void
 LDGPoissonProblem<dim, dim_omega>::
 distribute_local_flux_to_global(
-  const FullMatrix<double> &vi_ui_matrix,
-  const FullMatrix<double> &vi_ue_matrix,
-  const FullMatrix<double> &ve_ui_matrix,
-  const FullMatrix<double> &ve_ue_matrix,
+   FullMatrix<double> &vi_ui_matrix,
+   FullMatrix<double> &vi_ue_matrix,
+   FullMatrix<double> &ve_ui_matrix,
+   FullMatrix<double> &ve_ue_matrix,
   const std::vector<types::global_dof_index> &local_dof_indices,
   const std::vector<types::global_dof_index> &local_neighbor_dof_indices)
 {
+ /* std::cout<<"distribute_local_flux_to_global"<<std::endl;
+    for(unsigned int i = 0; i < local_neighbor_dof_indices.size(); i++)
+  {
+    std::cout<<local_dof_indices[i]<<" "<<local_neighbor_dof_indices[i]<< " | ";
+  }                     
+ //std::cout<<std::endl<<"values"<<std::endl;   
+*/
+
+  for(unsigned int i = 0; i < local_dof_indices.size(); i++)
+  {
+    for(unsigned int j = 0; j < local_dof_indices.size(); j++)
+    {
+    //std::cout<<vi_ui_matrix(i,j)<<" "<<isfinite(vi_ui_matrix(i,j))<<" | ";
+   //if(vi_ui_matrix(i,j)> 10)
+  //  vi_ui_matrix.set(i,j,1);
+    }
+  }
+  //std::cout<<std::endl;
   constraints.distribute_local_to_global(vi_ui_matrix,
                                          local_dof_indices,
                                          system_matrix);
 
+  for(unsigned int i = 0; i < local_dof_indices.size(); i++)
+  {
+    for(unsigned int j = 0; j < local_neighbor_dof_indices.size(); j++)
+    {
+     // if(vi_ue_matrix(i,j)> 10)
+   //  std::cout<<vi_ue_matrix(i,j)<<" "<<isfinite(vi_ui_matrix(i,j))<<" | ";
+    //vi_ue_matrix.set(i,j, 1);
+    }
+    
+  }
+  //std::cout<<std::endl;
   constraints.distribute_local_to_global(vi_ue_matrix,
                                          local_dof_indices,
                                          local_neighbor_dof_indices,
                                          system_matrix);
 
+  for(unsigned int i = 0; i < local_neighbor_dof_indices.size(); i++)
+  {
+    for(unsigned int j = 0; j < local_dof_indices.size(); j++)
+    {
+  //  std::cout<<ve_ui_matrix(i,j)<<" ";
+ //   ve_ui_matrix.set(i,j, 1);
+    }
+  }
+  //std::cout<<std::endl;
   constraints.distribute_local_to_global(ve_ui_matrix,
                                          local_neighbor_dof_indices,
                                          local_dof_indices,
                                          system_matrix);
-
+  for(unsigned int i = 0; i < local_dof_indices.size(); i++)
+  {
+    for(unsigned int j = 0; j < local_dof_indices.size(); j++)
+    {
+   // std::cout<<ve_ue_matrix(i,j)<<" ";
+   // ve_ue_matrix.set(i,j, 1);
+     }
+  }
+ //std::cout<<std::endl;
   constraints.distribute_local_to_global(ve_ue_matrix,
                                          local_neighbor_dof_indices,
                                          system_matrix);
@@ -1164,7 +1412,24 @@ LDGPoissonProblem<dim, dim_omega>::
 solve()
 {
   TimerOutput::Scope t(computing_timer, "solve");
+        std::cout << "Solving linear system... ";
+      Timer timer;
+      
+      SparseDirectUMFPACK A_direct;
+  
+      solution = system_rhs;
+      A_direct.solve(system_matrix, solution);
+  
 
+    /*  const unsigned int max_iterations = solution.size();
+      SolverControl      solver_control(max_iterations);
+      SolverCG<>         solver(solver_control);
+      solver.solve(system_matrix, solution, system_rhs, PreconditionIdentity());*/
+
+
+      timer.stop();
+      std::cout << "done (" << timer.cpu_time() << "s)" << std::endl;
+/*
   // As in step-40 in order to perform a linear solve
   // we need solution vector where there is no overlap across
   // the processors and we create this by instantiating
@@ -1195,6 +1460,8 @@ solve()
   // in order to be able to do computations using the solution
   // later in the code or in post processing.
   solution = completely_distributed_solution;
+
+*/
 }
 
 // @sect4{output_results}
@@ -1250,36 +1517,57 @@ output_results()    const
   data_out.add_data_vector(solution,
                            solution_names);
 
-  Vector<float>   subdomain(triangulation.n_active_cells());
+  /*Vector<float>   subdomain(triangulation.n_active_cells());
 
   for (unsigned int i=0; i<subdomain.size(); ++i)
     subdomain(i) = triangulation.locally_owned_subdomain();
 
-  data_out.add_data_vector(subdomain,"subdomain");
+  data_out.add_data_vector(subdomain,"subdomain");*/
 
   data_out.build_patches();
 
-  const std::string filename = ("solution."   +
-                                Utilities::int_to_string(
-                                  triangulation.locally_owned_subdomain(),4));
 
-  std::ofstream output((filename + ".vtu").c_str());
+
+  std::ofstream output("solution.vtu");
   data_out.write_vtu(output);
 
-  if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
-    {
-      std::vector<std::string>    filenames;
-      for (unsigned int i=0;
-           i < Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
-           i++)
-        {
-          filenames.push_back("solution." +
-                              Utilities::int_to_string(i,4) +
-                              ".vtu");
-        }
-      std::ofstream master_output("solution.pvtu");
-      data_out.write_pvtu_record(master_output, filenames);
-    }
+  
+
+    
+
+//-----omega-----------
+    Vector<double> solution_omega;
+    const std::vector<types::global_dof_index> dofs_per_component_omega =
+      DoFTools::count_dofs_per_fe_component(dof_handler_omega);
+    for(unsigned int i = 0; i < dofs_per_component_omega.size(); i++)
+    std::cout<<"dofs_per_component_omega " <<dofs_per_component_omega[i]<<std::endl;
+    //const std::vector<types::global_dof_index> block_sizes_omega = {dofs_per_component_omega[0], dofs_per_component_omega[1]};
+    solution_omega.reinit(dofs_per_component_omega[0] + dofs_per_component_omega[1]);
+    for(unsigned int i = 0; i < dofs_per_component_omega[0]; i++)
+      solution_omega[i] = solution[start_VectorField_omega + i];
+
+    for(unsigned int i = 0; i < dofs_per_component_omega[1]; i++)
+      solution_omega[dofs_per_component_omega[0]+ i] = solution[start_Potential_omega + i];
+    std::vector<std::string> solution_names_omega;
+    solution_names_omega.emplace_back("q");
+    solution_names_omega.emplace_back("u");
+ 
+    std::vector<DataComponentInterpretation::DataComponentInterpretation>
+      interpretation_omega;
+    interpretation_omega.push_back(DataComponentInterpretation::component_is_scalar);
+    interpretation_omega.push_back(DataComponentInterpretation::component_is_scalar);
+   
+    DataOut<dim_omega> data_out_omega;
+    data_out_omega.add_data_vector(dof_handler_omega,
+                             solution_omega,
+                             solution_names_omega,
+                             interpretation_omega);
+
+    data_out_omega.build_patches(degree + 1);
+
+    std::ofstream output_omega("solution_omega.vtu");
+    data_out_omega.write_vtu(output_omega);
+    
 }
 
 
@@ -1288,7 +1576,7 @@ void
 LDGPoissonProblem<dim, dim_omega>::
 run()
 {
-  penalty = 100;
+  penalty = 1;
   make_grid();
   make_dofs();
   assemble_system();
@@ -1311,7 +1599,7 @@ int main(int argc, char *argv[])
                                                           numbers::invalid_unsigned_int);
 
       unsigned int degree = 1;
-      unsigned int n_refine = 4;
+      unsigned int n_refine =3;
       LDGPoissonProblem<2,1>    Poisson(degree, n_refine);
       Poisson.run();
 
