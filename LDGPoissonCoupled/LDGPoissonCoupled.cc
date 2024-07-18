@@ -128,7 +128,7 @@ public:
 
   ~LDGPoissonProblem();
 
-  void run();
+  std::array<double,4> run();
 
 
 
@@ -186,7 +186,7 @@ void dof_omega_to_Omega(const DoFHandler<_dim>  &dof_handler,
 
   void solve();
 
-  void compute_errors() const;
+  std::array<double, 4> compute_errors() const;
   void output_results() const;
 
 
@@ -231,6 +231,7 @@ void dof_omega_to_Omega(const DoFHandler<_dim>  &dof_handler,
   SparseMatrix<double> system_matrix;
  
   Vector<double> solution;
+   Vector<double> solution_omega;
   Vector<double> system_rhs;
 
   ConditionalOStream                              pcout;
@@ -243,6 +244,7 @@ void dof_omega_to_Omega(const DoFHandler<_dim>  &dof_handler,
   const KInverse<dim>                   K_inverse_function;
   const DirichletBoundaryValues<dim>    Dirichlet_bc_function;
   const TrueSolution<dim>               true_solution;
+  const TrueSolution_omega<dim_omega>   true_solution_omega;
 
   const RightHandSide_omega<dim_omega>              rhs_function_omega;
   const KInverse<dim_omega>                       	k_inverse_function;
@@ -256,7 +258,7 @@ void dof_omega_to_Omega(const DoFHandler<_dim>  &dof_handler,
   unsigned int start_Potential_omega;
   unsigned int start_Potential;
 
-  const double g = 0;
+  const double g = 1;
 };
 
 
@@ -316,7 +318,7 @@ make_grid()
             cell->face(face_no)->set_boundary_id(Dirichlet);
         }
     }
-      GridGenerator::hyper_cube(triangulation_omega, -0.5, 0.5);
+  GridGenerator::hyper_cube(triangulation_omega, -0.5, 0.5);
   triangulation_omega.refine_global(n_refine);
 
   typename Triangulation<dim_omega>::cell_iterator
@@ -486,8 +488,8 @@ assemble_system()
 {
   TimerOutput::Scope t(computing_timer, "assembly");
 
-  QGauss<dim>         quadrature_formula(fe.degree+1);
-  QGauss<dim-1>       face_quadrature_formula(fe.degree+1);
+  QGauss<dim>         quadrature_formula(fe.degree+2);
+  QGauss<dim-1>       face_quadrature_formula(fe.degree+2);
 
 
   const UpdateFlags update_flags  = update_values
@@ -712,8 +714,8 @@ const UpdateFlags update_flags_coupling  = update_values;
 
 
     // omega
-  QGauss<dim_omega>         quadrature_formula_omega(fe.degree+1);
-  QGauss<dim_omega-1>       face_quadrature_formula_omega(fe.degree+1);
+  QGauss<dim_omega>         quadrature_formula_omega(fe.degree+2);
+  QGauss<dim_omega-1>       face_quadrature_formula_omega(fe.degree+2);
 
   FEValues<dim_omega>      fe_values_omega(fe_omega, quadrature_formula_omega, update_flags);
 
@@ -826,12 +828,10 @@ typename DoFHandler<dim_omega>::active_cell_iterator
 
               if (face_omega->at_boundary() )
                 {
-               //   std::cout<<"isboundary "<<std::endl;
                   fe_face_values_omega.reinit(cell_omega, face_no_omega);
 
                   if (face_omega->boundary_id() == Dirichlet)
                     {
-
                       double h = cell_omega->diameter();
                       assemble_Dirichlet_boundary_terms(fe_face_values_omega,
                                                         local_matrix_omega,
@@ -1584,18 +1584,11 @@ distribute_local_flux_to_global(
 }
 
 template<int dim, int dim_omega>
-void LDGPoissonProblem<dim, dim_omega>::compute_errors() const
+std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::compute_errors() const
   {
     const ComponentSelectFunction<dim> potential_mask(dim + 1, dim + dim_omega +2);
     const ComponentSelectFunction<dim> vectorfield_mask(std::make_pair(0, dim),
                                                      dim + dim_omega + 2); 
-  /*  const ComponentSelectFunction<dim> pressure_mask(dim + 1, dim + nof_scalar_fields);
-    const ComponentSelectFunction<dim> velocity_mask(std::make_pair(0, dim),
-                                                     dim + nof_scalar_fields);
-
-   const ComponentSelectFunction<dim> pressure_mask(dim, dim + 1);
-    const ComponentSelectFunction<dim> velocity_mask(std::make_pair(0, dim),
-                                                     dim + 1);*/
 
     Vector<double> cellwise_errors(triangulation.n_active_cells());
 
@@ -1629,6 +1622,48 @@ void LDGPoissonProblem<dim, dim_omega>::compute_errors() const
 
     std::cout << "Errors: ||e_potential||_L2 = " << potential_l2_error
               << ",   ||e_vectorfield||_L2 = " << vectorfield_l2_error << std::endl;
+
+
+
+    const ComponentSelectFunction<dim_omega> potential_mask_omega(dim_omega, dim_omega + 1);
+    const ComponentSelectFunction<dim_omega> vectorfield_mask_omega(std::make_pair(0, dim_omega),
+                                                      dim_omega + 1); 
+    Vector<double> cellwise_errors_omega(triangulation_omega.n_active_cells());
+
+    const QTrapezoid<1>  q_trapez_omega;
+    const QIterated<dim_omega> quadrature_omega(q_trapez_omega, degree + 2);
+
+    VectorTools::integrate_difference(dof_handler_omega,
+                                      solution_omega,
+                                      true_solution_omega,
+                                      cellwise_errors_omega,
+                                      quadrature_omega,
+                                      VectorTools::L2_norm,
+                                      &potential_mask_omega);
+    const double potential_l2_error_omega =
+      VectorTools::compute_global_error(triangulation_omega,
+                                        cellwise_errors_omega,
+                                        VectorTools::L2_norm);
+
+    VectorTools::integrate_difference(dof_handler_omega,
+                                      solution_omega,
+                                      true_solution_omega,
+                                      cellwise_errors_omega,
+                                      quadrature_omega,
+                                      VectorTools::L2_norm,
+                                      &vectorfield_mask_omega);
+    const double vectorfield_l2_error_omega =
+      VectorTools::compute_global_error(triangulation_omega,
+                                        cellwise_errors_omega,
+                                        VectorTools::L2_norm);
+
+    std::cout << "Errors: ||e_potential_omega||_L2 = " << potential_l2_error_omega
+              << ",   ||e_vectorfield_omega||_L2 = " << vectorfield_l2_error_omega << std::endl;
+
+    
+    return std::array<double, 4>{{potential_l2_error, vectorfield_l2_error, potential_l2_error_omega, vectorfield_l2_error_omega}};
+
+    
   }
 
 
@@ -1706,6 +1741,17 @@ solve()
   solution = completely_distributed_solution;
 
 */
+    const std::vector<types::global_dof_index> dofs_per_component_omega =
+      DoFTools::count_dofs_per_fe_component(dof_handler_omega);
+   // std::cout<<"nof compoent "<<dofs_per_component_omega.size()<<std::endl;
+
+    solution_omega.reinit(dofs_per_component_omega[0] + dofs_per_component_omega[1]);
+    for(unsigned int i = 0; i < dofs_per_component_omega[0]; i++)
+      solution_omega[i] = solution[start_VectorField_omega + i];
+
+    for(unsigned int i = 0; i < dofs_per_component_omega[1]; i++)
+      solution_omega[dofs_per_component_omega[0]+ i] = solution[start_Potential_omega + i];
+
 }
 
 // @sect4{output_results}
@@ -1780,18 +1826,6 @@ output_results()    const
     
 
 //-----omega-----------
-    Vector<double> solution_omega;
-    const std::vector<types::global_dof_index> dofs_per_component_omega =
-      DoFTools::count_dofs_per_fe_component(dof_handler_omega);
-    /*for(unsigned int i = 0; i < dofs_per_component_omega.size(); i++)
-    std::cout<<"dofs_per_component_omega " <<dofs_per_component_omega[i]<<std::endl;
-    //const std::vector<types::global_dof_index> block_sizes_omega = {dofs_per_component_omega[0], dofs_per_component_omega[1]};*/
-    solution_omega.reinit(dofs_per_component_omega[0] + dofs_per_component_omega[1]);
-    for(unsigned int i = 0; i < dofs_per_component_omega[0]; i++)
-      solution_omega[i] = solution[start_VectorField_omega + i];
-
-    for(unsigned int i = 0; i < dofs_per_component_omega[1]; i++)
-      solution_omega[dofs_per_component_omega[0]+ i] = solution[start_Potential_omega + i];
     std::vector<std::string> solution_names_omega;
     solution_names_omega.emplace_back("q");
     solution_names_omega.emplace_back("u");
@@ -1816,7 +1850,7 @@ output_results()    const
 
 
 template<int dim, int dim_omega>
-void
+std::array<double,4>
 LDGPoissonProblem<dim, dim_omega>::
 run()
 {
@@ -1825,52 +1859,71 @@ run()
   make_dofs();
   assemble_system();
   solve();
-  compute_errors();
+  std::array<double, 4> results_array = compute_errors();
   output_results();
+  return results_array;
 }
 
 
 int main(int argc, char *argv[])
 {
 
-  try
-    {
-      using namespace dealii;
+  LDGPoissonProblem<dimension_Omega, 1> *LDGPoissonCoupled;
 
-      deallog.depth_console(0);
+  const unsigned int p_degree[1] = {1};
+  constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);
+  const unsigned int refinement[5] = {2,3,4,5 ,6 };
+  constexpr unsigned int refinement_size =
+      sizeof(refinement) / sizeof(refinement[0]);
 
-      Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv,
-                                                          numbers::invalid_unsigned_int);
+  std::array<double, 4> results[p_degree_size][refinement_size];
 
-      unsigned int degree = 1;
-      unsigned int n_refine = 6;
-      LDGPoissonProblem<dimension_Omega,1>    Poisson(degree, n_refine);
-      Poisson.run();
+  std::vector<std::string> solution_names = {"Q_Omega", "U_Omega", "q_omega", "u_omega"};
+  for (unsigned int r = 0; r < refinement_size; r++) {
+    for (unsigned int p = 0; p < p_degree_size; p++) {
+      LDGPoissonCoupled = new  LDGPoissonProblem<dimension_Omega, 1>(p_degree[p], refinement[r]);
+      std::array<double, 4> arr = LDGPoissonCoupled->run();
+      results[p][r] = arr;
 
+      delete LDGPoissonCoupled;
     }
-  catch (std::exception &exc)
-    {
-      std::cerr << std::endl << std::endl
-                << "----------------------------------------------------"
-                << std::endl;
-      std::cerr << "Exception on processing: " << std::endl
-                << exc.what() << std::endl
-                << "Aborting!" << std::endl
-                << "----------------------------------------------------"
-                << std::endl;
+  }
+  std::cout << "--------" << std::endl;
+  std::ofstream myfile;
+  myfile.open("convergence_results.txt");
+  for (unsigned int f = 0; f < 4; f++) {
+    myfile <<solution_names[f]<<"\n";
+    myfile << "refinement/p_degree, ";
+    for (unsigned int p = 0; p < p_degree_size; p++) {
+      myfile << p_degree[p] << ",";
+    }
+    myfile << "\n";
+    for (unsigned int r = 0; r < refinement_size; r++) {
+      myfile << refinement[r] << ",";
+      for (unsigned int p = 0; p < p_degree_size; p++) {
+        const double error = results[p][r][f];
 
-      return 1;
+        myfile << error;
+        std::cout << error;
+        if (r != 0) {
+          const double rate =
+              std::log2(results[p][r - 1][f] / results[p][r][f]);
+          myfile << " (" << rate << ")";
+          std::cout << " (" << rate << ")";
+        }
+
+        myfile << ",";
+        std::cout << ",";
+      }
+      myfile << std::endl;
+      std::cout << std::endl;
     }
-  catch (...)
-    {
-      std::cerr << std::endl << std::endl
-                << "----------------------------------------------------"
-                << std::endl;
-      std::cerr << "Unknown exception!" << std::endl
-                << "Aborting!" << std::endl
-                << "----------------------------------------------------"
-                << std::endl;
-      return 1;
-    }
+    myfile << std::endl << std::endl;
+    std::cout << std::endl << std::endl;
+  }
+
+  myfile.close();
+
   return 0;
+
 }
