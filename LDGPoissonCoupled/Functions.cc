@@ -13,6 +13,7 @@
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
 const double y_l = 0.0;
+const double z_l = 0.0;
 
 template <int dim>
 class RightHandSide : public Function<dim>
@@ -96,18 +97,23 @@ RightHandSide<dim>::
 value(const Point<dim> &p,
       const unsigned int ) const
 {
- //return 0;
+ return 0;
  if(dim == 2)
  return(2 * std::pow(w, 2)) * std::cos(w * p[0] ) *
              std::cos(w * p[1]);
   if(dim == 3)
-  return 0;
+  return (3 * std::pow(w, 2)) * std::cos(w * p[0] ) *
+             std::cos(w * p[1]) * std::cos(w * p[2]);
 }
 template <int dim>
 double RightHandSide_omega<dim>::value(const Point<dim> & p,
                                      const unsigned int /*component*/) const
 {
+  return  2;
+   if(dim ==2)
     return std::pow(w, 2) * std::cos(w * p[0]) * std::cos(w * y_l);
+  if(dim ==3)
+    return std::pow(w, 2) * std::cos(w * p[0]) * std::cos(w * y_l) * std::cos(w * z_l);
 }
 
 template <int dim>
@@ -120,13 +126,21 @@ value(const Point<dim> &p,
   double y = p[1];
   if(dim ==2)
   return  std::cos(w * x) * std::cos(w * y);
+  if(dim == 3)
+  {
+     double z = p[2];
+     return  std::cos(w * x) * std::cos(w * y) * std::cos(w * z);
+  }
 }
     
 template <int dim>
 double DirichletBoundaryValues_omega<dim>::value(const Point<dim> &p,
                                        const unsigned int /*component*/) const
 {
+  if(dim == 2)
   return  std::cos(w * p[0]) * std::cos(w * y_l);
+  if(dim == 3)
+  return  std::cos(w * p[0]) * std::cos(w * y_l) * std::cos(w * z_l);
 }
 
 
@@ -163,15 +177,16 @@ vector_value(const Point<dim> &p,
   }
   if(dim == 3)
   {
-  double x = p[0];
-  double y = p[1];
+    double x = p[0];
+    double y = p[1];
+    double z = p[2];
 
-  values(0) = 1 + 2*M_PI*cos(2*M_PI*x);
-  values(1) = 2*M_PI*sin(2*M_PI*y);
-  values(2) = 0;
-  values(3) = 0;
-  values(4) = std::sin(w * p[0] + numbers::PI / 2) * std::cos(w * p[1]);
-  values(5) = 0;
+  values(0) = w *std::sin(w * x) * std::cos(w * y) * std::cos(w * z);
+  values(1) = w *std::cos(w * x) * std::sin(w * y) * std::cos(w * z);
+  values(2) = w *std::cos(w * x) * std::cos(w * y) * std::sin(w * z);
+  values(3) = w *std::sin(w * x) * std::cos(w * y_l) * std::cos(w * z_l);
+  values(4) = std::cos(w * x) * std::cos(w * y) * std::cos(w * z);
+  values(5) = std::cos(w * x) * std::cos(w * y_l) * std::cos(w * z_l);
   }
 }
 
@@ -185,8 +200,17 @@ vector_value(const Point<dim> &p,
   Assert(values.size() == dim + 1,
          ExcDimensionMismatch(values.size(), dim + 1) );
  
-  double x = p[0];
-  
-  values(0) = w * std::sin(w * x) * std::cos(w * y_l);
-  values(1) = std::cos(w * x) * std::cos(w * y_l);
+    double x = p[0];
+
+  if(dim == 2)
+  { 
+    values(0) = w * std::sin(w * x) * std::cos(w * y_l);
+    values(1) = std::cos(w * x) * std::cos(w * y_l);
+  }
+  if(dim == 3)
+  { 
+    values(0) = w * std::sin(w * x) * std::cos(w * y_l)* std::cos(w * z_l);
+    values(1) = std::cos(w * x) * std::cos(w * y_l) * std::cos(w * z_l);
+  }
+ 
 }

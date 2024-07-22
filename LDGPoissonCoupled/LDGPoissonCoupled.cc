@@ -108,14 +108,14 @@
 
 using namespace dealii;
 
-constexpr unsigned int dimension_Omega{2};
+constexpr unsigned int dimension_Omega{3};
 const FEValuesExtractors::Vector VectorField_omega(0);
 const FEValuesExtractors::Scalar Potential_omega(1);
 
 const FEValuesExtractors::Vector VectorField(0);
 const FEValuesExtractors::Scalar Potential(dimension_Omega + 1);
 
-const unsigned int dimension_gap = 1;
+const unsigned int dimension_gap = 0;
 
 
 template <int dim, int dim_omega>
@@ -259,6 +259,17 @@ void dof_omega_to_Omega(const DoFHandler<_dim>  &dof_handler,
   unsigned int start_Potential;
 
   const double g = 1;
+
+  const UpdateFlags update_flags  = update_values
+                                    | update_gradients
+                                    | update_quadrature_points
+                                    | update_JxW_values;
+  const UpdateFlags update_flags_coupling  = update_values;
+
+  const UpdateFlags face_update_flags =   update_values
+                                          | update_normal_vectors
+                                          | update_quadrature_points
+                                          | update_JxW_values;
 };
 
 
@@ -469,6 +480,70 @@ for(unsigned int i = start_Potential_omega; i < start_Potential_omega +n_dofs_Po
         dsp.add(i,j);
       }
   }
+/*
+   QGauss<dim_omega>         quadrature_formula_omega(fe.degree+2);
+  FEValues<dim_omega>      fe_values_omega(fe_omega, quadrature_formula_omega, update_flags);
+  const unsigned int dofs_per_cell_omega = fe_omega.dofs_per_cell;
+  std::vector<types::global_dof_index> local_dof_indices_omega(dofs_per_cell_omega);
+
+  QGauss<dim>         quadrature_formula(fe.degree+2);
+  FEValues<dim>           fe_values(fe, quadrature_formula, update_flags);
+  const unsigned int dofs_per_cell = fe.dofs_per_cell;
+  std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
+
+
+
+typename DoFHandler<dim_omega>::active_cell_iterator
+ cell_omega = dof_handler_omega.begin_active(),
+ endc_omega = dof_handler_omega.end();
+
+  for (; cell_omega!=endc_omega; ++cell_omega)
+  {
+      fe_values_omega.reinit(cell_omega);
+      cell_omega->get_dof_indices(local_dof_indices_omega);
+      dof_omega_to_Omega(dof_handler_omega, local_dof_indices_omega);
+
+      std::vector<Point<dim_omega>> quadrature_points_omega = fe_values_omega.get_quadrature_points();
+
+      for(unsigned int p = 0; p < quadrature_points_omega.size(); p++)
+      {
+        Point<dim_omega> quadrature_point_omega = quadrature_points_omega[p];
+       // std::cout<<quadrature_point_omega<<std::endl;
+        Point<dim> quadrature_point;
+       if(dim == 2)
+          quadrature_point = Point<dim>(quadrature_point_omega[0], y_l);
+        if(dim ==3)
+         quadrature_point = Point<dim>(quadrature_point_omega[0], y_l, z_l);
+       auto cell = GridTools::find_active_cell_around_point(dof_handler, quadrature_point);
+        fe_values.reinit(cell);
+        cell->get_dof_indices(local_dof_indices);
+
+
+
+          for(unsigned int i = 0; i < local_dof_indices.size() ; i++)
+          {
+              for(unsigned int j = 0; j < local_dof_indices_omega.size() ; j++)
+              {
+                dsp.add(local_dof_indices[i],local_dof_indices_omega[j]);
+              }
+          }
+
+          for(unsigned int i = 0; i < local_dof_indices_omega.size() ; i++)
+          {
+              for(unsigned int j = 0; j < local_dof_indices.size() ; j++)
+              {
+                dsp.add(local_dof_indices_omega[i],local_dof_indices[j]);
+              }
+          }
+
+
+
+      }
+  }
+*/
+
+
+
         
                                   
   //DoFTools::make_sparsity_pattern(dof_handler, dsp, constraints,false);
@@ -490,20 +565,6 @@ assemble_system()
 
   QGauss<dim>         quadrature_formula(fe.degree+2);
   QGauss<dim-1>       face_quadrature_formula(fe.degree+2);
-
-
-  const UpdateFlags update_flags  = update_values
-                                    | update_gradients
-                                    | update_quadrature_points
-                                    | update_JxW_values;
-const UpdateFlags update_flags_coupling  = update_values;
-
-  const UpdateFlags face_update_flags =   update_values
-                                          | update_normal_vectors
-                                          | update_quadrature_points
-                                          | update_JxW_values;
-
-
 
   const unsigned int dofs_per_cell = fe.dofs_per_cell;
   std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
@@ -950,7 +1011,7 @@ typename DoFHandler<dim_omega>::active_cell_iterator
        if(dim == 2)
           quadrature_point = Point<dim>(quadrature_point_omega[0], y_l);
         if(dim ==3)
-         quadrature_point = Point<dim>(quadrature_point_omega[0], y_l, y_l);
+         quadrature_point = Point<dim>(quadrature_point_omega[0], y_l, z_l);
 
         // GridTools::Cache<dim, dim> cache(triangulation, mapping);
         //auto cell_and_ref_point = GridTools::find_active_cell_around_point(cache, quadrature_point);//
@@ -1854,6 +1915,8 @@ std::array<double,4>
 LDGPoissonProblem<dim, dim_omega>::
 run()
 {
+  std::cout<<"n_refine "<<n_refine << "  degree "<< degree<<std::endl;
+
   penalty = 1;
   make_grid();
   make_dofs();
@@ -1868,11 +1931,14 @@ run()
 int main(int argc, char *argv[])
 {
 
+ LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(0,4);
+ std::array<double, 4> arr = LDGPoissonCoupled_s.run();
+  return 0;
   LDGPoissonProblem<dimension_Omega, 1> *LDGPoissonCoupled;
 
   const unsigned int p_degree[1] = {1};
   constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);
-  const unsigned int refinement[5] = {2,3,4,5 ,6 };
+  const unsigned int refinement[2] = {2,3};
   constexpr unsigned int refinement_size =
       sizeof(refinement) / sizeof(refinement[0]);
 
