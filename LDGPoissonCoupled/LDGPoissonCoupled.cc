@@ -107,8 +107,9 @@
 #include "Functions.cc"
 
 using namespace dealii;
+#define MPI 0
 
-constexpr unsigned int dimension_Omega{3};
+constexpr unsigned int dimension_Omega{2};
 const FEValuesExtractors::Vector VectorField_omega(0);
 const FEValuesExtractors::Scalar Potential_omega(1);
 
@@ -145,8 +146,8 @@ private:
                            Vector<double>         &cell_vector, 
                            const TensorFunction<2, _dim>   &K_inverse_function,
                            const Function<_dim>   &_rhs_function,
-                           const FEValuesExtractors::Vector VectorField, 
-                           const FEValuesExtractors::Scalar Potential);
+                           const FEValuesExtractors::Vector &VectorField, 
+                           const FEValuesExtractors::Scalar &Potential);
 
   void assemble_Neumann_boundary_terms(const FEFaceValues<dim>    &face_fe,
                                        FullMatrix<double>         &local_matrix,
@@ -206,6 +207,25 @@ void dof_omega_to_Omega(const DoFHandler<_dim>  &dof_handler,
     Neumann
   };
 
+#if MPI
+ parallel::distributed::Triangulation<dim>       triangulation;
+  FESystem<dim>                                   fe;
+  DoFHandler<dim>                                 dof_handler;
+
+  AffineConstraints<double>                       constraints;
+
+  SparsityPattern                                 sparsity_pattern;
+
+  TrilinosWrappers::SparseMatrix                  system_matrix;
+  TrilinosWrappers::MPI::Vector                   locally_relevant_solution;
+  TrilinosWrappers::MPI::Vector                   system_rhs;
+
+  ConditionalOStream                              pcout;
+  TimerOutput                                     computing_timer;
+
+  SolverControl                                   solver_control;
+  TrilinosWrappers::SolverDirect                  solver;
+#else
   Triangulation<dim>                              triangulation;
   FESystem<dim>                                   fe;
   DoFHandler<dim>                                 dof_handler;
@@ -215,17 +235,6 @@ void dof_omega_to_Omega(const DoFHandler<_dim>  &dof_handler,
   DoFHandler<dim_omega>                           dof_handler_omega;
 
   AffineConstraints<double>                       constraints;
-
-  /*  SparsityPattern                                 sparsity_pattern;
-
-    SparseMatrix                  system_matrix;
-   Vector                   solution;
-   Vector                   system_rhs;*/
-    /*BlockSparsityPattern      sparsity_pattern;
-    BlockSparseMatrix<double> system_matrix;
-
-    BlockVector<double> solution;
-    BlockVector<double> system_rhs;*/
 
   SparsityPattern      sparsity_pattern;
   SparseMatrix<double> system_matrix;
@@ -239,6 +248,16 @@ void dof_omega_to_Omega(const DoFHandler<_dim>  &dof_handler,
 
   SolverControl                                   solver_control;
   TrilinosWrappers::SolverDirect                  solver;
+
+#endif
+
+
+
+
+
+
+
+  
 
   const RightHandSide<dim>              rhs_function;
   const KInverse<dim>                   K_inverse_function;
@@ -284,11 +303,20 @@ LDGPoissonProblem(const unsigned int degree,
   fe_omega( FESystem<dim_omega>(FE_DGQ<dim_omega>(degree), dim_omega), FE_DGQ<dim_omega>(degree)),
   dof_handler(triangulation),
   dof_handler_omega(triangulation_omega),
+ #if MPI 
+   pcout(std::cout,
+        Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0),
+  computing_timer(MPI_COMM_WORLD,
+                  pcout,
+                  TimerOutput::summary,
+                  TimerOutput::wall_times),
+ #else
   pcout(std::cout),
   computing_timer(
                  pcout,
                   TimerOutput::summary,
                   TimerOutput::wall_times),
+#endif
   solver_control(1),
   solver(solver_control),
   rhs_function(),
@@ -361,14 +389,14 @@ make_dofs()
   dof_handler_omega.distribute_dofs(fe_omega);
   DoFRenumbering::component_wise(dof_handler_omega);
 
-
-/*  IndexSet locally_owned_dofs = dof_handler.locally_owned_dofs();
+#if MPI
+IndexSet locally_owned_dofs = dof_handler.locally_owned_dofs();
 
 
   IndexSet locally_relevant_dofs;
   DoFTools::extract_locally_relevant_dofs(dof_handler,
                                           locally_relevant_dofs);
-*/
+#endif
   const std::vector<types::global_dof_index> dofs_per_component =
     DoFTools::count_dofs_per_fe_component(dof_handler);
     
@@ -465,6 +493,7 @@ unsigned int n_dofs_Potential =  dofs_per_component[dim + dim_omega];
   }
 
 //COUPLING
+/*
 for(unsigned int i = start_Potential_omega; i < start_Potential_omega +n_dofs_Potential_omega ; i++)
   {
       for(unsigned int j = start_Potential; j < start_Potential + n_dofs_Potential ; j++)
@@ -480,7 +509,8 @@ for(unsigned int i = start_Potential_omega; i < start_Potential_omega +n_dofs_Po
         dsp.add(i,j);
       }
   }
-/*
+  */
+
    QGauss<dim_omega>         quadrature_formula_omega(fe.degree+2);
   FEValues<dim_omega>      fe_values_omega(fe_omega, quadrature_formula_omega, update_flags);
   const unsigned int dofs_per_cell_omega = fe_omega.dofs_per_cell;
@@ -540,11 +570,29 @@ typename DoFHandler<dim_omega>::active_cell_iterator
 
       }
   }
-*/
+
+#if MPI
+
+  SparsityTools::distribute_sparsity_pattern(dsp,
+                                            dof_handler.locally_owned_dofs(),
+                                            MPI_COMM_WORLD,
+                                             locally_relevant_dofs);
 
 
+  system_matrix.reinit(locally_owned_dofs,
+                       locally_owned_dofs,
+                       dsp
+                       MPI_COMM_WORLD);
 
-        
+
+  solution.reinit(locally_relevant_dofs);
+                                  // MPI_COMM_WORLD);
+
+  system_rhs.reinit(locally_owned_dofs,
+                    locally_relevant_dofs
+                    MPI_COMM_WORLD,
+                    true);
+#else 
                                   
   //DoFTools::make_sparsity_pattern(dof_handler, dsp, constraints,false);
   sparsity_pattern.copy_from(dsp);
@@ -553,7 +601,7 @@ typename DoFHandler<dim_omega>::active_cell_iterator
   solution.reinit(dof_handler.n_dofs());
     system_rhs.reinit(dof_handler.n_dofs());
 
-
+#endif
 }
 
 template <int dim, int dim_omega>
@@ -563,8 +611,8 @@ assemble_system()
 {
   TimerOutput::Scope t(computing_timer, "assembly");
 
-  QGauss<dim>         quadrature_formula(fe.degree+2);
-  QGauss<dim-1>       face_quadrature_formula(fe.degree+2);
+  QGauss<dim>         quadrature_formula(fe.degree+1);
+  QGauss<dim-1>       face_quadrature_formula(fe.degree+1);
 
   const unsigned int dofs_per_cell = fe.dofs_per_cell;
   std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
@@ -595,7 +643,7 @@ assemble_system()
   const Mapping<dim> &mapping = fe_values.get_mapping();  
   {
     TimerOutput::Scope t(computing_timer, "assembly - Omega");
-   
+   //std::cout<<"assemly - Omega"<<std::endl;
     /*support_points.resize(dof_handler.n_dofs());
 
     std::vector<Point<dim>> unit_support_points_FE_Q(fe.n_dofs_per_cell());
@@ -648,10 +696,14 @@ assemble_system()
   typename DoFHandler<dim>::active_cell_iterator
   cell = dof_handler.begin_active(),
   endc = dof_handler.end();
-
+  unsigned int cell_number = 0; 
   for (; cell!=endc; ++cell)
     {
-      
+     // std::cout<<"cell_number "<<cell_number<<std::endl;
+      cell_number++;
+#if MPI
+      if (cell->is_locally_owned())
+#endif 
         {
 
           local_matrix = 0;
@@ -771,7 +823,10 @@ assemble_system()
     }
 
   }
-
+#if MPI
+  system_matrix.compress(VectorOperation::add);
+  system_rhs.compress(VectorOperation::add);
+#endif
 
 
     // omega
@@ -842,9 +897,12 @@ typename DoFHandler<dim_omega>::active_cell_iterator
  cell_omega = dof_handler_omega.begin_active(),
  endc_omega = dof_handler_omega.end();
 
+#if MPI
+if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
+#endif
 {
   TimerOutput::Scope t(computing_timer, "assembly - omega");
-
+std::cout<<"assemly - omega"<<std::endl;
  
   for (; cell_omega!=endc_omega; ++cell_omega)
     {
@@ -982,11 +1040,13 @@ typename DoFHandler<dim_omega>::active_cell_iterator
     }
 }
 
-
+#if MPI
+if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
+#endif
 {
   TimerOutput::Scope t(computing_timer, "assembly - coupling");
     //coupling
-  //std::cout<<"start Coupling"<<std::endl;
+  std::cout<<"start Coupling"<<std::endl;
   FullMatrix<double>      V_U_matrix_coupling(dofs_per_cell, dofs_per_cell);
   FullMatrix<double>      v_U_matrix_coupling(dofs_per_cell_omega, dofs_per_cell);
   FullMatrix<double>      V_u_matrix_coupling(dofs_per_cell, dofs_per_cell_omega);
@@ -1196,8 +1256,8 @@ assemble_cell_terms(
   Vector<double>          &cell_vector,
   const TensorFunction<2, _dim>    &_K_inverse_function,
   const Function<_dim>    &_rhs_function,
-  const FEValuesExtractors::Vector VectorField, 
-  const FEValuesExtractors::Scalar Potential)
+  const FEValuesExtractors::Vector &VectorField, 
+  const FEValuesExtractors::Scalar &Potential)
 {
   const unsigned int dofs_per_cell = cell_fe.dofs_per_cell;
   const unsigned int n_q_points    = cell_fe.n_quadrature_points;
@@ -1753,6 +1813,18 @@ solve()
 {
   TimerOutput::Scope t(computing_timer, "solve");
         std::cout << "Solving linear system... ";
+#if MPI
+ TrilinosWrappers::MPI::Vector
+  completely_distributed_solution(system_rhs);
+
+  solver.solve(system_matrix,
+               completely_distributed_solution,
+               system_rhs);
+
+  constraints.distribute(completely_distributed_solution);
+
+ solution = completely_distributed_solution;
+#else
       Timer timer;
       
       SparseDirectUMFPACK A_direct;
@@ -1769,6 +1841,8 @@ solve()
 
       timer.stop();
       std::cout << "done (" << timer.cpu_time() << "s)" << std::endl;
+    
+#endif
 /*
   // As in step-40 in order to perform a linear solve
   // we need solution vector where there is no overlap across
@@ -1923,7 +1997,7 @@ run()
   assemble_system();
   solve();
   std::array<double, 4> results_array = compute_errors();
-  output_results();
+ // output_results();
   return results_array;
 }
 
@@ -1931,7 +2005,7 @@ run()
 int main(int argc, char *argv[])
 {
 
- LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(0,4);
+ LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(1,5);
  std::array<double, 4> arr = LDGPoissonCoupled_s.run();
   return 0;
   LDGPoissonProblem<dimension_Omega, 1> *LDGPoissonCoupled;

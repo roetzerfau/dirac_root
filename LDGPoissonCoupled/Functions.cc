@@ -97,7 +97,7 @@ RightHandSide<dim>::
 value(const Point<dim> &p,
       const unsigned int ) const
 {
- return 0;
+ //return 0;
  if(dim == 2)
  return(2 * std::pow(w, 2)) * std::cos(w * p[0] ) *
              std::cos(w * p[1]);
@@ -109,7 +109,7 @@ template <int dim>
 double RightHandSide_omega<dim>::value(const Point<dim> & p,
                                      const unsigned int /*component*/) const
 {
-  return  2;
+  //return  2;
    if(dim ==2)
     return std::pow(w, 2) * std::cos(w * p[0]) * std::cos(w * y_l);
   if(dim ==3)
