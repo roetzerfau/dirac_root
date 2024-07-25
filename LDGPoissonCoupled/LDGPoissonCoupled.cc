@@ -94,20 +94,10 @@
 #include <deal.II/meshworker/mesh_loop.h>
 #include <deal.II/lac/trilinos_solver.h>
 
-
-
-
-
-
-
-
-
-
-
 #include "Functions.cc"
 
 using namespace dealii;
-#define MPI 0
+#define USE_MPI 1
 
 constexpr unsigned int dimension_Omega{2};
 const FEValuesExtractors::Vector VectorField_omega(0);
@@ -207,53 +197,45 @@ void dof_omega_to_Omega(const DoFHandler<_dim>  &dof_handler,
     Neumann
   };
 
-#if MPI
+#if USE_MPI
  parallel::distributed::Triangulation<dim>       triangulation;
-  FESystem<dim>                                   fe;
-  DoFHandler<dim>                                 dof_handler;
 
-  AffineConstraints<double>                       constraints;
-
-  SparsityPattern                                 sparsity_pattern;
-
-  TrilinosWrappers::SparseMatrix                  system_matrix;
-  TrilinosWrappers::MPI::Vector                   locally_relevant_solution;
+   TrilinosWrappers::SparseMatrix                  system_matrix;
+  TrilinosWrappers::MPI::Vector                   solution;
   TrilinosWrappers::MPI::Vector                   system_rhs;
 
-  ConditionalOStream                              pcout;
-  TimerOutput                                     computing_timer;
-
-  SolverControl                                   solver_control;
-  TrilinosWrappers::SolverDirect                  solver;
 #else
   Triangulation<dim>                              triangulation;
-  FESystem<dim>                                   fe;
+ 
+  SparseMatrix<double> system_matrix;
+  Vector<double> solution;
+  Vector<double> system_rhs;
+
+
+
+ 
+
+#endif
+ FESystem<dim>                                   fe;
   DoFHandler<dim>                                 dof_handler;
 
   Triangulation<dim_omega>                        triangulation_omega;
   FESystem<dim_omega>                             fe_omega;
   DoFHandler<dim_omega>                           dof_handler_omega;
+   Vector<double> solution_omega;
+
 
   AffineConstraints<double>                       constraints;
 
-  SparsityPattern      sparsity_pattern;
-  SparseMatrix<double> system_matrix;
- 
-  Vector<double> solution;
-   Vector<double> solution_omega;
-  Vector<double> system_rhs;
+  SparsityPattern                                 sparsity_pattern;
+
+
 
   ConditionalOStream                              pcout;
   TimerOutput                                     computing_timer;
 
   SolverControl                                   solver_control;
   TrilinosWrappers::SolverDirect                  solver;
-
-#endif
-
-
-
-
 
 
 
@@ -299,11 +281,14 @@ LDGPoissonProblem(const unsigned int degree,
   :
   degree(degree),   
   n_refine(n_refine),
+   #if USE_MPI
+  triangulation(MPI_COMM_WORLD),
+  #endif
   fe( FESystem<dim>(FE_DGQ<dim>(degree), dim), FE_DGQ<dim>(degree),  FE_DGQ<dim>(degree), FE_DGQ<dim>(degree)),
   fe_omega( FESystem<dim_omega>(FE_DGQ<dim_omega>(degree), dim_omega), FE_DGQ<dim_omega>(degree)),
   dof_handler(triangulation),
   dof_handler_omega(triangulation_omega),
- #if MPI 
+ #if USE_MPI 
    pcout(std::cout,
         Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0),
   computing_timer(MPI_COMM_WORLD,
@@ -389,7 +374,7 @@ make_dofs()
   dof_handler_omega.distribute_dofs(fe_omega);
   DoFRenumbering::component_wise(dof_handler_omega);
 
-#if MPI
+#if USE_MPI
 IndexSet locally_owned_dofs = dof_handler.locally_owned_dofs();
 
 
@@ -435,7 +420,7 @@ unsigned int n_dofs_Potential =  dofs_per_component[dim + dim_omega];
    /* for(unsigned int i = 0; i < dofs_per_component.size(); i++)
   std::cout<<"dofs_per_component " <<dofs_per_component[i]<<std::endl;*/
 
-  cout << "Number of active cells : "
+  pcout << "Number of active cells : "
         << triangulation.n_global_active_cells()
         << std::endl
         << "Number of degrees of freedom: "
@@ -571,7 +556,7 @@ typename DoFHandler<dim_omega>::active_cell_iterator
       }
   }
 
-#if MPI
+#if USE_MPI
 
   SparsityTools::distribute_sparsity_pattern(dsp,
                                             dof_handler.locally_owned_dofs(),
@@ -581,15 +566,13 @@ typename DoFHandler<dim_omega>::active_cell_iterator
 
   system_matrix.reinit(locally_owned_dofs,
                        locally_owned_dofs,
-                       dsp
+                       dsp,
                        MPI_COMM_WORLD);
 
-
-  solution.reinit(locally_relevant_dofs);
-                                  // MPI_COMM_WORLD);
-
-  system_rhs.reinit(locally_owned_dofs,
-                    locally_relevant_dofs
+  solution.reinit(locally_relevant_dofs,
+                                   MPI_COMM_WORLD);
+ system_rhs.reinit(locally_owned_dofs,
+                    locally_relevant_dofs,
                     MPI_COMM_WORLD,
                     true);
 #else 
@@ -643,7 +626,7 @@ assemble_system()
   const Mapping<dim> &mapping = fe_values.get_mapping();  
   {
     TimerOutput::Scope t(computing_timer, "assembly - Omega");
-   //std::cout<<"assemly - Omega"<<std::endl;
+    pcout<<"assemly - Omega"<<std::endl;
     /*support_points.resize(dof_handler.n_dofs());
 
     std::vector<Point<dim>> unit_support_points_FE_Q(fe.n_dofs_per_cell());
@@ -701,7 +684,7 @@ assemble_system()
     {
      // std::cout<<"cell_number "<<cell_number<<std::endl;
       cell_number++;
-#if MPI
+#if USE_MPI
       if (cell->is_locally_owned())
 #endif 
         {
@@ -823,7 +806,7 @@ assemble_system()
     }
 
   }
-#if MPI
+#if USE_MPI
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
 #endif
@@ -897,12 +880,12 @@ typename DoFHandler<dim_omega>::active_cell_iterator
  cell_omega = dof_handler_omega.begin_active(),
  endc_omega = dof_handler_omega.end();
 
-#if MPI
+#if USE_MPI
 if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 #endif
 {
   TimerOutput::Scope t(computing_timer, "assembly - omega");
-std::cout<<"assemly - omega"<<std::endl;
+pcout<<"assemly - omega"<<std::endl;
  
   for (; cell_omega!=endc_omega; ++cell_omega)
     {
@@ -1040,13 +1023,13 @@ std::cout<<"assemly - omega"<<std::endl;
     }
 }
 
-#if MPI
+#if USE_MPI
 if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 #endif
 {
   TimerOutput::Scope t(computing_timer, "assembly - coupling");
     //coupling
-  std::cout<<"start Coupling"<<std::endl;
+  pcout<<"start Coupling"<<std::endl;
   FullMatrix<double>      V_U_matrix_coupling(dofs_per_cell, dofs_per_cell);
   FullMatrix<double>      v_U_matrix_coupling(dofs_per_cell_omega, dofs_per_cell);
   FullMatrix<double>      V_u_matrix_coupling(dofs_per_cell, dofs_per_cell_omega);
@@ -1813,7 +1796,7 @@ solve()
 {
   TimerOutput::Scope t(computing_timer, "solve");
         std::cout << "Solving linear system... ";
-#if MPI
+#if USE_MPI
  TrilinosWrappers::MPI::Vector
   completely_distributed_solution(system_rhs);
 
@@ -2004,6 +1987,29 @@ run()
 
 int main(int argc, char *argv[])
 {
+std::cout<<"USE_MPI "<<USE_MPI<<std::endl;
+#if USE_MPI 
+   deallog.depth_console(0);
+
+      Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv,
+                                                          numbers::invalid_unsigned_int);//
+                                                          
+    int num_processes = dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
+
+      // Get the rank of the process
+      int rank = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
+
+      // Print the number of processes and the rank of the current process
+      if (rank == 0)
+      {
+        std::cout << "Number of MPI processes: " << num_processes << std::endl;
+      }
+
+      std::cout << "This is MPI process " << rank << std::endl;
+
+#endif
+
+std::cout<<"dimension_Omega "<<dimension_Omega<<std::endl;
 
  LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(1,5);
  std::array<double, 4> arr = LDGPoissonCoupled_s.run();
