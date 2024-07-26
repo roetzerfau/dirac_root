@@ -100,9 +100,9 @@
 
 using namespace dealii;
 #define USE_MPI 1
+#define USE_LDG 1
 
-
-constexpr unsigned int dimension_Omega{2};
+constexpr unsigned int dimension_Omega{3};
 const FEValuesExtractors::Vector VectorField_omega(0);
 const FEValuesExtractors::Scalar Potential_omega(1);
 
@@ -472,7 +472,7 @@ unsigned int n_dofs_Potential =  dofs_per_component[dim + dim_omega];
   }
 
 //COUPLING
-/*
+
 for(unsigned int i = start_Potential_omega; i < start_Potential_omega +n_dofs_Potential_omega ; i++)
   {
       for(unsigned int j = start_Potential; j < start_Potential + n_dofs_Potential ; j++)
@@ -488,8 +488,8 @@ for(unsigned int i = start_Potential_omega; i < start_Potential_omega +n_dofs_Po
         dsp.add(i,j);
       }
   }
-  */
-
+  
+/*
    QGauss<dim_omega>         quadrature_formula_omega(fe.degree+1);
   FEValues<dim_omega>      fe_values_omega(fe_omega, quadrature_formula_omega, update_flags);
   const unsigned int dofs_per_cell_omega = fe_omega.dofs_per_cell;
@@ -553,7 +553,7 @@ typename DoFHandler<dim_omega>::active_cell_iterator
 
       }
   }
-
+*/
 #if USE_MPI
 
   SparsityTools::distribute_sparsity_pattern(dsp,
@@ -1078,9 +1078,9 @@ std::cout<<"ende omega loop"<<std::endl;
 
 
 
-#if 0
+
 #if USE_MPI
-if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
+//if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 #endif
 {
   TimerOutput::Scope t(computing_timer, "assembly - coupling");
@@ -1096,6 +1096,7 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 
   for (; cell_omega!=endc_omega; ++cell_omega)
   {
+   //  std::cout<<"cell_omega "<<cell_omega->index()<<std::endl;
       fe_values_omega.reinit(cell_omega);
       cell_omega->get_dof_indices(local_dof_indices_omega);
       dof_omega_to_Omega(dof_handler_omega, local_dof_indices_omega);
@@ -1116,8 +1117,10 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
         //auto cell_and_ref_point = GridTools::find_active_cell_around_point(cache, quadrature_point);//
        // auto cell = cell_and_ref_point.first;
        auto cell = GridTools::find_active_cell_around_point(dof_handler, quadrature_point);
-       // std::cout<<"cell "<<cell<<std::endl;
-        
+       // std::cout<<"cell "<<cell->index()<<std::endl;
+#if 1
+         if (cell->is_locally_owned())
+         {
         fe_values.reinit(cell);
         cell->get_dof_indices(local_dof_indices);
 
@@ -1188,7 +1191,6 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
                                               system_matrix);    
 
         
-        
         /*std::cout<<"cell "<<cell<<std::endl;
         std::cout << "The point (" << query_point[0] << ", " << query_point[1] << ") is in cell with vertices: " << std::endl;
         for (unsigned int v = 0; v < GeometryInfo<2>::vertices_per_cell; ++v)
@@ -1229,14 +1231,19 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
           cell = dof_handler.begin_active(),
           endc = dof_handler.end();
           */
-
+        }
+        
+  #endif      
       }
     //std::cout<<std::endl;
   }
 }
-
-
+#if USE_MPI
+  system_matrix.compress(VectorOperation::add);
+  system_rhs.compress(VectorOperation::add);
 #endif
+std::cout<<"ende coupling loop"<<std::endl;
+
 
 
 
@@ -1466,10 +1473,14 @@ assemble_flux_terms(
 
 
   Point<_dim> beta;
+#if USE_LDG 
   for (int i=0; i<_dim; ++i)
     beta(i) = 1.0;
   beta /= sqrt(beta.square() );
-
+#else
+  for (int i=0; i<_dim; ++i)
+    beta(i) = 0.0;
+#endif
  // std::cout<<"penalty "<<penalty<<" h "<<h<<std::endl;
 
 
@@ -1572,16 +1583,21 @@ assemble_flux_terms(
               // from the exterior of this elements face and solution
               // function is taken from the interior. 
               ve_ui_matrix(i,j) +=  0;
-            ve_ui_matrix(i,j) += (-0.5 * (
+            ve_ui_matrix(i,j) += 
+#if USE_LDG
+                                      (-0.5 * (
                                        psi_i_field_plus *
                                        fe_face_values.normal_vector(q) *
                                        psi_j_potential_minus
                                        +
                                        psi_i_potential_plus *
                                        fe_face_values.normal_vector(q) *
-                                       psi_j_field_minus)
-                                     -
-                                     beta *
+                                       psi_j_field_minus) 
+#else
+                                      (
+#endif
+                                     
+                                     -1 *  beta *
                                      psi_i_field_plus *
                                      psi_j_potential_minus
                                      +
@@ -1607,16 +1623,21 @@ assemble_flux_terms(
               // function and solution function are taken from the exterior
               // cell to this face.  
               ve_ue_matrix(i,j) += 0;
-              ve_ue_matrix(i,j) +=    (-0.5 * (
+              ve_ue_matrix(i,j) +=    
+#if USE_LDG              
+                                        (-0.5 * (
                                          psi_i_field_plus *
                                          fe_face_values.normal_vector(q) *
                                          psi_j_potential_plus
                                          +
                                          psi_i_potential_plus *
                                          fe_face_values.normal_vector(q) *
-                                         psi_j_field_plus )
-                                       +
-                                       beta *
+                                         psi_j_field_plus )  
+#else
+                                      (
+#endif
+                                      
+                                      + 1 * beta *
                                        psi_i_field_plus *
                                        psi_j_potential_plus
                                        -
@@ -1944,7 +1965,9 @@ IndexSet locally_relevant_dofs;
     for(unsigned int i = 0; i < dofs_per_component_omega[0]; i++)
     { 
         types::global_dof_index dof_index = start_VectorField_omega + i;
+#if USE_MPI
         if(locally_owned_dofs.is_element(dof_index))
+#endif
           solution_omega[i] = solution[dof_index];
     }
       
@@ -1952,7 +1975,9 @@ IndexSet locally_relevant_dofs;
     for(unsigned int i = 0; i < dofs_per_component_omega[1]; i++)
     {
         types::global_dof_index dof_index = start_Potential_omega + i;
+#if USE_MPI
          if(locally_owned_dofs.is_element(dof_index))
+#endif
         solution_omega[dofs_per_component_omega[0]+ i] = solution[dof_index];
     }
       
