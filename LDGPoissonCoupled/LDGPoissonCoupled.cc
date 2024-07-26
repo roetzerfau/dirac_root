@@ -52,7 +52,7 @@
 #include <deal.II/lac/trilinos_sparse_matrix.h>
 #include <deal.II/lac/trilinos_vector.h>
 #include <deal.II/lac/trilinos_solver.h>
-#include <deal.II/non_matching/fe_values.h>
+//#include <deal.II/non_matching/fe_values.h>
 
 
 
@@ -100,7 +100,7 @@
 
 using namespace dealii;
 #define USE_MPI 1
-#define USE_LDG 1
+#define USE_LDG 0
 
 constexpr unsigned int dimension_Omega{3};
 const FEValuesExtractors::Vector VectorField_omega(0);
@@ -1509,16 +1509,16 @@ assemble_flux_terms(
                                         psi_i_potential_minus *
                                         fe_face_values.normal_vector(q) *
                                         psi_j_field_minus )
-
-                                     +
-                                      beta *
-                                      psi_i_field_minus *
-                                      psi_j_potential_minus
-                                      -
-                                      beta *
-                                      psi_i_potential_minus *
-                                      psi_j_field_minus
-                                
+// #if USE_LDG
+//                                      +
+//                                       beta *
+//                                       psi_i_field_minus *
+//                                       psi_j_potential_minus
+//                                       -
+//                                       beta *
+//                                       psi_i_potential_minus *
+//                                       psi_j_field_minus
+//  #endif                               
                                         + (penalty/h) *
                                         psi_j_potential_minus *
                                         psi_i_potential_minus
@@ -1545,16 +1545,16 @@ assemble_flux_terms(
                                        psi_i_potential_minus *
                                        fe_face_values.normal_vector(q) *
                                        psi_j_field_plus )                          
-                                                                        
-                                    -
-                                     beta *
-                                     psi_i_field_minus *
-                                     psi_j_potential_plus
-                                     +
-                                     beta *
-                                     psi_i_potential_minus *
-                                     psi_j_field_plus                                   
-                                     
+// #if USE_LDG                                                                       
+//                                     -
+//                                      beta *
+//                                      psi_i_field_minus *
+//                                      psi_j_potential_plus
+//                                      +
+//                                      beta *
+//                                      psi_i_potential_minus *
+//                                      psi_j_field_plus                                   
+// #endif                                    
                                      - 
                                      (penalty/h) *
                                      psi_i_potential_minus *
@@ -1584,7 +1584,7 @@ assemble_flux_terms(
               // function is taken from the interior. 
               ve_ui_matrix(i,j) +=  0;
             ve_ui_matrix(i,j) += 
-#if USE_LDG
+
                                       (-0.5 * (
                                        psi_i_field_plus *
                                        fe_face_values.normal_vector(q) *
@@ -1592,18 +1592,16 @@ assemble_flux_terms(
                                        +
                                        psi_i_potential_plus *
                                        fe_face_values.normal_vector(q) *
-                                       psi_j_field_minus) 
-#else
-                                      (
-#endif
-                                     
-                                     -1 *  beta *
-                                     psi_i_field_plus *
-                                     psi_j_potential_minus
-                                     +
-                                     beta *
-                                     psi_i_potential_plus *
-                                     psi_j_field_minus
+                                       psi_j_field_minus)  
+// #if USE_LDG                       
+//                                      -1 *  beta *
+//                                      psi_i_field_plus *
+//                                      psi_j_potential_minus
+//                                      +
+//                                      beta *
+//                                      psi_i_potential_plus *
+//                                      psi_j_field_minus
+// #endif
                                      -
                                      (penalty/h) *
                                      psi_i_potential_plus *
@@ -1624,7 +1622,7 @@ assemble_flux_terms(
               // cell to this face.  
               ve_ue_matrix(i,j) += 0;
               ve_ue_matrix(i,j) +=    
-#if USE_LDG              
+             
                                         (-0.5 * (
                                          psi_i_field_plus *
                                          fe_face_values.normal_vector(q) *
@@ -1633,17 +1631,16 @@ assemble_flux_terms(
                                          psi_i_potential_plus *
                                          fe_face_values.normal_vector(q) *
                                          psi_j_field_plus )  
-#else
-                                      (
-#endif
-                                      
-                                      + 1 * beta *
-                                       psi_i_field_plus *
-                                       psi_j_potential_plus
-                                       -
-                                       beta *
-                                       psi_i_potential_plus *
-                                       psi_j_field_plus
+
+//  #if USE_LDG                                     
+//                                       + 1 * beta *
+//                                        psi_i_field_plus *
+//                                        psi_j_potential_plus
+//                                        -
+//                                        beta *
+//                                        psi_i_potential_plus *
+//                                        psi_j_field_plus
+// #endif
                                        +
                                        (penalty/h) *
                                        psi_i_potential_plus *
@@ -2112,9 +2109,9 @@ std::cout<<"USE_MPI "<<USE_MPI<<std::endl;
 
 std::cout<<"dimension_Omega "<<dimension_Omega<<std::endl;
 
- LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(1,4);
- std::array<double, 4> arr = LDGPoissonCoupled_s.run();
-  return 0;
+//  LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(1,4);
+//  std::array<double, 4> arr = LDGPoissonCoupled_s.run();
+//   return 0;
   LDGPoissonProblem<dimension_Omega, 1> *LDGPoissonCoupled;
 
   const unsigned int p_degree[2] = {0,1};
@@ -2125,7 +2122,7 @@ std::cout<<"dimension_Omega "<<dimension_Omega<<std::endl;
 
   std::array<double, 4> results[p_degree_size][refinement_size];
 
-  std::vector<std::string> solution_names = {"Q_Omega", "U_Omega", "q_omega", "u_omega"};
+  std::vector<std::string> solution_names = {"U_Omega", "Q_Omega", "u_omega", "q_omega"};
   for (unsigned int r = 0; r < refinement_size; r++) {
     for (unsigned int p = 0; p < p_degree_size; p++) {
       LDGPoissonCoupled = new  LDGPoissonProblem<dimension_Omega, 1>(p_degree[p], refinement[r]);
