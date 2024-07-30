@@ -214,3 +214,43 @@ vector_value(const Point<dim> &p,
   }
  
 }
+template <int dim>
+Point<dim> cross_product(const Point<dim> &a, const Point<dim> &b)
+{
+    static_assert(dim == 3, "Cross product is only defined for 3-dimensional space.");
+    return Point<dim>(a[1] * b[2] - a[2] * b[1],
+                      a[2] * b[0] - a[0] * b[2],
+                      a[0] * b[1] - a[1] * b[0]);
+}
+
+template <int dim>
+std::vector<Point<dim>> equidistant_points_on_circle(const Point<dim> &center, double radius, const Point<dim> &normal, int num_points = 10)
+{
+    static_assert(dim == 3, "This function is designed for 3-dimensional space only.");
+    
+    std::vector<Point<dim>> points;
+    
+    // Normalize the normal vector
+    Point<dim> norm = normal / normal.norm();
+
+    // Create a vector that is not parallel to the normal vector
+    Point<dim> arbitrary_vector = (std::abs(norm[0]) > std::abs(norm[1])) ? Point<dim>(0, 1, 0) : Point<dim>(1, 0, 0);
+
+    // Compute two orthogonal vectors in the plane of the circle
+    Point<dim> u = cross_product(arbitrary_vector, norm);
+    u /= u.norm();  // Normalize u
+    Point<dim> v = cross_product(norm, u);
+
+    double angle_step = 2 * M_PI / num_points; // Angle between each point in radians
+
+    for (int i = 0; i < num_points; ++i)
+    {
+        double angle = i * angle_step;
+        double x = center[0] + radius * (u[0] * std::cos(angle) + v[0] * std::sin(angle));
+        double y = center[1] + radius * (u[1] * std::cos(angle) + v[1] * std::sin(angle));
+        double z = center[2] + radius * (u[2] * std::cos(angle) + v[2] * std::sin(angle));
+        points.push_back(Point<dim>(x, y, z));
+    }
+
+    return points;
+}

@@ -1,3 +1,5 @@
+//https://www.dealii.org/developer/doxygen/deal.II/step_60.html#step_60-Runningwithspacedimequaltothree
+
 // @sect3{LDGPoisson.cc}
 // The code begins as per usual with a long list of the the included
 // files from the deal.ii library.
@@ -520,12 +522,12 @@ typename DoFHandler<dim_omega>::active_cell_iterator
       {
         Point<dim_omega> quadrature_point_omega = quadrature_points_omega[p];
        // std::cout<<quadrature_point_omega<<std::endl;
-        Point<dim> quadrature_point;
+        Point<dim> quadrature_point_trial;
        if(dim == 2)
-          quadrature_point = Point<dim>(quadrature_point_omega[0], y_l);
+          quadrature_point_trial = Point<dim>(quadrature_point_omega[0], y_l);
         if(dim ==3)
-         quadrature_point = Point<dim>(quadrature_point_omega[0], y_l, z_l);
-       auto cell = GridTools::find_active_cell_around_point(dof_handler, quadrature_point);
+         quadrature_point_trial = Point<dim>(quadrature_point_omega[0], y_l, z_l);
+       auto cell = GridTools::find_active_cell_around_point(dof_handler, quadrature_point_trial);
 
 
       if (cell->is_locally_owned())
@@ -1108,33 +1110,115 @@ std::cout<<"ende omega loop"<<std::endl;
       for(unsigned int p = 0; p < quadrature_points_omega.size(); p++)
       {
         Point<dim_omega> quadrature_point_omega = quadrature_points_omega[p];
-       // std::cout<<quadrature_point_omega<<std::endl;
-        Point<dim> quadrature_point;
-       if(dim == 2)
-          quadrature_point = Point<dim>(quadrature_point_omega[0], y_l);
-        if(dim ==3)
-         quadrature_point = Point<dim>(quadrature_point_omega[0], y_l, z_l);
 
+
+        // TODO hier über kreis iterieren
+        double radius = 0.0;
+        std::vector<Point<dim>> quadrature_points_circle;
+        Point<dim> quadrature_point_coupling;
+
+        Point<dim> quadrature_point_trial;
+        Point<dim> quadrature_point_test;
+
+        if(dim == 2)        
+          quadrature_point_coupling = Point<dim>(quadrature_point_omega[0], y_l);
+        if(dim ==3)
+          quadrature_point_coupling = Point<dim>(quadrature_point_omega[0], y_l, z_l);
+
+        std::cout << "CouplingPoint (" << quadrature_point_coupling[0] << ", " << quadrature_point_coupling[1] << ", " << quadrature_point_coupling[2] << ")\n";
+        
+        quadrature_point_test = quadrature_point_coupling;
+        
+        
+        double weight;
+        double C_avag;
+        unsigned int nof_quad_points;
+        Point<dim> normal_vector_omega = Point<dim>(1,0,0);
+
+
+        bool AVERAGE = radius != 0;
+        //weight 
+        if(AVERAGE)
+        {
+            nof_quad_points = 11;
+        }
+        else
+        {
+          nof_quad_points = 1;
+          
+        }
+        quadrature_points_circle = equidistant_points_on_circle<dim>(quadrature_point_coupling, radius,  normal_vector_omega, nof_quad_points);
+        /*for (const auto &point : quadrature_points_circle )
+        {
+            std::cout << "(" << point[0] << ", " << point[1] << ", " << point[2] << ")\n";
+        }*/
+       // std::cout<<quadrature_point_omega<<std::endl;
+      
+          for(unsigned int q_avag = 0; q_avag < nof_quad_points; q_avag++)
+          {
+            //Quadrature weights and points
+             quadrature_point_trial = quadrature_points_circle[q_avag];
+              std::cout << "(" << quadrature_point_trial[0] << ", " << quadrature_point_trial[1] << ", " << quadrature_point_trial[2] << ")\n";
+            if(AVERAGE)
+            {
+              double perimeter = 2*M_PI *radius;
+              double h_avag = perimeter/(nof_quad_points-1);
+              //std::cout<<"h_avag "<<h_avag <<" nof_quad_points "<<nof_quad_points<<std::endl;
+              
+              double weights_odd = 4/3* h_avag;
+              double weights_even = 2/3 * h_avag;
+              double weights_first_last = h_avag/3;
+
+              C_avag = 1/perimeter;
+              if(q_avag == 0 || q_avag == nof_quad_points -1)
+                weight = weights_first_last;
+              else
+              {
+                if(q_avag % 2 == 0)
+                  weight = weights_even;
+                else
+                  weight = weights_odd;
+              }
+              } 
+              else{
+                    weight = 1;
+                    C_avag = 1;
+              }
+
+        
+
+        
+        
         // GridTools::Cache<dim, dim> cache(triangulation, mapping);
-        //auto cell_and_ref_point = GridTools::find_active_cell_around_point(cache, quadrature_point);//
+        //auto cell_and_ref_point = GridTools::find_active_cell_around_point(cache, quadrature_point_trial);//
        // auto cell = cell_and_ref_point.first;
-       auto cell = GridTools::find_active_cell_around_point(dof_handler, quadrature_point);
+       auto cell_trial = GridTools::find_active_cell_around_point(dof_handler, quadrature_point_trial);
+       auto cell_test = GridTools::find_active_cell_around_point(dof_handler, quadrature_point_test);
        // std::cout<<"cell "<<cell->index()<<std::endl;
 #if 1
-         if (cell->is_locally_owned())
+         if (cell_trial->is_locally_owned() && cell_test->is_locally_owned())
          {
-        fe_values.reinit(cell);
-        cell->get_dof_indices(local_dof_indices);
+          std::cout<<"index "<<cell_trial->index()<<" "<<cell_test->index()<<std::endl;;
+        fe_values.reinit(cell_trial);
+        cell_trial->get_dof_indices(local_dof_indices);
 
-        Point<dim> quadrature_point_mapped_cell =  mapping.transform_real_to_unit_cell(cell,quadrature_point);
-       // std::cout<<quadrature_point<<" | "<<quadrature_point_mapped_cell<< std::endl;
+        Point<dim> quadrature_point_trial_mapped_cell =  mapping.transform_real_to_unit_cell(cell_trial,quadrature_point_trial);
+        Point<dim> quadrature_point_test_mapped_cell =  mapping.transform_real_to_unit_cell(cell_test,quadrature_point_test);
+       // std::cout<<quadrature_point_trial<<" | "<<quadrature_point_mapped_cell<< std::endl;
         
-        std::vector<Point<dim>> my_quadrature_points = {quadrature_point_mapped_cell};
-         std::vector<double> my_quadrature_weights = {1};
-         const Quadrature<dim> my_quadrature_formula(my_quadrature_points, my_quadrature_weights);
+        std::vector<double> my_quadrature_weights = {1};
+        std::vector<Point<dim>> my_quadrature_points_trial = {quadrature_point_trial_mapped_cell};
+        std::vector<Point<dim>> my_quadrature_points_test = {quadrature_point_test_mapped_cell};
+         const Quadrature<dim> my_quadrature_formula_trial(my_quadrature_points_trial, my_quadrature_weights);
+         const Quadrature<dim> my_quadrature_formula_test(my_quadrature_points_test, my_quadrature_weights);
 
-        FEValues<dim> fe_values_coupling(fe, my_quadrature_formula, update_flags_coupling);
-        fe_values_coupling.reinit(cell);
+        
+        
+        FEValues<dim> fe_values_coupling_trial(fe, my_quadrature_formula_trial, update_flags_coupling);
+        fe_values_coupling_trial.reinit(cell_trial);
+
+        FEValues<dim> fe_values_coupling_test(fe, my_quadrature_formula_test, update_flags_coupling);
+        fe_values_coupling_test.reinit(cell_test);
 
 
       /*  for (unsigned int i = 0; i < fe.dofs_per_cell; ++i)
@@ -1147,7 +1231,9 @@ std::cout<<"ende omega loop"<<std::endl;
       {
          for(unsigned int j = 0; j < dofs_per_cell; j++)
          {  
-          V_U_matrix_coupling(i,j) += g * fe_values_coupling[Potential].value(i,0) * fe_values_coupling[Potential].value(j,0) * fe_values_omega.JxW(p);
+
+        //VectorTools::point_value(dof_handler)
+          V_U_matrix_coupling(i,j) += g * fe_values_coupling_test[Potential].value(i,0) * C_avag * weight * fe_values_coupling_trial[Potential].value(j,0) * fe_values_omega.JxW(p);
          }
       }
       constraints.distribute_local_to_global(V_U_matrix_coupling,
@@ -1159,7 +1245,7 @@ std::cout<<"ende omega loop"<<std::endl;
       {
          for(unsigned int j = 0; j < dofs_per_cell; j++)
          {  
-          v_U_matrix_coupling(i,j) += - g * fe_values_omega[Potential_omega].value(i,p) * fe_values_coupling[Potential].value(j,0) * fe_values_omega.JxW(p);
+          v_U_matrix_coupling(i,j) += - g * fe_values_omega[Potential_omega].value(i,p) * C_avag * weight * fe_values_coupling_trial[Potential].value(j,0) * fe_values_omega.JxW(p);
          }
       }
       constraints.distribute_local_to_global(v_U_matrix_coupling,
@@ -1172,7 +1258,7 @@ std::cout<<"ende omega loop"<<std::endl;
       {
          for(unsigned int j = 0; j < dofs_per_cell_omega; j++)
          {  
-          V_u_matrix_coupling(i,j) += - g * fe_values_omega[Potential_omega].value(j,p) * fe_values_coupling[Potential].value(i,0) * fe_values_omega.JxW(p);
+          V_u_matrix_coupling(i,j) += - g * fe_values_omega[Potential_omega].value(j,p) * fe_values_coupling_test[Potential].value(i,0) * fe_values_omega.JxW(p);
          }
       }
       constraints.distribute_local_to_global(V_u_matrix_coupling,                                      
@@ -1205,7 +1291,7 @@ std::cout<<"ende omega loop"<<std::endl;
          for (; cell!=endc; ++cell)
           {
             fe_values.reinit(cell);
-            Point<dim> quadrature_point_mapped_cell =  mapping.transform_real_to_unit_cell(cell,quadrature_point);
+            Point<dim> quadrature_point_mapped_cell =  mapping.transform_real_to_unit_cell(cell,quadrature_point_trial);
             std::cout<<quadrature_point_omega<<" | "<<quadrature_point_mapped_cell<< std::endl;
             
             
@@ -1223,7 +1309,7 @@ std::cout<<"ende omega loop"<<std::endl;
 
 
 
-       /* std::vector<Point<dim>> my_quadrature_points = {quadrature_point };
+       /* std::vector<Point<dim>> my_quadrature_points = {quadrature_point_trial };
         std::vector<double> my_quadrature_weights = {1};
         const Quadrature<dim> my_quadrature_formula(my_quadrature_points, my_quadrature_weights);
         FEValues<dim> fe_values_coupling(fe, my_quadrature_formula, update_flags);
@@ -1233,6 +1319,7 @@ std::cout<<"ende omega loop"<<std::endl;
           cell = dof_handler.begin_active(),
           endc = dof_handler.end();
           */
+           }
         }
         
   #endif      
@@ -2113,9 +2200,9 @@ std::cout<<"USE_MPI "<<USE_MPI<<std::endl;
 
 std::cout<<"dimension_Omega "<<dimension_Omega<<std::endl;
 
-//  LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(1,4);
-//  std::array<double, 4> arr = LDGPoissonCoupled_s.run();
-//   return 0;
+ LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(0,3);
+ std::array<double, 4> arr = LDGPoissonCoupled_s.run();
+  return 0;
   
 
   const unsigned int p_degree[1] = {0};
