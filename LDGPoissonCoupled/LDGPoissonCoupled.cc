@@ -1,8 +1,9 @@
 //https://www.dealii.org/developer/doxygen/deal.II/step_60.html#step_60-Runningwithspacedimequaltothree
-
+//kozlow point 
 // @sect3{LDGPoisson.cc}
 // The code begins as per usual with a long list of the the included
 // files from the deal.ii library.
+
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/base/logstream.h>
 #include <deal.II/base/function.h>
@@ -264,7 +265,7 @@ void dof_omega_to_Omega(const DoFHandler<_dim>  &dof_handler,
   unsigned int start_Potential_omega;
   unsigned int start_Potential;
 
-  const double g = 1;
+
 
   const UpdateFlags update_flags  = update_values
                                     | update_gradients
@@ -1113,7 +1114,6 @@ std::cout<<"ende omega loop"<<std::endl;
 
 
         // TODO hier über kreis iterieren
-        double radius = 0.0;
         std::vector<Point<dim>> quadrature_points_circle;
         Point<dim> quadrature_point_coupling;
 
@@ -1125,16 +1125,20 @@ std::cout<<"ende omega loop"<<std::endl;
         if(dim ==3)
           quadrature_point_coupling = Point<dim>(quadrature_point_omega[0], y_l, z_l);
 
-        std::cout << "CouplingPoint (" << quadrature_point_coupling[0] << ", " << quadrature_point_coupling[1] << ", " << quadrature_point_coupling[2] << ")\n";
-        
+       // std::cout << "CouplingPoint (" << quadrature_point_coupling[0] << ", " << quadrature_point_coupling[1] << ", " << quadrature_point_coupling[2] << ")\n";
+        //std::cout<<"CouplingPoint (" << quadrature_point_coupling<<std::endl;
+       // std::cout<<"agg"<<std::endl;
         quadrature_point_test = quadrature_point_coupling;
         
         
         double weight;
         double C_avag;
-        unsigned int nof_quad_points;
-        Point<dim> normal_vector_omega = Point<dim>(1,0,0);
-
+        unsigned int nof_quad_points; 
+        Point<dim> normal_vector_omega;
+        if(dim == 3)
+         normal_vector_omega = Point<dim>(1,0,0);
+        else
+         normal_vector_omega = Point<dim>(1,0);
 
         bool AVERAGE = radius != 0;
         //weight 
@@ -1147,7 +1151,9 @@ std::cout<<"ende omega loop"<<std::endl;
           nof_quad_points = 1;
           
         }
+       // std::cout<<"start"<<std::endl;
         quadrature_points_circle = equidistant_points_on_circle<dim>(quadrature_point_coupling, radius,  normal_vector_omega, nof_quad_points);
+        //std::cout<<"fertig"<<std::endl;
         /*for (const auto &point : quadrature_points_circle )
         {
             std::cout << "(" << point[0] << ", " << point[1] << ", " << point[2] << ")\n";
@@ -1158,7 +1164,11 @@ std::cout<<"ende omega loop"<<std::endl;
           {
             //Quadrature weights and points
              quadrature_point_trial = quadrature_points_circle[q_avag];
+          //   std::cout<<"quadrature_point_trial " <<quadrature_point_trial<<std::endl;
+             /*if(dim ==  3)
               std::cout << "(" << quadrature_point_trial[0] << ", " << quadrature_point_trial[1] << ", " << quadrature_point_trial[2] << ")\n";
+              else
+               std::cout << "(" << quadrature_point_trial[0] << ", " << quadrature_point_trial[1]  << ")\n";*/
             if(AVERAGE)
             {
               double perimeter = 2*M_PI *radius;
@@ -1198,7 +1208,7 @@ std::cout<<"ende omega loop"<<std::endl;
 #if 1
          if (cell_trial->is_locally_owned() && cell_test->is_locally_owned())
          {
-          std::cout<<"index "<<cell_trial->index()<<" "<<cell_test->index()<<std::endl;;
+        //  std::cout<<"index "<<cell_trial->index()<<" "<<cell_test->index()<<std::endl;;
         fe_values.reinit(cell_trial);
         cell_trial->get_dof_indices(local_dof_indices);
 
@@ -2162,14 +2172,14 @@ LDGPoissonProblem<dim, dim_omega>::
 run()
 {
   std::cout<<"n_refine "<<n_refine << "  degree "<< degree<<std::endl;
-
+  
   penalty = 1;
   make_grid();
   make_dofs();
   assemble_system();
   solve();
   std::array<double, 4> results_array= compute_errors();
- // output_results();
+  output_results();
   return results_array;
 }
 
@@ -2198,16 +2208,16 @@ std::cout<<"USE_MPI "<<USE_MPI<<std::endl;
 
 #endif
 
-std::cout<<"dimension_Omega "<<dimension_Omega<<std::endl;
+std::cout<<"dimension_Omega "<<dimension_Omega<<" solution "<<constructed_solution<<std::endl;
 
- LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(0,3);
+ /*LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(0,4);
  std::array<double, 4> arr = LDGPoissonCoupled_s.run();
-  return 0;
+  return 0;*/
   
 
-  const unsigned int p_degree[1] = {0};
+  const unsigned int p_degree[2] = {0,1};
   constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);
-  const unsigned int refinement[1] = {4};
+  const unsigned int refinement[3] = {2,3,4};
   constexpr unsigned int refinement_size =
       sizeof(refinement) / sizeof(refinement[0]);
 
