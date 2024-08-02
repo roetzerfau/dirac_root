@@ -1865,13 +1865,13 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::compute_errors() const
   {
 	std::cout<<"compute_errors " <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) <<std::endl;
 	double potential_l2_error, vectorfield_l2_error, potential_l2_error_omega, vectorfield_l2_error_omega;
-	if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
+	//if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 	{
     const ComponentSelectFunction<dim> potential_mask(dim + 1, dim + dim_omega +2);
     const ComponentSelectFunction<dim> vectorfield_mask(std::make_pair(0, dim),
                                                      dim + dim_omega + 2); 
 
-
+/*
       Triangulation<dim> triangulation;
       GridGenerator::hyper_cube(triangulation, -0.5,0.5 );
       triangulation.refine_global(n_refine);
@@ -1881,7 +1881,7 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::compute_errors() const
       dof_handler.distribute_dofs(fe);
       DoFRenumbering::component_wise(dof_handler);
 
-
+*/
 
     Vector<double> cellwise_errors(triangulation.n_active_cells());
     std::cout<<"triangulation.n_active_cells() "<<triangulation.n_active_cells()<<" solution size "<<solution.size()<<std::endl;
@@ -1899,7 +1899,13 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::compute_errors() const
                                       quadrature,
                                       VectorTools::L2_norm,
                                       &potential_mask);
-
+  potential_l2_error =
+  VectorTools::compute_global_error(triangulation,
+                                    cellwise_errors,
+                                    VectorTools::L2_norm);
+#if USE_MPI
+  cellwise_errors.compress(VectorOperation::add);//TODO scauen was es noc fpr 
+#endif
 
     VectorTools::integrate_difference(dof_handler,
                                       solution,
@@ -1908,11 +1914,10 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::compute_errors() const
                                       quadrature,
                                       VectorTools::L2_norm,
                                       &vectorfield_mask);
+#if USE_MPI
+  cellwise_errors.compress(VectorOperation::add);//TODO scauen was es noc fpr 
+#endif
 
-    potential_l2_error =
-  VectorTools::compute_global_error(triangulation,
-                                    cellwise_errors,
-                                    VectorTools::L2_norm);
     vectorfield_l2_error =
       VectorTools::compute_global_error(triangulation,
                                         cellwise_errors,
