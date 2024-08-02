@@ -332,7 +332,7 @@ make_grid()
 {
   TimerOutput::Scope t(computing_timer, "make grid");
 
-  GridGenerator::hyper_cube(triangulation, -1, 1);
+  GridGenerator::hyper_cube(triangulation, -0.5,0.5 );
   triangulation.refine_global(n_refine);
 
   typename Triangulation<dim>::cell_iterator
@@ -1863,17 +1863,31 @@ distribute_local_flux_to_global(
 template<int dim, int dim_omega>
 std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::compute_errors() const
   {
-	std::cout<<"compute_errors " <<std::endl;
+	std::cout<<"compute_errors " <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) <<std::endl;
 	double potential_l2_error, vectorfield_l2_error, potential_l2_error_omega, vectorfield_l2_error_omega;
-	//if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
+	if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 	{
     const ComponentSelectFunction<dim> potential_mask(dim + 1, dim + dim_omega +2);
     const ComponentSelectFunction<dim> vectorfield_mask(std::make_pair(0, dim),
                                                      dim + dim_omega + 2); 
 
-    Vector<double> cellwise_errors(triangulation.n_active_cells());
-    std::cout<<"triangulation.n_active_cells() "<<triangulation.n_active_cells()<<std::endl;
 
+      Triangulation<dim> triangulation;
+      GridGenerator::hyper_cube(triangulation, -0.5,0.5 );
+      triangulation.refine_global(n_refine);
+
+      DoFHandler<dim> dof_handler(triangulation);
+      
+      dof_handler.distribute_dofs(fe);
+      DoFRenumbering::component_wise(dof_handler);
+
+
+
+    Vector<double> cellwise_errors(triangulation.n_active_cells());
+    std::cout<<"triangulation.n_active_cells() "<<triangulation.n_active_cells()<<" solution size "<<solution.size()<<std::endl;
+    //for(unsigned int i = 0; i < solution.size();i++ )
+     //std::cout<<solution[i]<<" ";
+    std::cout<<std::endl;
     const QTrapezoid<1>  q_trapez;
     const QIterated<dim> quadrature(q_trapez, degree + 2);
 
@@ -1885,10 +1899,7 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::compute_errors() const
                                       quadrature,
                                       VectorTools::L2_norm,
                                       &potential_mask);
-     potential_l2_error =
-      VectorTools::compute_global_error(triangulation,
-                                        cellwise_errors,
-                                        VectorTools::L2_norm);
+
 
     VectorTools::integrate_difference(dof_handler,
                                       solution,
@@ -1897,6 +1908,11 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::compute_errors() const
                                       quadrature,
                                       VectorTools::L2_norm,
                                       &vectorfield_mask);
+
+    potential_l2_error =
+  VectorTools::compute_global_error(triangulation,
+                                    cellwise_errors,
+                                    VectorTools::L2_norm);
     vectorfield_l2_error =
       VectorTools::compute_global_error(triangulation,
                                         cellwise_errors,
@@ -1910,7 +1926,9 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::compute_errors() const
 	std::cout<<"triangulation_omega.n_active_cells() "<<triangulation_omega.n_active_cells()<<std::endl;
     const QTrapezoid<1>  q_trapez_omega;
     const QIterated<dim_omega> quadrature_omega(q_trapez_omega, degree + 2);
-
+    for(unsigned int i = 0; i < solution_omega.size();i++ )
+    std::cout<<solution_omega[i]<<" ";
+    std::cout<<std::endl;
     VectorTools::integrate_difference(dof_handler_omega,
                                       solution_omega,
                                       true_solution_omega,
@@ -2055,6 +2073,10 @@ IndexSet locally_relevant_dofs;
     
 #endif
 
+#if USE_MPI
+ // solution.compress(VectorOperation::add);
+#endif
+
     const std::vector<types::global_dof_index> dofs_per_component_omega =
       DoFTools::count_dofs_per_fe_component(dof_handler_omega);
    // std::cout<<"nof compoent "<<dofs_per_component_omega.size()<<std::endl;
@@ -2079,7 +2101,9 @@ IndexSet locally_relevant_dofs;
         solution_omega[dofs_per_component_omega[0]+ i] = solution[dof_index];
     }
       
-
+#if USE_MPI
+  //solution_omega.compress(VectorOperation::add);//TODO scauen was es noc fpr 
+#endif
 }
 
 template<int dim, int dim_omega>
@@ -2179,7 +2203,7 @@ run()
   assemble_system();
   solve();
   std::array<double, 4> results_array= compute_errors();
-  output_results();
+ // output_results();
   return results_array;
 }
 
@@ -2210,9 +2234,9 @@ std::cout<<"USE_MPI "<<USE_MPI<<std::endl;
 
 std::cout<<"dimension_Omega "<<dimension_Omega<<" solution "<<constructed_solution<<std::endl;
 
- /*LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(0,4);
+ LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(0,3);
  std::array<double, 4> arr = LDGPoissonCoupled_s.run();
-  return 0;*/
+  return 0;
   
 
   const unsigned int p_degree[2] = {0,1};

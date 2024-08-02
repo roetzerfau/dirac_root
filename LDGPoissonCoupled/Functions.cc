@@ -14,7 +14,7 @@ using namespace dealii;
 const double w = numbers::PI * 3 / 2;
 const double y_l = 0.0;
 const double z_l = 0.0;
-const double radius = 0.001;
+const double radius = 0.05;
 const double g = 0;
 constexpr unsigned int constructed_solution{2};
 
@@ -327,7 +327,7 @@ vector_value(const Point<dim> &p,
       if(dim == 3)
       {
       values(3) = - numbers::PI * std::cos(numbers::PI * x); //q  
-      values(5) = std::sin(numbers::PI * x) + 2; //u
+      values(5) = std::sin(numbers::PI * x); //u
 
       values(0) = r > radius ?  g/(g+1) * (1 - radius * std::log(r/radius)) * numbers::PI * std::cos(numbers::PI * x) : g/(g+1) * values(3);//Q
       values(1) = r > radius ?  - g/(g+1) * (radius*(y - y_l)/std::pow(r,2)) * values(5) : 0;;
@@ -374,8 +374,8 @@ vector_value(const Point<dim> &p,
   {
    // if(dim == 3)
     {
-      values(0) = - numbers::PI * std::cos(numbers::PI * x);
-      values(1) = std::sin(numbers::PI * x) + 2;
+      values(0) =  -numbers::PI * std::cos(numbers::PI * x);
+      values(1) = std::sin(numbers::PI * x);
     }
   break;
   }
