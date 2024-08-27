@@ -268,9 +268,9 @@ value(const Point<dim> &p,
   case 3:
   {
     if(p[0] == 1)
-      - 1/(2*numbers::PI * std::log(r));
+      - 1/(2*numbers::PI) * std::log(r);
     if(p[0] == 0)
-      1/(2*numbers::PI * std::log(r));
+      1/(2*numbers::PI) * std::log(r);
      /*Vector<double> values(6);
     TrueSolution<dim> solution;
     solution.vector_value(p, values);
@@ -338,7 +338,7 @@ void KInverse<dim>::value_list(const std::vector<Point<dim>> &points,
   for (auto &value : values)
   {
     value = unit_symmetric_tensor<dim>();
-    if(constructed_solution == 3)
+    if(constructed_solution == 3 && dim == 1)
     { 
       for(unsigned int i = 0; i < dim; i++)
       {
