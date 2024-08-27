@@ -113,7 +113,8 @@ const FEValuesExtractors::Vector VectorField(0);
 const FEValuesExtractors::Scalar Potential(dimension_Omega + 1);
 
 const unsigned int dimension_gap = 0;
-
+const double extent = 0.5;
+const double half_length =0.5;
 
 template <int dim, int dim_omega>
 class LDGPoissonProblem
@@ -144,10 +145,11 @@ private:
                            const Function<_dim>   &_rhs_function,
                            const FEValuesExtractors::Vector &VectorField, 
                            const FEValuesExtractors::Scalar &Potential);
-
-  void assemble_Neumann_boundary_terms(const FEFaceValues<dim>    &face_fe,
+  template<int _dim>
+  void assemble_Neumann_boundary_terms(const FEFaceValues<_dim>    &face_fe,
                                        FullMatrix<double>         &local_matrix,
-                                       Vector<double>             &local_vector);
+                                       Vector<double>             &local_vector,
+                                       const Function<_dim>       &Neumann_bc_function);
  
   template<int _dim>
   void assemble_Dirichlet_boundary_terms(const FEFaceValues<_dim>  &face_fe,
@@ -250,6 +252,7 @@ void dof_omega_to_Omega(const DoFHandler<_dim>  &dof_handler,
   const RightHandSide<dim>              rhs_function;
   const KInverse<dim>                   K_inverse_function;
   const DirichletBoundaryValues<dim>    Dirichlet_bc_function;
+  const NeumannBoundaryValues<dim>      Neumann_bc_function;
   const TrueSolution<dim>               true_solution;
   const TrueSolution_omega<dim_omega>   true_solution_omega;
 
@@ -331,8 +334,41 @@ LDGPoissonProblem<dim, dim_omega>::
 make_grid()
 {
   TimerOutput::Scope t(computing_timer, "make grid");
+  if(constructed_solution == 3)
+  {
+   
+    GridGenerator::cylinder(triangulation, 1, half_length );
+     // Calculate the shift vector
+    Point<3> shift_vector(half_length, 0, 0);
 
-  GridGenerator::hyper_cube(triangulation, -0.5,0.5 );
+    // Shift the cylinder by the half-length along the z-axis
+   GridTools::shift(shift_vector, triangulation);
+
+
+
+    auto bounding_box_ = GridTools::compute_mesh_predicate_bounding_box(triangulation, IteratorFilters::LocallyOwnedCell(), 0, true,1 );
+    std::cout<<"bounding_box.size() "<<bounding_box_.size()<<std::endl;
+     BoundingBox<dim> bounding_box = bounding_box_[0];
+    // Get the min and max points of the bounding box
+    Point<3> min_point = bounding_box.get_boundary_points().first;
+    Point<3> max_point = bounding_box.get_boundary_points().second;
+    std::cout<<"min_max_point "<<min_point<<" "<<max_point<<std::endl;
+
+    // Calculate the extent of the triangulation in each dimension
+    double extent_x = max_point[0] - min_point[0];
+    double extent_y = max_point[1] - min_point[1];
+    double extent_z = max_point[2] - min_point[2];
+
+    // Output the extent
+    std::cout << "Extent of the triangulation:" << std::endl;
+    std::cout << "X: " << extent_x << std::endl;
+    std::cout << "Y: " << extent_y << std::endl;
+    std::cout << "Z: " << extent_z << std::endl;
+    
+  }
+  else
+    GridGenerator::hyper_cube(triangulation, -extent, extent );
+  
   triangulation.refine_global(n_refine);
 
   typename Triangulation<dim>::cell_iterator
@@ -344,11 +380,20 @@ make_grid()
            face_no < GeometryInfo<dim>::faces_per_cell;
            face_no++)
         {
+          Point<dim> p = cell->face(face_no)->center();
           if (cell->face(face_no)->at_boundary() )
+          {
             cell->face(face_no)->set_boundary_id(Dirichlet);
+            if((p[0] == 0  || p[0] == 1) && constructed_solution == 3)
+              cell->face(face_no)->set_boundary_id(Neumann);
+          }
+            
         }
     }
-  GridGenerator::hyper_cube(triangulation_omega, -0.5, 0.5);
+  if(constructed_solution == 3)
+   GridGenerator::hyper_cube(triangulation_omega, 0, 2* half_length);
+  else
+  GridGenerator::hyper_cube(triangulation_omega, -extent, extent);
   triangulation_omega.refine_global(n_refine);
 
   typename Triangulation<dim_omega>::cell_iterator
@@ -743,7 +788,8 @@ assemble_system()
                     {
                       assemble_Neumann_boundary_terms(fe_face_values,
                                                       local_matrix,
-                                                      local_vector);
+                                                      local_vector, 
+                                                      Neumann_bc_function);
                     }
                   else
                     Assert(false, ExcNotImplemented() );
@@ -1141,6 +1187,7 @@ std::cout<<"ende omega loop"<<std::endl;
          normal_vector_omega = Point<dim>(1,0);
 
         bool AVERAGE = radius != 0;
+        //std::cout<<"AVERAGE "<<AVERAGE<<std::endl;
         //weight 
         if(AVERAGE)
         {
@@ -1153,12 +1200,13 @@ std::cout<<"ende omega loop"<<std::endl;
         }
        // std::cout<<"start"<<std::endl;
         quadrature_points_circle = equidistant_points_on_circle<dim>(quadrature_point_coupling, radius,  normal_vector_omega, nof_quad_points);
-        //std::cout<<"fertig"<<std::endl;
-        /*for (const auto &point : quadrature_points_circle )
+      /*  std::cout<<"fertig"<<std::endl;
+        for (const auto &point : quadrature_points_circle )
         {
             std::cout << "(" << point[0] << ", " << point[1] << ", " << point[2] << ")\n";
-        }*/
-       // std::cout<<quadrature_point_omega<<std::endl;
+        }
+        std::cout<<quadrature_point_omega<<std::endl;
+      */
       
           for(unsigned int q_avag = 0; q_avag < nof_quad_points; q_avag++)
           {
@@ -1509,18 +1557,23 @@ assemble_Dirichlet_boundary_terms(
 
 
 template<int dim, int dim_omega>
+template<int _dim>
 void
 LDGPoissonProblem<dim, dim_omega>::
 assemble_Neumann_boundary_terms(
-  const FEFaceValues<dim>     &face_fe,
+  const FEFaceValues<_dim>     &face_fe,
   FullMatrix<double>          &local_matrix,
-  Vector<double>              &local_vector)
+  Vector<double>              &local_vector,
+    const Function<_dim>        &Neumann_bc_function)
 {
   const unsigned int dofs_per_cell = face_fe.dofs_per_cell;
   const unsigned int n_q_points    = face_fe.n_quadrature_points;
 
 
   std::vector<double >    Neumann_bc_values(n_q_points);
+
+  Neumann_bc_function.value_list(face_fe.get_quadrature_points(),
+                                   Neumann_bc_values);
 
   for (unsigned int q=0; q<n_q_points; ++q)
     {
@@ -2202,13 +2255,13 @@ run()
 {
   std::cout<<"n_refine "<<n_refine << "  degree "<< degree<<std::endl;
   
-  penalty = 1;
+  penalty = 5;
   make_grid();
   make_dofs();
   assemble_system();
   solve();
+  output_results();
   std::array<double, 4> results_array= compute_errors();
- // output_results();
   return results_array;
 }
 
@@ -2239,14 +2292,14 @@ std::cout<<"USE_MPI "<<USE_MPI<<std::endl;
 
 std::cout<<"dimension_Omega "<<dimension_Omega<<" solution "<<constructed_solution<<std::endl;
 
- LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(0,3);
+ LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(0,4);
  std::array<double, 4> arr = LDGPoissonCoupled_s.run();
   return 0;
   
 
-  const unsigned int p_degree[2] = {0,1};
+  const unsigned int p_degree[1] = {0};
   constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);
-  const unsigned int refinement[3] = {2,3,4};
+  const unsigned int refinement[4] = {2,3,4,5};
   constexpr unsigned int refinement_size =
       sizeof(refinement) / sizeof(refinement[0]);
 

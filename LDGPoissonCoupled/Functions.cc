@@ -15,9 +15,9 @@ const double w = numbers::PI * 3 / 2;
 const double y_l = 0.0;
 const double z_l = 0.0;
 const double radius = 0.05;
-const double g = 0;
-constexpr unsigned int constructed_solution{2};
 
+constexpr unsigned int constructed_solution{3}; //1:sin cos, 2:papper log, 3: dangelo thesis log
+const double g = constructed_solution == 3 ? 2 * numbers::PI / (2 * numbers::PI * + std::log(radius)): 1;//1;
 
 
 template <int dim>
@@ -60,6 +60,16 @@ class DirichletBoundaryValues : public Function<dim>
 {
 public:
   DirichletBoundaryValues() : Function<dim>(1)
+  {}
+
+  virtual double value(const Point<dim> &p,
+                       const unsigned int component = 0 ) const override;
+};
+template <int dim>
+class NeumannBoundaryValues : public Function<dim>
+{
+public:
+  NeumannBoundaryValues() : Function<dim>(1)
   {}
 
   virtual double value(const Point<dim> &p,
@@ -130,15 +140,19 @@ value(const Point<dim> &p,
   }
   case 2: 
   {
-
-    if(dim == 3)
-      return 0;
-  break;
-  }
-  default:
+    return 0;
     break;
   }
- //return 0;
+  case 3:
+  {
+    return 0;
+    break;
+  }
+  default:
+    return 0;
+    break;
+  }
+ 
 
 }
 template <int dim>
@@ -158,14 +172,16 @@ double RightHandSide_omega<dim>::value(const Point<dim> & p,
   } 
   case 2:
   {
- //   std::cout<<"allo"<<std::endl;
-  //if(dim == 3)
-  {
- //  std::cout<<"rhs_omega "<<std::pow(numbers::PI,2) * std::sin(numbers::PI * p[0])<<std::endl;
-   return  std::pow(numbers::PI,2) * std::sin(numbers::PI * p[0]);
+    if(dim == 3)
+    {
+    return std::pow(numbers::PI,2) * std::sin(numbers::PI * p[0]);
+    }
+    break;
   }
-   
-  break;
+  case 3:
+  {
+    return 0;
+    break;
   }
   default:
     break;
@@ -214,6 +230,54 @@ value(const Point<dim> &p,
    
   }
   break;
+  case 3:
+  {
+    return 0;
+    break;
+  }
+  }
+  default:
+    break;
+  }
+  
+}
+
+
+template <int dim>
+double
+NeumannBoundaryValues<dim>::
+value(const Point<dim> &p,
+      const unsigned int ) const
+{
+  double x,y,z;
+  x = p[0];
+  y = p[1];
+  Point<dim> closest_point_line;
+  if(dim == 2)
+    closest_point_line = Point<dim>(x, y_l);
+  if(dim == 3)
+  {
+    z = p[2];
+    closest_point_line = Point<dim>(x, y_l, z_l);
+  }
+  double r = distance(p, closest_point_line);
+
+
+  switch (constructed_solution)
+  {
+  case 3:
+  {
+    if(p[0] == 1)
+      - 1/(2*numbers::PI * std::log(r));
+    if(p[0] == 0)
+      1/(2*numbers::PI * std::log(r));
+     /*Vector<double> values(6);
+    TrueSolution<dim> solution;
+    solution.vector_value(p, values);
+    return values[4];*/
+
+
+  break;
   }
   default:
     break;
@@ -245,7 +309,15 @@ double DirichletBoundaryValues_omega<dim>::value(const Point<dim> &p,
      // std::cout<<"BD_omega "<<values[1]<<std::endl;
       return values[1];
     }
-  break; 
+  break;
+  }
+  case 3:
+  {
+    if(p[0] == 0)
+      return 1;
+    if(p[0] == 1)
+      return 2;
+    break;
   }
   default:
     break;
@@ -260,9 +332,23 @@ void KInverse<dim>::value_list(const std::vector<Point<dim>> &points,
 {
   (void)points;
   AssertDimension(points.size(), values.size());
+  //std::cout<<"points.size() "<<points.size()<<std::endl;
+  //for (auto &value : values)
 
   for (auto &value : values)
+  {
     value = unit_symmetric_tensor<dim>();
+    if(constructed_solution == 3)
+    { 
+      for(unsigned int i = 0; i < dim; i++)
+      {
+        Point<dim> p = points[i];
+        value[i][i] =   1 + p[0] + 0.5 * std::pow(p[0],2);
+      }
+    }
+
+  }
+
 }
 
 
@@ -277,6 +363,7 @@ vector_value(const Point<dim> &p,
   double x,y,z;
   x = p[0];
   y = p[1];
+  values = 0;
   Point<dim> closest_point_line;
   if(dim == 2)
     closest_point_line = Point<dim>(x, y_l);
@@ -285,10 +372,12 @@ vector_value(const Point<dim> &p,
     z = p[2];
     closest_point_line = Point<dim>(x, y_l, z_l);
   }
+  double r = distance(p, closest_point_line);
    
 
   switch (constructed_solution)
   {
+    
   case 1:
   {
     if(dim == 2)
@@ -301,8 +390,6 @@ vector_value(const Point<dim> &p,
       }
       if(dim == 3)
       {
-
-
       values(0) = w *std::sin(w * x) * std::cos(w * y) * std::cos(w * z);//Q
       values(1) = w *std::cos(w * x) * std::sin(w * y) * std::cos(w * z);
       values(2) = w *std::cos(w * x) * std::cos(w * y) * std::sin(w * z);
@@ -314,7 +401,6 @@ vector_value(const Point<dim> &p,
     }
     case 2:
     {
-      double r = distance(p, closest_point_line);
       /*if(dim == 2)
       {
         
@@ -337,6 +423,22 @@ vector_value(const Point<dim> &p,
       }
     break;
     }
+    case 3:
+    {
+      if(r != 0)
+      {
+        values(4) =  -(1 + x)/(2 * numbers::PI) * std::log(r); //U
+        values(5) = 1 + x; // u
+      //std::cout<<"W "<<values(4)<<" "<<values(5)<<" r "<<r<<" std::log(r) "<<std::log(r)<<std::endl;
+      }
+      else
+      {
+        values(4) =  (1 + x); //U
+        values(5) = 1 + x; // u
+      }
+      break;
+    }
+
   default:
     break;
   }
@@ -353,7 +455,8 @@ vector_value(const Point<dim> &p,
   Assert(values.size() == dim + 1,
          ExcDimensionMismatch(values.size(), dim + 1) );
  
-    double x = p[0];
+  double x = p[0];
+  values = 0;
   switch (constructed_solution)
   {
   case 1:
@@ -374,10 +477,16 @@ vector_value(const Point<dim> &p,
   {
    // if(dim == 3)
     {
-      values(0) =  -numbers::PI * std::cos(numbers::PI * x);
-      values(1) = std::sin(numbers::PI * x);
+      values(0) =  -numbers::PI * std::cos(numbers::PI * x);//q
+      values(1) = std::sin(numbers::PI * x) + 2; //u
     }
   break;
+  }
+  case 3:
+  {
+    values(1) = 1 + x;
+     //std::cout<<"w "<<values(0)<<" "<<values(1)<<std::endl;
+    break;
   }
   default:
     break;
@@ -398,6 +507,11 @@ template <int dim>
 std::vector<Point<dim>> equidistant_points_on_circle(const Point<dim> &center, double radius, const Point<dim> &normal, int num_points = 10)
 {
     std::vector<Point<dim>> points;
+    if(num_points == 1)
+    {
+      points.push_back(center);
+      return points;
+    }
     double angle_step = 2 * M_PI / num_points; // Angle between each point in radians
      if(dim == 2)
      {
