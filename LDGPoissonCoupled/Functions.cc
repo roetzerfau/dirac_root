@@ -76,16 +76,36 @@ public:
   TrueSolution() : Function<dim>(dim + 3) {}
 
   virtual void vector_value(const Point<dim> &p,
-                            Vector<double> &valuess) const override;
+                            Vector<double> &values) const override;
 };
 template <int dim> class TrueSolution_omega : public Function<dim> {
 public:
   TrueSolution_omega() : Function<dim>(dim + 1) {}
 
   virtual void vector_value(const Point<dim> &p,
-                            Vector<double> &valuess) const override;
+                            Vector<double> &values) const override;
 };
+template <int dim> class ProductFunction : public Function<dim> {
+public:
+  ProductFunction (const Function<dim> &f1,
+                    const Function<dim> &f2) : Function<dim>(dim + 3), function1(f1), function2(f2) {}
 
+  virtual void vector_value(const Point<dim> &p,
+                            Vector<double> &values) const override;
+   
+  private:
+    const Function<dim> &function1;
+    const Function<dim> &function2;                          
+};
+template <int dim> class DistanceWeight : public Function<dim> {
+public:
+  DistanceWeight(double _alpha, double R = 0) : Function<dim>(dim + 3), alpha(_alpha), radius(R) {}
+
+  virtual void vector_value(const Point<dim> &p,
+                            Vector<double> &values) const override;
+  private:
+    double alpha, radius;
+};
 template <int dim>
 double RightHandSide<dim>::value(const Point<dim> &p,
                                  const unsigned int) const {
@@ -132,7 +152,7 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
     break;
   }
   case 3: {
-    return -(1 + p[0]);
+    return 0;//-(1 + p[0]);
     //return - std::sin(2 * numbers::PI * p[0]);//std::pow(2 * numbers::PI, 2) * std::sin(2 * numbers::PI * p[0]) ;
     break;
   }
@@ -421,6 +441,62 @@ void TrueSolution_omega<dim>::vector_value(const Point<dim> &p,
   }
  // std::cout<<values<<std::endl;
 }
+template <int dim>
+void ProductFunction<dim>::vector_value(const Point<dim> &p,
+                                     Vector<double> &values) const 
+{
+    Assert(values.size() == dim + 3,
+         ExcDimensionMismatch(values.size(), dim + 3));
+
+    const unsigned int n_components = function1.n_components;
+    AssertDimension(function2.n_components, n_components);
+    values.reinit(n_components);
+
+    Vector<double> value1(n_components), value2(n_components);
+    function1.vector_value(p, value1);
+    function2.vector_value(p, value2);
+
+    for (unsigned int i = 0; i < n_components; ++i)
+    {
+        values[i] = value1[i] * value2[i];
+    }
+    
+
+}
+template <int dim>
+void DistanceWeight<dim>::vector_value(const Point<dim> &p,
+                                     Vector<double> &values) const {
+  Assert(values.size() == dim + 3,
+         ExcDimensionMismatch(values.size(), dim + 3));
+  unsigned int n_components = dim + 3;
+  double x, y, z;
+  x = p[0];
+  y = p[1];
+  values = 0;
+  Point<dim> closest_point_line;
+ if (dim == 2)
+    closest_point_line = Point<dim>(x, y_l);
+  if (dim == 3) 
+  {
+    z = p[2];
+    closest_point_line = Point<dim>(x, y_l, z_l);
+  }
+  double r = distance(p, closest_point_line);
+
+  for(unsigned int i = 0; i < n_components; i++)
+  {
+    if(r < radius)
+       values(i) = 0;
+    else  
+      values(i) = 1;
+    //values(i) = std::pow(r,2*alpha);
+  }
+
+   
+
+}
+
+
 template <int dim>
 Point<dim> cross_product(const Point<dim> &a, const Point<dim> &b) {
   // static_assert(dim == 3, "Cross product is only defined for 3-dimensional

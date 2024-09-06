@@ -980,7 +980,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
         else
           normal_vector_omega = Point<dim>(1, 0);
 
-        bool AVERAGE = false;//radius != 0;
+        bool AVERAGE = radius != 0;
         // std::cout<<"AVERAGE "<<AVERAGE<<std::endl;
         // weight
         if (AVERAGE) {
@@ -1017,17 +1017,17 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
         fe_values_coupling_test.reinit(cell_test);
 
         // f_Omega in omega
-    local_vector = 0;
+ /*   local_vector = 0;
       for (unsigned int i = 0; i < dofs_per_cell; i++) {
        local_vector(i) +=
            fe_values_coupling_test[Potential].value(i, 0)  * (1 + quadrature_point_omega[0]) * fe_values_omega.JxW(p);// 
       }
        constraints.distribute_local_to_global(local_vector, local_dof_indices_test, system_rhs);
+*/
 
 
 
-
-#if 0
+#if 1
         for (unsigned int q_avag = 0; q_avag < nof_quad_points; q_avag++) {
           // Quadrature weights and points
           quadrature_point_trial = quadrature_points_circle[q_avag];
@@ -1582,7 +1582,10 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
                                                       dim + dim_omega + 2);
     const ComponentSelectFunction<dim> vectorfield_mask(std::make_pair(0, dim),
                                                         dim + dim_omega + 2);
+    const DistanceWeight<dim> distance_weight(1);
 
+    const ProductFunction<dim> connected_function_potential(potential_mask, distance_weight);
+    const ProductFunction<dim> connected_function_vectorfield(vectorfield_mask, distance_weight);
     /*
           Triangulation<dim> triangulation;
           GridGenerator::hyper_cube(triangulation, -0.5,0.5 );
@@ -1609,7 +1612,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
 
     VectorTools::integrate_difference(dof_handler, solution, true_solution,
                                       cellwise_errors, quadrature,
-                                      VectorTools::L2_norm, &potential_mask);
+                                      VectorTools::L2_norm, &connected_function_potential);
     potential_l2_error = VectorTools::compute_global_error(
         triangulation, cellwise_errors, VectorTools::L2_norm);
 #if USE_MPI
@@ -1619,7 +1622,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
 
     VectorTools::integrate_difference(dof_handler, solution, true_solution,
                                       cellwise_errors, quadrature,
-                                      VectorTools::L2_norm, &vectorfield_mask);
+                                      VectorTools::L2_norm, &connected_function_vectorfield);
 #if USE_MPI
     cellwise_errors.compress(VectorOperation::add); // TODO scauen was es noc
                                                     // fpr
@@ -1957,11 +1960,11 @@ int main(int argc, char *argv[]) {
   std::cout << "dimension_Omega " << dimension_Omega << " solution "
             << constructed_solution << std::endl;
 
-  /*LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(0,3);
+  LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(0,3);
   std::array<double, 4> arr = LDGPoissonCoupled_s.run();
   std::cout<<rank<<" Result_ende "<<arr[0]<<" "<<arr[1]<<" "<<arr[2]<<" "<<arr[3]<<std::endl;
   return 0;
-*/
+
 
   const unsigned int p_degree[1] = {1};
   constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);
