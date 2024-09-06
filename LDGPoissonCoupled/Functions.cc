@@ -17,7 +17,7 @@ const double z_l = 0.0;
 const double radius = 0.01;
 
 constexpr unsigned int constructed_solution{3};   // 1:sin cos, 2:papper log, 3: dangelo thesis log
-const double g = 0;//constructed_solution == 3 ? (2 * numbers::PI) / (2 * numbers::PI + std::log(radius)): 1;
+const double g = constructed_solution == 3 ? (2 * numbers::PI) / (2 * numbers::PI + std::log(radius)): 1;
 
 template <int dim> double distance(Point<dim> point1, Point<dim> point2) {
   double d = 0;
@@ -270,7 +270,7 @@ void KInverse<dim>::value_list(const std::vector<Point<dim>> &points,
       for (unsigned int i = 0; i < dim; i++) {
         Point<dim> p = points[i];
       // value[i][i]  = p[0] + 1;//
-      //value[i][i]  = 1/(1 + p[0] + 0.5 * std::pow(p[0], 2));
+      value[i][i]  = 1/(1 + p[0] + 0.5 * std::pow(p[0], 2));
       //value[i][i] = -std::pow(numbers::PI *2,2);
            
       }

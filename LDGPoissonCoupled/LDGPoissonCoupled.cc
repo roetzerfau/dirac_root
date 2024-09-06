@@ -386,7 +386,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
   for (unsigned int i = 0; i < dofs_per_component.size(); i++)
     pcout << "dofs_per_component " << dofs_per_component[i] << std::endl;
 
-  pcout << "Number of active cells Omega: "
+  pcout << "Number of global active cells Omega: "
         << triangulation.n_global_active_cells() << std::endl
         << "Number of degrees of freedom: " << dof_handler.n_dofs() << " ("
         << n_vector_field << " + " << n_potential << ")" << std::endl;
@@ -476,8 +476,10 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
     std::vector<types::global_dof_index> local_dof_indices_test(fe.dofs_per_cell);
     std::vector<types::global_dof_index> local_dof_indices_trial(fe.dofs_per_cell);
     for (; cell_omega != endc_omega; ++cell_omega) {
+
+      
       //  std::cout<<"cell_omega "<<cell_omega->index()<<std::endl;
-      fe_values_omega.reinit(cell_omega);
+     fe_values_omega.reinit(cell_omega);
 
       std::vector<Point<dim_omega>> quadrature_points_omega =
           fe_values_omega.get_quadrature_points();
@@ -518,20 +520,34 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
         //test function
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
-        auto cell_test = GridTools::find_active_cell_around_point(
+        typename DoFHandler<dim>::active_cell_iterator cell_test = GridTools::find_active_cell_around_point(
             dof_handler, quadrature_point_test);
+ if (cell_test == dof_handler.end()) {
+    std::cout << "Point not found in any cell! " << quadrature_point_coupling<<std::endl;
+}
+ #if USE_MPI
+      if (cell_test != dof_handler.end())
+      if ( cell_test->is_locally_owned())
+#endif
+ { 
+    
 
         cell_test->get_dof_indices(local_dof_indices_test);
 
         for (unsigned int q_avag = 0; q_avag < nof_quad_points; q_avag++) {
           // Quadrature weights and points
           quadrature_point_trial = quadrature_points_circle[q_avag];
-
+ 
           auto cell_trial = GridTools::find_active_cell_around_point(
               dof_handler, quadrature_point_trial);
 
+#if USE_MPI
+      if (cell_trial != dof_handler.end())
+      if (cell_trial->is_locally_owned())
+#endif
+          {
           cell_trial->get_dof_indices(local_dof_indices_trial);
-          
+        
           for (unsigned int i = 0; i < local_dof_indices_test.size(); i++) {
             for (unsigned int j = 0; j < local_dof_indices_trial.size(); j++) {
             dsp.add(local_dof_indices_test[i], local_dof_indices_trial[j]);
@@ -543,10 +559,17 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
             dsp.add(local_dof_indices_trial[i], local_dof_indices_test[j]);
               }
           }
-
+          }
+        
         }
+        
       }
+      }
+      
+
     }
+    
+
 
 #if USE_MPI
 
@@ -975,8 +998,12 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
         quadrature_point_test = quadrature_point_coupling;
         auto cell_test = GridTools::find_active_cell_around_point(
             dof_handler, quadrature_point_test);
-
-        cell_test->get_dof_indices(local_dof_indices_test);
+ #if USE_MPI
+      if (cell_test != dof_handler.end())
+      if ( cell_test->is_locally_owned())
+#endif
+{
+         cell_test->get_dof_indices(local_dof_indices_test);
           
         Point<dim> quadrature_point_test_mapped_cell =
             mapping.transform_real_to_unit_cell(cell_test,
@@ -1132,7 +1159,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
         }
 
 #endif
-     
+      }
       }
 
       // std::cout<<std::endl;
@@ -1548,6 +1575,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
             << Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) << std::endl;
   double potential_l2_error, vectorfield_l2_error, potential_l2_error_omega,
       vectorfield_l2_error_omega;
+      double global_potential_l2_error,global_vectorfield_l2_error, global_potential_l2_error_omega, global_vectorfield_l2_error_omega;
   // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
   {
     const ComponentSelectFunction<dim> potential_mask(dim + 1,
@@ -1568,9 +1596,11 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
     */
 
     Vector<double> cellwise_errors(triangulation.n_active_cells());
-    std::cout << "triangulation.n_active_cells() "
-              << triangulation.n_active_cells() << " solution size "
-              << solution.size() << std::endl;
+   /* std::cout << "triangulation.n_active_cells() " << triangulation.n_active_cells()
+              << " dof_handler.n_dofs() " << dof_handler.n_dofs() 
+              << " dof_handler.n_locally_owned_dofs() "<<dof_handler.n_locally_owned_dofs()
+              << " solution size "  << solution.size()
+              <<" mpi "<<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<std::endl;*/
     // for(unsigned int i = 0; i < solution.size();i++ )
     // std::cout<<solution[i]<<" ";
     std::cout << std::endl;
@@ -1593,47 +1623,98 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
 #if USE_MPI
     cellwise_errors.compress(VectorOperation::add); // TODO scauen was es noc
                                                     // fpr
+
 #endif
 
     vectorfield_l2_error = VectorTools::compute_global_error(
         triangulation, cellwise_errors, VectorTools::L2_norm);
 
+
+//-------------omega----------------------------------
+if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+ {
     const ComponentSelectFunction<dim_omega> potential_mask_omega(
         dim_omega, dim_omega + 1);
     const ComponentSelectFunction<dim_omega> vectorfield_mask_omega(
         std::make_pair(0, dim_omega), dim_omega + 1);
     Vector<double> cellwise_errors_omega(triangulation_omega.n_active_cells());
-    std::cout << "triangulation_omega.n_active_cells() "
-              << triangulation_omega.n_active_cells() << std::endl;
+    /*std::cout << "triangulation_omega.n_active_cells() " << triangulation_omega.n_active_cells() 
+              << " dof_handler_omega.n_dofs() " << dof_handler_omega.n_dofs() 
+             << " dof_handler_omega.n_locally_owned_dofs() "<<dof_handler_omega.n_locally_owned_dofs()
+              <<" solution_omega.size() "<<solution_omega.size() 
+              <<" mpi "<<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<std::endl;*/
     const QTrapezoid<1> q_trapez_omega;
     const QIterated<dim_omega> quadrature_omega(q_trapez_omega, degree + 2);
-    for (unsigned int i = 0; i < solution_omega.size(); i++)
-      std::cout << solution_omega[i] << " ";
+   // for (unsigned int i = 0; i < solution_omega.size(); i++)
+     // std::cout << solution_omega[i] << " ";
     std::cout << std::endl;
     VectorTools::integrate_difference(
         dof_handler_omega, solution_omega, true_solution_omega,
         cellwise_errors_omega, quadrature_omega, VectorTools::L2_norm,
         &potential_mask_omega);
+
+
     potential_l2_error_omega = VectorTools::compute_global_error(
         triangulation_omega, cellwise_errors_omega, VectorTools::L2_norm);
-
+    for (unsigned int i = 0; i < cellwise_errors_omega.size(); i++)
+    //  std::cout << cellwise_errors_omega[i] << " ";
+      // std::cout << std::endl;
     VectorTools::integrate_difference(
         dof_handler_omega, solution_omega, true_solution_omega,
         cellwise_errors_omega, quadrature_omega, VectorTools::L2_norm,
         &vectorfield_mask_omega);
+
+
     vectorfield_l2_error_omega = VectorTools::compute_global_error(
         triangulation_omega, cellwise_errors_omega, VectorTools::L2_norm);
 
-    std::cout << "Errors: ||e_potential||_L2 = " << potential_l2_error
+}
+else
+{
+   potential_l2_error_omega = 0;
+  vectorfield_l2_error_omega = 0;
+}
+#if USE_MPI
+    // Reduce local errors to global errors across all MPI processes
+    global_potential_l2_error = Utilities::MPI::sum(std::pow(potential_l2_error,2), MPI_COMM_WORLD);
+    global_vectorfield_l2_error = Utilities::MPI::sum(std::pow(vectorfield_l2_error,2), MPI_COMM_WORLD);
+    global_potential_l2_error_omega = Utilities::MPI::sum(std::pow(potential_l2_error_omega,2), MPI_COMM_WORLD);
+    global_vectorfield_l2_error_omega = Utilities::MPI::sum(std::pow(vectorfield_l2_error_omega,2), MPI_COMM_WORLD);
+#else
+    // If not using MPI, local errors are the global errors
+    global_potential_l2_error = local_potential_l2_error;
+    global_vectorfield_l2_error = local_vectorfield_l2_error;
+    global_potential_l2_error_omega = local_potential_l2_error_omega;
+    global_vectorfield_l2_error_omega = local_vectorfield_l2_error_omega;
+#endif
+
+    /*std::cout << "MPI "<< Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" Errors: ||e_potential||_L2 = " << potential_l2_error
               << ",   ||e_vectorfield||_L2 = " << vectorfield_l2_error
               << std::endl
               << "Errors: ||e_potential_omega||_L2 = "
               << potential_l2_error_omega << ",   ||e_vectorfield_omega||_L2 = "
-              << vectorfield_l2_error_omega << std::endl;
+              << vectorfield_l2_error_omega << std::endl;*/
+//std::cout<<"------------------------------------------------"<<std::endl;
+/*if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
+    std::cout << "Errors: ||e_potential||_L2 = " << global_potential_l2_error
+              << ",   ||e_vectorfield||_L2 = " << global_vectorfield_l2_error
+              << std::endl
+              << "Errors: ||e_potential_omega||_L2 = "
+              << global_potential_l2_error_omega << ",   ||e_vectorfield_omega||_L2 = "
+              << global_vectorfield_l2_error_omega << std::endl;
+}*/
   }
-  return std::array<double, 4>{{potential_l2_error, vectorfield_l2_error,
-                                potential_l2_error_omega,
-                                vectorfield_l2_error_omega}};
+#if USE_MPI
+  return std::array<double, 4>{{std::sqrt(global_potential_l2_error), std::sqrt(global_vectorfield_l2_error),
+                                std::sqrt(global_potential_l2_error_omega),
+                                std::sqrt(global_vectorfield_l2_error_omega)}};
+#else
+   return std::array<double, 4>{{global_potential_l2_error,global_vectorfield_l2_error,
+                                global_potential_l2_error_omega,
+                                global_vectorfield_l2_error_omega}};
+#endif
+
+
 }
 
 template <int dim, int dim_omega>
@@ -1641,6 +1722,7 @@ void LDGPoissonProblem<dim, dim_omega>::solve() {
   TimerOutput::Scope t(computing_timer, "solve");
   pcout << "Solving linear system... ";
 #if USE_MPI
+
   //  TrilinosWrappers::MPI::Vector
   //   completely_distributed_solution(system_rhs);
 
@@ -1844,7 +1926,7 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   make_dofs();
   assemble_system();
   solve();
-// output_results();
+  //output_results();
   std::array<double, 4> results_array = compute_errors();
   return results_array;
 }
@@ -1875,14 +1957,15 @@ int main(int argc, char *argv[]) {
   std::cout << "dimension_Omega " << dimension_Omega << " solution "
             << constructed_solution << std::endl;
 
-  LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(0,4);
+  /*LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(0,3);
   std::array<double, 4> arr = LDGPoissonCoupled_s.run();
+  std::cout<<rank<<" Result_ende "<<arr[0]<<" "<<arr[1]<<" "<<arr[2]<<" "<<arr[3]<<std::endl;
   return 0;
+*/
 
-
-  const unsigned int p_degree[1] = {0};
+  const unsigned int p_degree[1] = {1};
   constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);
-  const unsigned int refinement[4] = {2, 3, 4, 5};
+  const unsigned int refinement[3] = {2, 3, 4};
   constexpr unsigned int refinement_size =
       sizeof(refinement) / sizeof(refinement[0]);
 
