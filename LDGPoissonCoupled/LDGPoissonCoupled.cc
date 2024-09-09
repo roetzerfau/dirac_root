@@ -448,7 +448,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
   }
 
   // COUPLING
-
+#if COUPLED
   for (unsigned int i = start_Potential_omega;
        i < start_Potential_omega + n_dofs_Potential_omega; i++) {
     for (unsigned int j = start_Potential;
@@ -464,8 +464,9 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
       dsp.add(i, j);
     }
   }
+#endif
 
-
+#if lumpedAvarage
   // circle around 1D inclusion
     typename DoFHandler<dim_omega>::active_cell_iterator
       cell_omega = dof_handler_omega.begin_active(),
@@ -569,6 +570,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
       
 
     }
+#endif
     
 
 
@@ -1018,17 +1020,18 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
         fe_values_coupling_test.reinit(cell_test);
 
         // f_Omega in omega
+#if !COUPLED
     local_vector = 0;
       for (unsigned int i = 0; i < dofs_per_cell; i++) {
        local_vector(i) +=
            fe_values_coupling_test[Potential].value(i, 0)  * (1 + quadrature_point_omega[0]) * fe_values_omega.JxW(p);// 
       }
        constraints.distribute_local_to_global(local_vector, local_dof_indices_test, system_rhs);
+#endif
 
 
 
-
-#if 0
+#if COUPLED
         for (unsigned int q_avag = 0; q_avag < nof_quad_points; q_avag++) {
           // Quadrature weights and points
           quadrature_point_trial = quadrature_points_circle[q_avag];
@@ -1614,7 +1617,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
 
     VectorTools::integrate_difference(dof_handler, solution, true_solution,
                                       cellwise_errors, quadrature,
-                                      VectorTools::L2_norm, &connected_function_potential);//potential_mask
+                                      VectorTools::L2_norm, &potential_mask);//
   /*  std::cout<<"cellwise_error.size() "<<cellwise_errors.size()<<std::endl;
    for (unsigned int i = 0; i < cellwise_errors.size(); i++)
     std::cout << cellwise_errors[i] << " "<<std::endl;
@@ -1630,7 +1633,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
 // vectorfield Omega
     VectorTools::integrate_difference(dof_handler, solution, true_solution,
                                       cellwise_errors, quadrature,
-                                      VectorTools::L2_norm, &connected_function_vectorfield);
+                                      VectorTools::L2_norm, &vectorfield_mask);
 
 /*
 #if USE_MPI
@@ -1977,14 +1980,14 @@ int main(int argc, char *argv[]) {
 
   std::cout << "dimension_Omega " << dimension_Omega << " solution "
             << constructed_solution << std::endl;
-
+ /*           
   LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(0,2);
   std::array<double, 4> arr = LDGPoissonCoupled_s.run();
   std::cout<<rank<<" Result_ende: U "<<arr[0]<<" Q "<<arr[1]<<" u "<<arr[2]<<" q "<<arr[3]<<std::endl;
   return 0;
+*/
 
-
-  const unsigned int p_degree[1] = {1};
+  const unsigned int p_degree[2] = {0,1};
   constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);
   const unsigned int refinement[3] = {2, 3, 4};
   constexpr unsigned int refinement_size =
@@ -1999,13 +2002,18 @@ int main(int argc, char *argv[]) {
       LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled =
           LDGPoissonProblem<dimension_Omega, 1>(p_degree[p], refinement[r]);
       std::array<double, 4> arr = LDGPoissonCoupled.run();
+      std::cout<<rank<<" Result_ende: U "<<arr[0]<<" Q "<<arr[1]<<" u "<<arr[2]<<" q "<<arr[3]<<std::endl;
       results[p][r] = arr;
     }
   }
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
     // std::cout << "--------" << std::endl;
     std::ofstream myfile;
-    myfile.open("convergence_results.txt");
+#if COUPLED
+    myfile.open("convergence_results_coupled.txt");
+#else
+    myfile.open("convergence_results_uncoupled.txt");
+#endif
     for (unsigned int f = 0; f < 4; f++) {
       myfile << solution_names[f] << "\n";
       myfile << "refinement/p_degree, ";

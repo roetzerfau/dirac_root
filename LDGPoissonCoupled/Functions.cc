@@ -10,12 +10,15 @@
 #include <numbers>
 // std::numbers::PI
 
+#define COUPLED 0
+#define lumpedAvarage 0
+
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
 const double y_l = 0.0;
 const double z_l = 0.0;
 const double radius = 0.01;
-const bool lumpedAvarage = true;
+
 
 constexpr unsigned int constructed_solution{3};   // 1:sin cos, 2:papper log, 3: dangelo thesis log
 const double g = constructed_solution == 3 ? (2 * numbers::PI) / (2 * numbers::PI + std::log(radius)): 1;
@@ -153,7 +156,12 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
     break;
   }
   case 3: {
+#if COUPLED
     return -(1 + p[0]);
+#else
+  return 0;
+#endif
+
     //return - std::sin(2 * numbers::PI * p[0]);//std::pow(2 * numbers::PI, 2) * std::sin(2 * numbers::PI * p[0]) ;
     break;
   }
@@ -496,7 +504,7 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
        values(i) = 0;
     else  
       values(i) = 1;
-    //values(i) = std::pow(r,2*alpha);
+    values(i) = std::pow(r,2*alpha);
   }
  /* if(values[0] == 0)
   std::cout<<"distValues " <<values<<std::endl;
