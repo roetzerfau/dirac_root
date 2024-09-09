@@ -15,6 +15,7 @@ const double w = numbers::PI * 3 / 2;
 const double y_l = 0.0;
 const double z_l = 0.0;
 const double radius = 0.01;
+const bool lumpedAvarage = true;
 
 constexpr unsigned int constructed_solution{3};   // 1:sin cos, 2:papper log, 3: dangelo thesis log
 const double g = constructed_solution == 3 ? (2 * numbers::PI) / (2 * numbers::PI + std::log(radius)): 1;
@@ -152,7 +153,7 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
     break;
   }
   case 3: {
-    return 0;//-(1 + p[0]);
+    return -(1 + p[0]);
     //return - std::sin(2 * numbers::PI * p[0]);//std::pow(2 * numbers::PI, 2) * std::sin(2 * numbers::PI * p[0]) ;
     break;
   }
@@ -376,10 +377,12 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
   }
   case 3: {
     if (r != 0) {
-      values(0) = - 1/(2*numbers::PI) * std::log(r);
-      values(1) = -(1+x)/(2*numbers::PI) * (y/std::pow(r,2));
-      values(2) = -(1+x)/(2*numbers::PI) * (z/std::pow(r,2));
-   
+      values(0) = 1/(2*numbers::PI) * std::log(r); //Q 
+       values(1) = (1+x)/(2*numbers::PI) * (y/std::pow(r,2)); // Q
+      values(2) = (1+x)/(2*numbers::PI) * (z/std::pow(r,2)); //Q
+    //values(1) = 0;
+    //values(2) = (1+x)/ (2*numbers::PI *r );
+   //std::cout<<r << " " <<x <<" " <<values(2)<<std::endl;
       values(4) = -(1 + x) / (2 * numbers::PI) * std::log(r); // U  
       //values(4) = std::sin(numbers::PI * 2 *x) / (2 * numbers::PI) * std::log(r); // U      
     } else {
@@ -432,7 +435,7 @@ void TrueSolution_omega<dim>::vector_value(const Point<dim> &p,
   case 3: {
     //values(1) = std::sin(numbers::PI * 2 *x);//u
     values(1) = 1 + x;//u
-    values(0) = -(1 + x + 0.5 * std::pow(x,2));
+    values(0) = -(1 + x + 0.5 * std::pow(x,2)); //q 
     // std::cout<<"w "<<values(0)<<" "<<values(1)<<std::endl;
     break;
   }
@@ -449,18 +452,22 @@ void ProductFunction<dim>::vector_value(const Point<dim> &p,
          ExcDimensionMismatch(values.size(), dim + 3));
 
     const unsigned int n_components = function1.n_components;
+   
     AssertDimension(function2.n_components, n_components);
     values.reinit(n_components);
 
     Vector<double> value1(n_components), value2(n_components);
     function1.vector_value(p, value1);
     function2.vector_value(p, value2);
-
+    
     for (unsigned int i = 0; i < n_components; ++i)
     {
         values[i] = value1[i] * value2[i];
     }
-    
+    //std::cout<<p <<" "<<values<<std::endl;
+    /*if(value2[0] == 0)
+    std::cout<<p<<" | " << value1 <<  " | "<< value2<< " | "<< values<<std::endl;
+    */
 
 }
 template <int dim>
@@ -491,7 +498,9 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
       values(i) = 1;
     //values(i) = std::pow(r,2*alpha);
   }
-
+ /* if(values[0] == 0)
+  std::cout<<"distValues " <<values<<std::endl;
+*/
    
 
 }
