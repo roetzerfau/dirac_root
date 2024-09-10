@@ -346,6 +346,9 @@ template <int dim, int dim_omega>
 void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
   TimerOutput::Scope t(computing_timer, "setup");
 
+
+
+
   dof_handler.distribute_dofs(fe);
   DoFRenumbering::component_wise(dof_handler);
 
@@ -378,6 +381,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
   const std::vector<types::global_dof_index> dofs_per_component =
       DoFTools::count_dofs_per_fe_component(dof_handler);
 
+  unsigned int n_dofs_Potential = dofs_per_component[dim + dim_omega];
   const unsigned int n_vector_field =
       dim * dofs_per_component[0] + dim_omega * dofs_per_component[dim];
   const unsigned int n_potential = dofs_per_component[dim + dim_omega] +
@@ -447,8 +451,11 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
   }
 
   // COUPLING
+  QGauss<dim> quadrature_formula(fe.degree + 1);
+FEValues<dim> fe_values(fe, quadrature_formula, update_flags);
+  const Mapping<dim> &mapping = fe_values.get_mapping();
 #if COUPLED
-	
+	std::cout<<"CouölinDofs"<<std::endl;
   for (unsigned int i = start_Potential_omega;
        i < start_Potential_omega + n_dofs_Potential_omega; i++) {
     for (unsigned int j = start_Potential;
@@ -464,9 +471,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
       dsp.add(i, j);
     }
   }
-#endif
 
-#if lumpedAvarage
   // circle around 1D inclusion
     typename DoFHandler<dim_omega>::active_cell_iterator
       cell_omega = dof_handler_omega.begin_active(),
@@ -509,7 +514,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
         else
           normal_vector_omega = Point<dim>(1, 0);
 
-        bool AVERAGE = radius != 0;
+        bool AVERAGE = radius != 0 && !lumpedAvarage;
         if (AVERAGE) {
           nof_quad_points = 11;
         } else {
@@ -520,10 +525,24 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
             nof_quad_points);
 
         //test function
+
+
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
-        typename DoFHandler<dim>::active_cell_iterator cell_test = GridTools::find_active_cell_around_point(
+        //typename DoFHandler<dim>::active_cell_iterator cell_test = GridTools::find_active_cell_around_point(
+          //  dof_handler, quadrature_point_test);
+     
+        auto cell_test_array = GridTools::find_all_active_cells_around_point(mapping,
             dof_handler, quadrature_point_test);
+         std::cout<<"cell_test_array "<<cell_test_array.size()<<std::endl;
+		/*auto cell_test = GridTools::find_active_cell_around_point(
+            dof_handler, quadrature_point_test);*/
+        for(auto cellpair : cell_test_array)
+        {
+			auto cell_test = cellpair.first;
+
+
+        
  /*if (cell_test == dof_handler.end()) {
     std::cout << "Point not found in any cell! " << quadrature_point_coupling<<std::endl;
 }*/
@@ -566,6 +585,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
         }
         
       }
+        }
       }
       
 
@@ -1924,13 +1944,6 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
   data_out.attach_dof_handler(dof_handler);
   data_out.add_data_vector(solution, solution_names);//, DataOut<dim>::type_cell_data
 
-  /*Vector<float>   subdomain(triangulation.n_active_cells());
-
-  for (unsigned int i=0; i<subdomain.size(); ++i)
-    subdomain(i) = triangulation.locally_owned_subdomain();
-
-  data_out.add_data_vector(subdomain,"subdomain");*/
-
   data_out.build_patches(degree);
 
   std::ofstream output("solution.vtu");
@@ -1944,7 +1957,7 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
   
 	DataOut<dim> data_out_const;
   data_out_const.attach_dof_handler(dof_handler);
-  data_out_const.add_data_vector(solution_const, solution_names);//, DataOut<dim>::type_cell_data
+  data_out_const.add_data_vector(solution_const, solution_names);//
 
   /*Vector<float>   subdomain(triangulation.n_active_cells());
 
@@ -1961,6 +1974,7 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
 
 
   //-----omega-----------
+  
   std::vector<std::string> solution_names_omega;
   solution_names_omega.emplace_back("q");
   solution_names_omega.emplace_back("u");
@@ -1980,6 +1994,7 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
 
   std::ofstream output_omega("solution_omega.vtu");
   data_out_omega.write_vtu(output_omega);
+  
 }
 
 template <int dim, int dim_omega>
@@ -1991,7 +2006,7 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   make_dofs();
   assemble_system();
   solve();
-  output_results();
+//  output_results();
   std::array<double, 4> results_array = compute_errors();
   return results_array;
 }
@@ -2021,12 +2036,12 @@ int main(int argc, char *argv[]) {
 
   std::cout << "dimension_Omega " << dimension_Omega << " solution "
             << constructed_solution << std::endl;
- /*  
+ 
   LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(0,3);
   std::array<double, 4> arr = LDGPoissonCoupled_s.run();
   std::cout<<rank<<" Result_ende: U "<<arr[0]<<" Q "<<arr[1]<<" u "<<arr[2]<<" q "<<arr[3]<<std::endl;
   return 0;
-*/
+
 
   const unsigned int p_degree[1] = {0};
   constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);

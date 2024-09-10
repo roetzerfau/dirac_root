@@ -10,14 +10,14 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 0
-#define lumpedAvarage 0
+#define COUPLED 1
+#define lumpedAvarage 1
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
-const double y_l = 0.001;
-const double z_l = 0.001;
-const double radius = 0.01;
+const double y_l = 0.0;
+const double z_l = 0.0;
+const double radius = 0.001;
 
 
 constexpr unsigned int constructed_solution{3};   // 1:sin cos, 2:papper log, 3: dangelo thesis log
@@ -157,7 +157,7 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
   }
   case 3: {
 #if COUPLED
-    return 0:
+    return 0;
 #else
   return -(1 + p[0]);
 #endif
@@ -410,6 +410,8 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     //values(5) = std::sin(numbers::PI * 2 *x);  // u
     values(5) = 1 + x ;  // u
     values(3) = -(1 + x + 0.5 * std::pow(x,2)); //q
+
+     //values(4) = -(1 + x) / (2 * numbers::PI) * std::log(r); // U  
     break;
   }
 
