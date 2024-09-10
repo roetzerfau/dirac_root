@@ -157,9 +157,9 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
   }
   case 3: {
 #if COUPLED
-    return -(1 + p[0]);
+    return 0:
 #else
-  return 0;
+  return -(1 + p[0]);
 #endif
 
     //return - std::sin(2 * numbers::PI * p[0]);//std::pow(2 * numbers::PI, 2) * std::sin(2 * numbers::PI * p[0]) ;
@@ -504,7 +504,7 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
        values(i) = 0;
     else  
       values(i) = 1;
-    values(i) = std::pow(r,2*alpha);
+    //values(i) = std::pow(r,2*alpha);
   }
  /* if(values[0] == 0)
   std::cout<<"distValues " <<values<<std::endl;
