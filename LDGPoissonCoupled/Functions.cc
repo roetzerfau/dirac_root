@@ -17,7 +17,7 @@ using namespace dealii;
 const double w = numbers::PI * 3 / 2;
 const double y_l = 0.0;
 const double z_l = 0.0;
-const double radius = 0.01;
+const double radius = 0.001;
 
 
 constexpr unsigned int constructed_solution{3};   // 1:sin cos, 2:papper log, 3: dangelo thesis log
@@ -394,7 +394,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
       values(4) = -(1 + x) / (2 * numbers::PI) * std::log(r); // U  
       //values(4) = std::sin(numbers::PI * 2 *x) / (2 * numbers::PI) * std::log(r); // U      
     } else {
-      values(4) = (1 + x); // U
+      //values(4) = 1000000; // U
       //values(4) = std::sin(numbers::PI * 2 *x); // U
     }
     //values(5) = std::sin(numbers::PI * 2 *x);  // u
@@ -501,7 +501,10 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
   for(unsigned int i = 0; i < n_components; i++)
   {
     if(r < radius)
+    {
        values(i) = 0;
+       std::cout<<r<<std::endl;
+    }
     else  
       values(i) = 1;
     //values(i) = std::pow(r,2*alpha);
