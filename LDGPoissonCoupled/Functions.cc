@@ -15,9 +15,9 @@
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
-const double y_l = 0.0;
-const double z_l = 0.0;
-const double radius = 0.001;
+const double y_l = 0.001;
+const double z_l = 0.001;
+const double radius = 0.01;
 
 
 constexpr unsigned int constructed_solution{3};   // 1:sin cos, 2:papper log, 3: dangelo thesis log
@@ -215,15 +215,15 @@ double DirichletBoundaryValues<dim>::value(const Point<dim> &p,
 template <int dim>
 double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
                                          const unsigned int) const {
-  double x, y, z;
+  double x;//, y, z;
   x = p[0];
-  y = p[1];
+  //y = p[1];
   Point<dim> closest_point_line;
  if (dim == 2)
     closest_point_line = Point<dim>(x, y_l);
   if (dim == 3)
   {
-    z = p[2];
+    //z = p[2];
     closest_point_line = Point<dim>(x, y_l, z_l);
   }
   double r = distance(p, closest_point_line);
@@ -243,8 +243,13 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
     break;
   }
   default:
-    break;
+  {
+     std::cout<<"default"<<std::endl;
+      break;
   }
+   
+  }
+  return 0;
 }
 
 template <int dim>
@@ -279,8 +284,13 @@ double DirichletBoundaryValues_omega<dim>::value(
     break;
   }
   default:
+  {
+    std::cout<<"default"<<std::endl;
     break;
   }
+    
+  }
+ return 0;
 }
 
 template <int dim>
@@ -484,16 +494,16 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
   Assert(values.size() == dim + 3,
          ExcDimensionMismatch(values.size(), dim + 3));
   unsigned int n_components = dim + 3;
-  double x, y, z;
+  double x;//, y, z;
   x = p[0];
-  y = p[1];
+ // y = p[1];
   values = 0;
   Point<dim> closest_point_line;
  if (dim == 2)
     closest_point_line = Point<dim>(x, y_l);
   if (dim == 3) 
   {
-    z = p[2];
+    //z = p[2];
     closest_point_line = Point<dim>(x, y_l, z_l);
   }
   double r = distance(p, closest_point_line);
@@ -503,12 +513,13 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
     if(r < radius)
     {
        values(i) = 0;
-       std::cout<<r<<std::endl;
+       //std::cout<<r<<std::endl;
     }
     else  
       values(i) = 1;
-    //values(i) = std::pow(r,2*alpha);
+   values(i) = std::pow(r,2*alpha);
   }
+  values = 1;
  /* if(values[0] == 0)
   std::cout<<"distValues " <<values<<std::endl;
 */
