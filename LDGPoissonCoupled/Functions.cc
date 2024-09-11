@@ -12,6 +12,7 @@
 
 #define COUPLED 1
 #define lumpedAvarage 1
+#define TEST 0
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;

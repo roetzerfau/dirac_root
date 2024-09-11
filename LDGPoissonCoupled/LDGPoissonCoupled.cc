@@ -471,7 +471,7 @@ FEValues<dim> fe_values(fe, quadrature_formula, update_flags);
       dsp.add(i, j);
     }
   }
-
+#if 0
   // circle around 1D inclusion
     typename DoFHandler<dim_omega>::active_cell_iterator
       cell_omega = dof_handler_omega.begin_active(),
@@ -531,15 +531,19 @@ FEValues<dim> fe_values(fe, quadrature_formula, update_flags);
         quadrature_point_test = quadrature_point_coupling;
         //typename DoFHandler<dim>::active_cell_iterator cell_test = GridTools::find_active_cell_around_point(
           //  dof_handler, quadrature_point_test);
-     
+ #if TEST    
         auto cell_test_array = GridTools::find_all_active_cells_around_point(mapping,
             dof_handler, quadrature_point_test);
          std::cout<<"cell_test_array "<<cell_test_array.size()<<std::endl;
-		/*auto cell_test = GridTools::find_active_cell_around_point(
-            dof_handler, quadrature_point_test);*/
-        for(auto cellpair : cell_test_array)
+      for(auto cellpair : cell_test_array)
+#else
+		auto cell_test = GridTools::find_active_cell_around_point(
+            dof_handler, quadrature_point_test);
+#endif
         {
+#if TEST
 			auto cell_test = cellpair.first;
+#endif
 
 
         
@@ -590,6 +594,7 @@ FEValues<dim> fe_values(fe, quadrature_formula, update_flags);
       
 
     }
+#endif
 #endif
     
 
@@ -1023,14 +1028,22 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
         //test function
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
-        auto cell_test_array = GridTools::find_all_active_cells_around_point(mapping,
+
+#if TEST
+       auto cell_test_array = GridTools::find_all_active_cells_around_point(mapping,
             dof_handler, quadrature_point_test);
          std::cout<<"cell_test_array "<<cell_test_array.size()<<std::endl;
-		/*auto cell_test = GridTools::find_active_cell_around_point(
-            dof_handler, quadrature_point_test);*/
+
         for(auto cellpair : cell_test_array)
+#else
+          auto cell_test = GridTools::find_active_cell_around_point(
+        dof_handler, quadrature_point_test);
+#endif
+
         {
+#if TEST
 			auto cell_test = cellpair.first;
+#endif
 			
  #if USE_MPI
       if (cell_test != dof_handler.end())
@@ -1201,7 +1214,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 #endif
       }
       }
-   std::cout<<std::endl;
+   //std::cout<<std::endl;
   }
 
     
@@ -2043,7 +2056,7 @@ int main(int argc, char *argv[]) {
   return 0;
 
 
-  const unsigned int p_degree[1] = {0};
+  const unsigned int p_degree[2] = {0,1};
   constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);
   const unsigned int refinement[3] = {2,3,4};
   constexpr unsigned int refinement_size =
