@@ -11,14 +11,14 @@
 // std::numbers::PI
 
 #define COUPLED 1
-#define lumpedAvarage 1
-#define TEST 0
+#define lumpedAvarage 0
+#define TEST 1
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
 const double y_l = 0.0;
 const double z_l = 0.0;
-const double radius = 0.001;
+const double radius = 0.1;
 
 
 constexpr unsigned int constructed_solution{3};   // 1:sin cos, 2:papper log, 3: dangelo thesis log
@@ -234,7 +234,7 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
     if (p[0] == 1)
     {
     //  std::cout<<"neum1 "<<p[0]<<std::endl;
-      return -1 / (2 * numbers::PI) * std::log(r);///-
+      return 1 / (2 * numbers::PI) * std::log(r);///-
     }
     if (p[0] == 0)
     {
@@ -522,7 +522,7 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
       values(i) = 1;
    values(i) = std::pow(r,2*alpha);
   }
-  values = 1;
+  //values = 1;
  /* if(values[0] == 0)
   std::cout<<"distValues " <<values<<std::endl;
 */
