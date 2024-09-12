@@ -227,7 +227,7 @@ private:
 
   const UpdateFlags update_flags = update_values | update_gradients |
                                    update_quadrature_points | update_JxW_values;
-  const UpdateFlags update_flags_coupling = update_values; //| update_JxW_values
+  const UpdateFlags update_flags_coupling = update_values | update_JxW_values;
 
   const UpdateFlags face_update_flags = update_values | update_normal_vectors |
                                         update_quadrature_points |
@@ -273,9 +273,10 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
 
     GridGenerator::cylinder(triangulation, 1, half_length);
     // Calculate the shift vector
+    double offset = 0.0001;
     Point<dim> shift_vector;
     if (dim == 3)
-      shift_vector = Point<dim>(half_length, 0, 0);
+      shift_vector = Point<dim>(half_length+offset, 0+offset, 0+offset);
     else
       shift_vector = Point<dim>(half_length, 0);
 
@@ -466,8 +467,6 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
       cell_omega = dof_handler_omega.begin_active(),
       endc_omega = dof_handler_omega.end();
 
-    cell_omega = dof_handler_omega.begin_active();
-    endc_omega = dof_handler_omega.end();
 
     for (; cell_omega != endc_omega; ++cell_omega) {
       fe_values_omega.reinit(cell_omega);
@@ -511,7 +510,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
 #if TEST
         auto cell_test_array = GridTools::find_all_active_cells_around_point(
             mapping, dof_handler, quadrature_point_test);
-       // std::cout << "cell_test_array " << cell_test_array.size() << std::endl;
+       std::cout << "cell_test_array " << cell_test_array.size() << std::endl;
 
         for (auto cellpair : cell_test_array)
 #else
@@ -548,13 +547,13 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
                    q_avag++) {
                 // Quadrature weights and points
                 quadrature_point_trial = quadrature_points_circle[q_avag];
+               
 #if TEST
                 auto cell_trial_array =
                     GridTools::find_all_active_cells_around_point(
                         mapping, dof_handler, quadrature_point_trial);
-              //  std::cout << "cell_trial_array " << cell_trial_array.size()
-                //          << std::endl;
-
+               std::cout << "cell_trial_array " << cell_trial_array.size()<< std::endl;
+			
                 for (auto cellpair_trial : cell_trial_array)
 #else
               auto cell_trial = GridTools::find_active_cell_around_point(
@@ -565,7 +564,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
 #if TEST
                   auto cell_trial = cellpair_trial.first;
 #endif
-
+		if (cell_trial != dof_handler.end())
                   if (cell_trial->is_locally_owned() &&
                       cell_test->is_locally_owned()) {
 
@@ -1044,7 +1043,8 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
         auto cell_test_array = GridTools::find_all_active_cells_around_point(
             mapping, dof_handler, quadrature_point_test);
         n_te = cell_test_array.size();
-        //pcout << "cell_test_array " << cell_test_array.size() << std::endl;
+      //   n_te = 1;
+        pcout << "cell_test_array " << cell_test_array.size() << std::endl;
 
         for (auto cellpair : cell_test_array)
 #else
@@ -1083,9 +1083,8 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
               for (unsigned int i = 0; i < dofs_per_cell; i++) {
                 local_vector(i) +=
                     fe_values_coupling_test[Potential].value(i, 0) *
-                    (1 + quadrature_point_omega[0]) *
-                    fe_values_omega.JxW(
-                        p); // ;//  * * fe_values_coupling_test.JxW(0) *
+                    (1 + quadrature_point_omega[0])* fe_values_omega.JxW(p)*  1/n_te;
+                    //* fe_values_omega.JxW(p) ; // ;//  * * fe_values_coupling_test.JxW(0) * fe_values_omega.JxW(p)*
               }
               constraints.distribute_local_to_global(
                   local_vector, local_dof_indices_test, system_rhs);
@@ -1128,6 +1127,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                         mapping, dof_handler, quadrature_point_trial);
                //pcout<< "cell_trial_array " << cell_trial_array.size() << std::endl;
 		n_tr = cell_trial_array.size();
+		//n_tr  =1;
                 for (auto cellpair_trial : cell_trial_array)
 #else
                 auto cell_trial = GridTools::find_active_cell_around_point(
@@ -1139,7 +1139,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 #if TEST
                   auto cell_trial = cellpair_trial.first;
 #endif
-
+		if(cell_trial != dof_handler.end())
                   if (cell_trial->is_locally_owned() &&
                       cell_test->is_locally_owned()) {
 
@@ -2040,7 +2040,7 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   make_dofs();
   assemble_system();
   solve();
-  // output_results();
+  output_results();
   std::array<double, 4> results_array = compute_errors();
   return results_array;
 }
@@ -2070,16 +2070,16 @@ int main(int argc, char *argv[]) {
 
  // std::cout << "dimension_Omega " << dimension_Omega << " solution "
   //          << constructed_solution << std::endl;
-
-  /*LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(0,2);
+/*
+  LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(1,3);
   std::array<double, 4> arr = LDGPoissonCoupled_s.run();
   std::cout << rank << " Result_ende: U " << arr[0] << " Q " << arr[1] << " u "
             << arr[2] << " q " << arr[3] << std::endl;
-  return 0;*/
-  
-  const unsigned int p_degree[2] = {0,1};
+  return 0;
+  */
+  const unsigned int p_degree[1] = {0};
   constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);
-  const unsigned int refinement[4] = {1,2,3,4};
+  const unsigned int refinement[2] = {3,4};
   constexpr unsigned int refinement_size =
       sizeof(refinement) / sizeof(refinement[0]);
 

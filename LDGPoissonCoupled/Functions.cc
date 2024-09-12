@@ -10,7 +10,7 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 1
+#define COUPLED 0
 #define lumpedAvarage 0
 #define TEST 1
 
@@ -234,7 +234,7 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
     if (p[0] == 1)
     {
     //  std::cout<<"neum1 "<<p[0]<<std::endl;
-      return 1 / (2 * numbers::PI) * std::log(r);///-
+      return -1 / (2 * numbers::PI) * std::log(r);///-
     }
     if (p[0] == 0)
     {
@@ -520,7 +520,7 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
     }
     else  
       values(i) = 1;
-   values(i) = std::pow(r,2*alpha);
+  values(i) = std::pow(r,2*alpha);
   }
   //values = 1;
  /* if(values[0] == 0)
