@@ -1073,18 +1073,26 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
               const Quadrature<dim> my_quadrature_formula_test(
                   my_quadrature_points_test, my_quadrature_weights);
               FEValues<dim> fe_values_coupling_test(
-                  fe, my_quadrature_formula_test, update_flags_coupling);
+                  fe, my_quadrature_formula_test, update_flags_coupling); //hier ist der fehler. wenn zweimal in einer Cell integriert wird, stimmt es nicht 
               fe_values_coupling_test.reinit(cell_test);
-
+	      fe_values.reinit(cell_test);		
               // f_Omega in omega
 #if !COUPLED
               pcout<<"Omega rhs "<< COUPLED<<std::endl;
-              local_vector = 0;
+              local_vector = 0;//wenn zweimal in einer Zelle integriert wird, dann wird das erste überschrieben
+              const unsigned int n_q_points = fe_values.n_quadrature_points;
+              for (unsigned int q = 0; q < n_q_points; ++q) {
               for (unsigned int i = 0; i < dofs_per_cell; i++) {
+              
+              /*local_vector(i) +=
+                    fe_values[Potential].value(i, 0) *
+                    (1 + quadrature_point_omega[0])* fe_values.JxW(q);*/// * fe_values_omega.JxW(p) *  1/n_te;
+              
                 local_vector(i) +=
                     fe_values_coupling_test[Potential].value(i, 0) *
-                    (1 + quadrature_point_omega[0])* fe_values_omega.JxW(p)*  1/n_te;
-                    //* fe_values_omega.JxW(p) ; // ;//  * * fe_values_coupling_test.JxW(0) * fe_values_omega.JxW(p)*
+                    (1 + quadrature_point_omega[0])* fe_values_omega.JxW(p) *  1/n_te;
+                    //* fe_values_omega.JxW(p) ; // ;//  *  * fe_values_omega.JxW(p)*
+              }
               }
               constraints.distribute_local_to_global(
                   local_vector, local_dof_indices_test, system_rhs);
