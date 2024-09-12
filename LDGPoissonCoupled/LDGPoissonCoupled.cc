@@ -76,6 +76,7 @@
 #include <deal.II/grid/tria.h>
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/vector_tools.h>
+//#include <deal.II/fe/fe_coupling_values.h>
 
 #include <deal.II/base/tensor_function.h>
 #include <deal.II/base/timer.h>
@@ -1078,24 +1079,32 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 	      fe_values.reinit(cell_test);		
               // f_Omega in omega
 #if !COUPLED
+
+	   /* CouplingFEValues<dim, dim_omega> cfv(fe_values, fe_values_omega,
+                                         DoFCouplingType::independent,
+                                         QuadratureCouplingType::tensor_product);*/
               pcout<<"Omega rhs "<< COUPLED<<std::endl;
               local_vector = 0;//wenn zweimal in einer Zelle integriert wird, dann wird das erste überschrieben
               const unsigned int n_q_points = fe_values.n_quadrature_points;
-              for (unsigned int q = 0; q < n_q_points; ++q) {
+              //for (unsigned int q = 0; q < n_q_points; ++q) {
               for (unsigned int i = 0; i < dofs_per_cell; i++) {
               
               /*local_vector(i) +=
-                    fe_values[Potential].value(i, 0) *
-                    (1 + quadrature_point_omega[0])* fe_values.JxW(q);*/// * fe_values_omega.JxW(p) *  1/n_te;
+                    fe_values[Potential].value(i, q) *
+                    (1 + quadrature_point_omega[0])* fe_values.JxW(q);*/ // * fe_values_omega.JxW(p) *  1/n_te; // so ist auch falsch weil jede Cell mehrmals berücksichtig wird
               
                 local_vector(i) +=
                     fe_values_coupling_test[Potential].value(i, 0) *
-                    (1 + quadrature_point_omega[0])* fe_values_omega.JxW(p) *  1/n_te;
-                    //* fe_values_omega.JxW(p) ; // ;//  *  * fe_values_omega.JxW(p)*
+                    (1 + quadrature_point_omega[0]) *  1/n_te;
+                    //* fe_values_omega.JxW(p) ; // ;//  *  * fe_values_omega.JxW(p)* * fe_values_omega.JxW(p)
               }
-              }
+              //}
+          
+	//DoFCellAccessor<dim> cell_accessor(dof_handler, cell_test);
+        //  cell_test->distribute_local_to_global(
+          //        local_vector, local_dof_indices_test, system_rhs);
               constraints.distribute_local_to_global(
-                  local_vector, local_dof_indices_test, system_rhs);
+                 local_vector, local_dof_indices_test, system_rhs);
 #endif
 
 #if COUPLED
@@ -2048,7 +2057,7 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   make_dofs();
   assemble_system();
   solve();
-  output_results();
+  //output_results();
   std::array<double, 4> results_array = compute_errors();
   return results_array;
 }
@@ -2085,9 +2094,9 @@ int main(int argc, char *argv[]) {
             << arr[2] << " q " << arr[3] << std::endl;
   return 0;
   */
-  const unsigned int p_degree[1] = {0};
+  const unsigned int p_degree[2] = {0,1};
   constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);
-  const unsigned int refinement[2] = {3,4};
+  const unsigned int refinement[3] = {2,3,4};
   constexpr unsigned int refinement_size =
       sizeof(refinement) / sizeof(refinement[0]);
 
