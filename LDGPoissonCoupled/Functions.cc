@@ -12,7 +12,7 @@
 
 #define COUPLED 0
 #define lumpedAvarage 0
-#define TEST 1
+#define TEST 0
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
@@ -21,7 +21,7 @@ const double z_l = 0.0;
 const double radius = 0.1;
 
 
-constexpr unsigned int constructed_solution{3};   // 1:sin cos, 2:papper log, 3: dangelo thesis log
+constexpr unsigned int constructed_solution{1};   // 1:sin cos, 3: dangelo thesis log
 const double g = constructed_solution == 3 ? (2 * numbers::PI) / (2 * numbers::PI + std::log(radius)): 1;
 
 template <int dim> double distance(Point<dim> point1, Point<dim> point2) {
@@ -123,10 +123,6 @@ double RightHandSide<dim>::value(const Point<dim> &p,
              std::cos(w * p[2]);
     break;
   }
-  case 2: {
-    return 0;
-    break;
-  }
   case 3: {
     return 0;
     break;
@@ -147,13 +143,6 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
     if (dim == 3)*/
       return std::pow(w, 2) * std::cos(w * p[0]) * std::cos(w * y_l) *
              std::cos(w * z_l);
-    break;
-  }
-  case 2: {
-    //if (dim == 3) 
-    {
-      return std::pow(numbers::PI, 2) * std::sin(numbers::PI * p[0]);
-    }
     break;
   }
   case 3: {
@@ -187,26 +176,13 @@ double DirichletBoundaryValues<dim>::value(const Point<dim> &p,
     }
     break;
   }
-  case 2: {
-
-    if (dim == 3) {
-      /* Vector<double> values;
-       Point<1> p_omega = Point<1>(x);
-       TrueSolution_omega(p_omega, values);
-       return   values[1] * g/(1 +g) * (1 - radius * std::log(r/radius));
-       */
-      // std::cout<<"bound"<<std::endl;
-      Vector<double> values(6);
+  case 3: {
+     Vector<double> values(dim + 3);
       TrueSolution<dim> solution;
       solution.vector_value(p, values);
-      // std::cout<<"BD_Omega "<<values[4]<<std::endl;
       return values[4];
-    }
+      //return 0;
     break;
-  case 3: {
-    return 0;
-    break;
-  }
   }
   default:
     break;
@@ -262,17 +238,6 @@ double DirichletBoundaryValues_omega<dim>::value(
       return std::cos(w * p[0]) * std::cos(w * y_l);
     if (dim == 3)*/
       return std::cos(w * p[0]) * std::cos(w * y_l) * std::cos(w * z_l);
-    break;
-  }
-  case 2: {
-    // if(dim == 3)
-    {
-      Vector<double> values(dim + 1);
-      TrueSolution_omega<dim> solution;
-      solution.vector_value(p, values);
-      // std::cout<<"BD_omega "<<values[1]<<std::endl;
-      return values[1];
-    }
     break;
   }
   case 3: {
@@ -359,42 +324,9 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     }
     break;
   }
-  case 2: {
-    /*if(dim == 2)
-    {
-
-    values(0) = 0; //Q
-    values(1) = 0;
-    values(2) = r > radius ? values(4) * g/(1 +g) * (1 - radius *
-    std::log(r/radius)) : values(4) * g/(1 +g) ; // U values(3) = 0; //q
-    values(4) = sin(numbers::PI);//u
-    }*/
-   // if (dim == 3) 
-    {
-      values(3) = -numbers::PI * std::cos(numbers::PI * x); // q
-      values(5) = std::sin(numbers::PI * x);                // u
-
-      values(0) = r > radius
-                      ? g / (g + 1) * (1 - radius * std::log(r / radius)) *
-                            numbers::PI * std::cos(numbers::PI * x)
-                      : g / (g + 1) * values(3); // Q
-      values(1) =
-          r > radius
-              ? -g / (g + 1) * (radius * (y - y_l) / std::pow(r, 2)) * values(5)
-              : 0;
-      ;
-      values(2) =
-          r > radius
-              ? -g / (g + 1) * (radius * (z - z_l) / std::pow(r, 2)) * values(5)
-              : 0;
-
-      values(4) = r > radius ? values(5) * g / (1 + g) *
-                                   (1 - radius * std::log(r / radius))
-                             : values(5) * g / (1 + g); // U
-    }
-    break;
-  }
   case 3: {
+    if(dim == 3)
+    {
     if (r != 0) {
       values(0) = 1/(2*numbers::PI) * std::log(r); //Q 
        values(1) = (1+x)/(2*numbers::PI) * (y/std::pow(r,2)); // Q
@@ -413,6 +345,24 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     values(3) = -(1 + x + 0.5 * std::pow(x,2)); //q
 
      //values(4) = -(1 + x) / (2 * numbers::PI) * std::log(r); // U  
+     }
+     if(dim == 2)
+     {
+      Point<dim>center(0,0);
+      r = distance(p, center);
+    if(r!= 0)
+    {
+    values(0) =1/(2*numbers::PI) * (x/std::pow(r,2)); //Q 
+    values(1) = 1/(2*numbers::PI) * (y/std::pow(r,2)); // Q
+    values(3) = -1 / (2 * numbers::PI) * std::log(r); // U  
+    values(2) = -(1 + x + 0.5 * std::pow(x,2)); //q
+    values(4) = 1 + x ;  // u
+    }
+    else
+      values(3) = 100000000000;
+
+     }
+         
     break;
   }
 
@@ -442,14 +392,6 @@ void TrueSolution_omega<dim>::vector_value(const Point<dim> &p,
      
       values(0) = w * std::sin(w * x) * std::cos(w * y_l) * std::cos(w * z_l);
       values(1) = std::cos(w * x) * std::cos(w * y_l) * std::cos(w * z_l);
-    }
-    break;
-  }
-  case 2: {
-    // if(dim == 3)
-    {
-      values(0) = -numbers::PI * std::cos(numbers::PI * x); // q
-      values(1) = std::sin(numbers::PI * x) + 2;            // u
     }
     break;
   }
@@ -522,7 +464,7 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
       values(i) = 1;
   values(i) = std::pow(r,2*alpha);
   }
- values = 1;
+ //values = 1;
  /* if(values[0] == 0)
   std::cout<<"distValues " <<values<<std::endl;
 */
