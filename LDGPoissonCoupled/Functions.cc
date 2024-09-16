@@ -21,7 +21,7 @@ const double z_l = 0.0;
 const double radius = 0.1;
 
 
-constexpr unsigned int constructed_solution{1};   // 1:sin cos, 3: dangelo thesis log
+constexpr unsigned int constructed_solution{3};   // 1:sin cos, 3: dangelo thesis log
 const double g = constructed_solution == 3 ? (2 * numbers::PI) / (2 * numbers::PI + std::log(radius)): 1;
 
 template <int dim> double distance(Point<dim> point1, Point<dim> point2) {
@@ -180,7 +180,7 @@ double DirichletBoundaryValues<dim>::value(const Point<dim> &p,
      Vector<double> values(dim + 3);
       TrueSolution<dim> solution;
       solution.vector_value(p, values);
-      return values[4];
+      return values[3];
       //return 0;
     break;
   }
@@ -359,7 +359,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     values(4) = 1 + x ;  // u
     }
     else
-      values(3) = 100000000000;
+      values(3) = 10;
 
      }
          

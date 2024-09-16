@@ -274,7 +274,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
     
     
     // Calculate the shift vector
-    double offset = 0.0001;
+    double offset = 0.0;
     Point<dim> shift_vector;
     
     if (dim == 3)
@@ -291,37 +291,10 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
       GridGenerator::hyper_ball(triangulation, center, 1);
     }
 
-   
-
-    
-
-    /*    auto bounding_box_ = GridTools::compute_mesh_predicate_bounding_box(
-            triangulation, IteratorFilters::LocallyOwnedCell(), 0, true, 1);
-        std::cout << "bounding_box.size() " << bounding_box_.size() <<
-       std::endl; BoundingBox<dim> bounding_box = bounding_box_[0];
-        // Get the min and max points of the bounding box
-        Point<dim> min_point = bounding_box.get_boundary_points().first;
-        Point<dim> max_point = bounding_box.get_boundary_points().second;
-        std::cout << "min_max_point " << min_point << " " << max_point <<
-       std::endl;
-
-        // Calculate the extent of the triangulation in each dimension
-        double extent_x, extent_y, extent_z;
-        extent_x = max_point[0] - min_point[0];
-         extent_y = max_point[1] - min_point[1];
-        if(dim == 3)
-         extent_z = max_point[2] - min_point[2];
-
-        // Output the extent
-        std::cout << "Extent of the triangulation:" << std::endl;
-        std::cout << "X: " << extent_x << std::endl;
-        std::cout << "Y: " << extent_y << std::endl;
-        if(dim == 3)
-          std::cout << "Z: " << extent_z << std::endl;
-          */
-
   } else
     GridGenerator::hyper_cube(triangulation, -extent, extent);
+
+// GridGenerator::hyper_cube(triangulation, -1, 1);
 
   triangulation.refine_global(n_refine);
 
@@ -978,7 +951,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 #endif
 
 #if 1
-        Point<dim> quadrature_point_test(0,0);
+        Point<dim> quadrature_point_test(0.0,0.0);
         std::vector<types::global_dof_index> local_dof_indices_test(dofs_per_cell);
         // test function
         std::vector<double> my_quadrature_weights = {1};
@@ -1024,12 +997,13 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
               fe_values_coupling_test.reinit(cell_test);
 	      fe_values.reinit(cell_test);		
               for (unsigned int i = 0; i < dofs_per_cell; i++) {
-              
+           //  std::cout<< fe_values_coupling_test[Potential].value(i, 0)<< " ";
 
                 local_vector(i) +=
-                    fe_values_coupling_test[Potential].value(i, 0) ; // *  1/n_te
+                    fe_values_coupling_test[Potential].value(i, 0); // 
                    
               }
+            //  std::cout<<std::endl;
               if(constructed_solution == 3)
               constraints.distribute_local_to_global(
                  local_vector, local_dof_indices_test, system_rhs);
@@ -1889,13 +1863,18 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
   data_out.write_vtu(output);
 
   // ------analytical solution--------
-  /*std::cout<<"analytical solution"<<std::endl;
+  std::cout<<"analytical solution"<<std::endl;
+   DoFHandler<dim> dof_handler_Lag(triangulation);
+    FESystem<dim> fe_Lag(FESystem<dim>(FE_DGQ<dim>(degree), dim), FE_DGQ<dim>(degree),
+         FE_DGQ<dim>(degree), FE_DGQ<dim>(degree));  
+  dof_handler_Lag.distribute_dofs(fe_Lag);
   TrilinosWrappers::MPI::Vector solution_const;
-  solution_const.reinit(dof_handler.locally_owned_dofs(), MPI_COMM_WORLD);
-    (dof_handler, true_solution, solution_const);
+  solution_const.reinit(dof_handler_Lag.locally_owned_dofs(), MPI_COMM_WORLD);
+    
+  VectorTools::interpolate(dof_handler_Lag, true_solution, solution_const);
 
   DataOut<dim> data_out_const;
-  data_out_const.attach_dof_handler(dof_handler);
+  data_out_const.attach_dof_handler(dof_handler_Lag);
   data_out_const.add_data_vector(solution_const, solution_names); //
 
 
@@ -1904,7 +1883,7 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
 
   std::ofstream output_const("solution_const.vtu");
   data_out_const.write_vtu(output_const);
-*/
+
   //-----omega-----------
  std::cout<<"omega solution"<<std::endl;
   std::vector<std::string> solution_names_omega;
@@ -1932,7 +1911,7 @@ template <int dim, int dim_omega>
 std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   pcout << "n_refine " << n_refine << "  degree " << degree << std::endl;
 
-  penalty = 10;
+  penalty = 15;
   make_grid();
   make_dofs();
   assemble_system();
@@ -1967,8 +1946,8 @@ int main(int argc, char *argv[]) {
 
  // std::cout << "dimension_Omega " << dimension_Omega << " solution "
   //          << constructed_solution << std::endl;
-/*
-  LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(2,3);
+
+ /* LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(1,4);
   std::array<double, 4> arr = LDGPoissonCoupled_s.run();
   std::cout << rank << " Result_ende: U " << arr[0] << " Q " << arr[1] << " u "
             << arr[2] << " q " << arr[3] << std::endl;
@@ -1976,7 +1955,7 @@ int main(int argc, char *argv[]) {
 */
   std::cout<< "dimension_Omega " << dimension_Omega <<std::endl;
 
-  const unsigned int p_degree[3] = {0,1, 2};
+  const unsigned int p_degree[1] = {1};
   constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);
   const unsigned int refinement[4] = {1,2,3,4};
   constexpr unsigned int refinement_size =
@@ -2013,40 +1992,46 @@ int main(int argc, char *argv[]) {
       
       csvfile << solution_names[f] << "\n";
       csvfile << "refinement/p_degree;";
+
+      std::cout << solution_names[f] << "\n";
+      std::cout << "refinement/p_degree;";
       for (unsigned int p = 0; p < p_degree_size; p++) {
         myfile << p_degree[p] << ",";
         csvfile << p_degree[p] << ";";
+        std::cout << p_degree[p] << ";";
       }
       myfile << "\n";
       csvfile << "\n";
+      std::cout << "\n";
       for (unsigned int r = 0; r < refinement_size; r++) {
         myfile << refinement[r] << ",";
         csvfile << refinement[r] << ";";
+        std::cout << refinement[r] << ";";
         for (unsigned int p = 0; p < p_degree_size; p++) {
           const double error = results[p][r][f];
 
           myfile << error;
           csvfile << error;
-          // std::cout << error;
+          std::cout << error;
           if (r != 0) {
             const double rate =
                 std::log2(results[p][r - 1][f] / results[p][r][f]);
             myfile << " (" << rate << ")";
             csvfile << " (" << rate << ")";
-            // std::cout << " (" << rate << ")";
+            std::cout << " (" << rate << ")";
           }
 
           myfile << ",";
           if (p < p_degree_size - 1) csvfile << ";";
-          // std::cout << ",";
+          std::cout << ";";
         }
         myfile << std::endl;
         csvfile << "\n";
-        // std::cout << std::endl;
+        std::cout << std::endl;
       }
       myfile << std::endl << std::endl;
       csvfile << "\n\n"; 
-      // std::cout << std::endl << std::endl;
+      std::cout << std::endl << std::endl;
     }
 
     myfile.close();
