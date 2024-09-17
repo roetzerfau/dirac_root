@@ -10,9 +10,9 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 0
-#define lumpedAvarage 0
-#define TEST 0
+#define COUPLED 1
+#define lumpedAvarage 1
+#define TEST 1
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
@@ -20,7 +20,7 @@ const double y_l = 0.0;
 const double z_l = 0.0;
 const double radius = 0.1;
 
-
+//https://math.libretexts.org/Bookshelves/Differential_Equations/Introduction_to_Partial_Differential_Equations_(Herman)/07%3A_Green%27s_Functions/7.05%3A_Greens_Functions_for_the_2D_Poisson_Equation
 constexpr unsigned int constructed_solution{3};   // 1:sin cos, 3: dangelo thesis log
 const double g = constructed_solution == 3 ? (2 * numbers::PI) / (2 * numbers::PI + std::log(radius)): 1;
 
@@ -123,6 +123,7 @@ double RightHandSide<dim>::value(const Point<dim> &p,
              std::cos(w * p[2]);
     break;
   }
+  case 2:
   case 3: {
     return 0;
     break;
@@ -145,6 +146,7 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
              std::cos(w * z_l);
     break;
   }
+  case 2:
   case 3: {
 #if COUPLED
     return 0;
@@ -176,11 +178,12 @@ double DirichletBoundaryValues<dim>::value(const Point<dim> &p,
     }
     break;
   }
+  case 2:
   case 3: {
      Vector<double> values(dim + 3);
       TrueSolution<dim> solution;
       solution.vector_value(p, values);
-      return values[3];
+      return values[dim +1];
       //return 0;
     break;
   }
@@ -206,6 +209,7 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
   double r = distance(p, closest_point_line);
 
   switch (constructed_solution) {
+  case 2:
   case 3: {
     if (p[0] == 1)
     {
@@ -240,6 +244,7 @@ double DirichletBoundaryValues_omega<dim>::value(
       return std::cos(w * p[0]) * std::cos(w * y_l) * std::cos(w * z_l);
     break;
   }
+  case 2:
   case 3: {
     //return 0;
     if (p[0] == 0)
@@ -271,7 +276,7 @@ void KInverse<dim>::value_list(const std::vector<Point<dim>> &points,
     value = unit_symmetric_tensor<dim>();
     //if(dim == 1)
     //std::cout <<"kinverse_omega " <<value<<std::endl;
-    if (constructed_solution == 3 && dim == 1) {
+    if ((constructed_solution == 3||constructed_solution == 3) && dim == 1) {
       for (unsigned int i = 0; i < dim; i++) {
         Point<dim> p = points[i];
       // value[i][i]  = p[0] + 1;//
@@ -324,6 +329,39 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     }
     break;
   }
+  case 2: {
+    if(dim == 3)
+    {
+    if (r != 0) {
+      values(0) =  0; //Q 
+       values(1) =  (y/std::pow(r,2)); // Q
+      values(2) =  (z/std::pow(r,2)); //Q
+      values(4) =  -std::log(r); // U  
+    } else {
+      values(4) = 10; // U
+    }
+    values(5) = 1 + x ;  // u
+    values(3) = -(1 + x + 0.5 * std::pow(x,2)); //q
+     }
+     if(dim == 2)
+     {
+      Point<dim>center(0,0);
+      r = distance(p, center);
+      //std::cout<<r <<" "<<std::endl;
+    if(r!= 0)
+    {
+    values(0) =  (x/std::pow(r,2)); //Q 
+    values(1) = (y/std::pow(r,2)); // Q
+    values(3) = -std::log(r); // U  
+    values(2) = -(1 + x + 0.5 * std::pow(x,2)); //q
+    values(4) = 1 + x ;  // u
+    }
+    else
+      values(3) = 10;
+     }
+         
+    break;
+  }
   case 3: {
     if(dim == 3)
     {
@@ -331,25 +369,18 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
       values(0) = 1/(2*numbers::PI) * std::log(r); //Q 
        values(1) = (1+x)/(2*numbers::PI) * (y/std::pow(r,2)); // Q
       values(2) = (1+x)/(2*numbers::PI) * (z/std::pow(r,2)); //Q
-    //values(1) = 0;
-    //values(2) = (1+x)/ (2*numbers::PI *r );
-   //std::cout<<r << " " <<x <<" " <<values(2)<<std::endl;
-      values(4) = -(1 + x) / (2 * numbers::PI) * std::log(r); // U  
-      //values(4) = std::sin(numbers::PI * 2 *x) / (2 * numbers::PI) * std::log(r); // U      
+      values(4) = -(1+x) / (2 * numbers::PI) * std::log(r); // U  
     } else {
-      //values(4) = 1000000; // U
-      //values(4) = std::sin(numbers::PI * 2 *x); // U
+      values(4) = 10; // U
     }
-    //values(5) = std::sin(numbers::PI * 2 *x);  // u
     values(5) = 1 + x ;  // u
     values(3) = -(1 + x + 0.5 * std::pow(x,2)); //q
-
-     //values(4) = -(1 + x) / (2 * numbers::PI) * std::log(r); // U  
      }
      if(dim == 2)
      {
       Point<dim>center(0,0);
       r = distance(p, center);
+      //std::cout<<r <<" "<<std::endl;
     if(r!= 0)
     {
     values(0) =1/(2*numbers::PI) * (x/std::pow(r,2)); //Q 
@@ -395,6 +426,7 @@ void TrueSolution_omega<dim>::vector_value(const Point<dim> &p,
     }
     break;
   }
+  case 2:
   case 3: {
     //values(1) = std::sin(numbers::PI * 2 *x);//u
     values(1) = 1 + x;//u
