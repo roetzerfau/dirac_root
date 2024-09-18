@@ -16,8 +16,8 @@
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
-const double y_l = 0.0;
-const double z_l = 0.0;
+const double y_l = 0.025;
+const double z_l = 0.025;
 const double radius = 0.05;
 
 //https://math.libretexts.org/Bookshelves/Differential_Equations/Introduction_to_Partial_Differential_Equations_(Herman)/07%3A_Green%27s_Functions/7.05%3A_Greens_Functions_for_the_2D_Poisson_Equation
@@ -306,7 +306,8 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     closest_point_line = Point<dim>(x, y_l, z_l);
   }
   double r = distance(p, closest_point_line);
-
+  if(r > 1)
+  std::cout<<"FALSCH!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!   "<<r<<std::endl;
   switch (constructed_solution) {
 
   case 1: {
@@ -338,14 +339,14 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
       values(2) =  (z/std::pow(r,2)); //Q
       values(4) =  -std::log(r); // U  
     } else {
-      values(4) = 10; // U
+      values(4) = 1; // U
     }
     values(5) = 1 + x ;  // u
     values(3) = -(1 + x + 0.5 * std::pow(x,2)); //q
      }
      if(dim == 2)
      {
-      Point<dim>center(0,0);
+      Point<dim>center(y_l,z_l);
       r = distance(p, center);
       //std::cout<<r <<" "<<std::endl;
     if(r!= 0)
@@ -357,7 +358,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     values(4) = 1 + x ;  // u
     }
     else
-      values(3) = 10;
+      values(3) = 1;
      }
          
     break;
@@ -371,7 +372,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
       values(2) = (1+x)/(2*numbers::PI) * (z/std::pow(r,2)); //Q
       values(4) = -(1+x) / (2 * numbers::PI) * std::log(r); // U  
     } else {
-      values(4) = 10; // U
+      values(4) = 1 + x ; // U
     }
     values(5) =  1 + x ;  // u
     values(3) = -(1 + x + 0.5 * std::pow(x,2)); //q

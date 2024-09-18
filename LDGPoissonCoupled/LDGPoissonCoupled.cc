@@ -88,6 +88,7 @@
 #include <deal.II/meshworker/mesh_loop.h>
 #include <fstream>
 #include <iostream>
+#include <stdexcept>
 
 #include "Functions.cc"
 
@@ -271,10 +272,12 @@ LDGPoissonProblem<dim, dim_omega>::~LDGPoissonProblem() {
 template <int dim, int dim_omega>
 void LDGPoissonProblem<dim, dim_omega>::make_grid() {
   TimerOutput::Scope t(computing_timer, "make grid");
+  double offset = 0.0;
+#if 0
   if (constructed_solution == 3) {
 
     // Calculate the shift vector
-    double offset = 0.0;
+    
     Point<dim> shift_vector;
 
     if (dim == 3) {
@@ -291,8 +294,16 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
 
   } else
     GridGenerator::hyper_cube(triangulation, -extent, extent);
+#else
+ 
+  //Point<dim> p1 = Point<dim>(1, -std::sqrt(0.5) +offset, -std::sqrt(0.5)+offset);
+  //Point<dim> p2 = Point<dim>(0, std::sqrt(0.5)+offset, std::sqrt(0.5)+offset);
 
- //  GridGenerator::hyper_cube(triangulation, -std::sqrt(0.5), std::sqrt(0.5));
+  Point<dim> p1 = Point<dim>(1, -std::sqrt(0.4) +offset, -std::sqrt(0.4)+offset);
+  Point<dim> p2 = Point<dim>(0, std::sqrt(0.4)+offset, std::sqrt(0.4)+offset);
+ // std::cout<<"hyper_rectangle "<<p1 << " "<<p2<<std::endl;
+  GridGenerator::hyper_rectangle(triangulation, p1, p2);
+#endif
 
   triangulation.refine_global(n_refine);
  double max_diameter = 0.0;
@@ -317,7 +328,11 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
     }
   }
     if(radius > max_diameter && !lumpedAvarage)
-    std::cout<<"!!!!!!!!!!!!!! MAX DIAMETER > RADIUS !!!!!!!!!!!!!!!!"<<std::endl;
+    {
+      std::cout<<"!!!!!!!!!!!!!! MAX DIAMETER > RADIUS !!!!!!!!!!!!!!!!"<<max_diameter<<radius<< std::endl;
+      throw std::invalid_argument( "MAX DIAMETER > RADIUS" );
+    }
+
 
 
 
@@ -961,7 +976,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 #endif
   if (dim == 2 && constructed_solution == 3) {
     std::cout << "dim == 2 && constructed_solution == 3" << std::endl;
-    Point<dim> quadrature_point_test(0.0, 0.0);
+    Point<dim> quadrature_point_test(y_l, z_l);
     std::vector<types::global_dof_index> local_dof_indices_test(dofs_per_cell);
     // test function
     std::vector<double> my_quadrature_weights = {1};
@@ -990,8 +1005,8 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
         if (cell_test->is_locally_owned())
 #endif
         {
-          std::cout << "cell_test->center() " << cell_test->center()
-                    << std::endl;
+          //std::cout << "cell_test->center() " << cell_test->center()
+            //        << std::endl;
           cell_test->get_dof_indices(local_dof_indices_test);
 
           //-------------face -----------------
@@ -1032,7 +1047,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                   fe_values_coupling_test_face.n_quadrature_points;
               unsigned int dofs_this_cell =
                   fe_values_coupling_test_face.dofs_per_cell;
-              std::cout << "n_face_points " << n_face_points << std::endl;
+             // std::cout << "n_face_points " << n_face_points << std::endl;
               local_vector = 0;
               for (unsigned int q = 0; q < n_face_points; ++q) {
                 for (unsigned int i = 0; i < dofs_this_cell; ++i) {
@@ -1152,8 +1167,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
             mapping, dof_handler, quadrature_point_test);
         n_te = cell_test_array.size();
         //   n_te = 1;
-        //pcout << "cell_test_array " << cell_test_array.size() << std::endl;
-
+       // pcout << "cell_test_array " << cell_test_array.size() << std::endl;
         for (auto cellpair : cell_test_array)
 #else
         auto cell_test = GridTools::find_active_cell_around_point(
@@ -1191,8 +1205,12 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                 n_ftest = 1;
               }
               else
+              {
                 insideCell_test = false;
-            //  std::cout << "n_ftest " << n_ftest << " insideCell_test " <<insideCell_test<<std::endl;
+                //std::cout<<"insideCell_test = false"<<std::endl;
+              }
+                
+              std::cout << "n_ftest " << n_ftest << " insideCell_test " <<insideCell_test<<std::endl;
 
 
                  Point<dim> quadrature_point_test_mapped_cell =
@@ -1209,9 +1227,11 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
               fe_values_coupling_test.reinit(cell_test);
 
 #if !COUPLED
+              std::cout<<"not coupled"<<std::endl;
               //-------------face -----------------
               //n_ftest = 0;
-              if (n_ftest > 0) {
+              if (!insideCell_test) {
+                pcout << "Omega rhs outsidecell " << std::endl;
                 for (unsigned int face_no = 0;
                      face_no < GeometryInfo<dim>::faces_per_cell; face_no++) {
                   typename DoFHandler<dim>::face_iterator face_test =
@@ -1264,9 +1284,9 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 
            
 
-              if (n_ftest == 0) {
+              if (insideCell_test) {
 
-                pcout << "Omega rhs " << COUPLED << std::endl;
+                pcout << "Omega rhs insideCell" << std::endl;
                 local_vector = 0; 
                 const unsigned int n_q_points = fe_values.n_quadrature_points;
                 // for (unsigned int q = 0; q < n_q_points; ++q) {
@@ -1282,7 +1302,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 #endif
 
 #if COUPLED
-              //  std::cout << "coupled " << std::endl;
+               std::cout << "coupled " << std::endl;
               for (unsigned int q_avag = 0; q_avag < nof_quad_points;
                    q_avag++) {
                 // Quadrature weights and points
@@ -1375,9 +1395,14 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
             {
                 insideCell_trial = true;
                 n_ftrial = 1;
+                
             }
               else
+              {
                 insideCell_trial = false;
+               // std::cout<<"insideCell_trial = false"<<std::endl;
+              }
+                
             // std::cout << "n_ftrial " << n_ftrial << " insideCell_trial " <<insideCell_trial<<std::endl;
 
 
@@ -2168,8 +2193,8 @@ int main(int argc, char *argv[]) {
 
   // std::cout << "dimension_Omega " << dimension_Omega << " solution "
   //          << constructed_solution << std::endl;
-/*
-   LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(1,2);
+
+ /*  LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(1,3);
    std::array<double, 4> arr = LDGPoissonCoupled_s.run();
    std::cout << rank << " Result_ende: U " << arr[0] << " Q " << arr[1] << " u "
              << arr[2] << " q " << arr[3] << std::endl;
@@ -2177,7 +2202,7 @@ int main(int argc, char *argv[]) {
  */
   std::cout << "dimension_Omega " << dimension_Omega << std::endl;
 
-  const unsigned int p_degree[2] = {1,2};
+  const unsigned int p_degree[1] = {1};
   constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);
   const unsigned int refinement[3] = {1,2,3};
   constexpr unsigned int refinement_size =
