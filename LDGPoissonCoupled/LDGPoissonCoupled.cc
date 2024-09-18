@@ -1210,7 +1210,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                 //std::cout<<"insideCell_test = false"<<std::endl;
               }
                 
-              std::cout << "n_ftest " << n_ftest << " insideCell_test " <<insideCell_test<<std::endl;
+             // std::cout << "n_ftest " << n_ftest << " insideCell_test " <<insideCell_test<<std::endl;
 
 
                  Point<dim> quadrature_point_test_mapped_cell =
@@ -1231,7 +1231,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
               //-------------face -----------------
               //n_ftest = 0;
               if (!insideCell_test) {
-                pcout << "Omega rhs outsidecell " << std::endl;
+                pcout << "Omega rhs face " << std::endl;
                 for (unsigned int face_no = 0;
                      face_no < GeometryInfo<dim>::faces_per_cell; face_no++) {
                   typename DoFHandler<dim>::face_iterator face_test =
@@ -1302,7 +1302,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 #endif
 
 #if COUPLED
-               std::cout << "coupled " << std::endl;
+         //      std::cout << "coupled " << std::endl;
               for (unsigned int q_avag = 0; q_avag < nof_quad_points;
                    q_avag++) {
                 // Quadrature weights and points
@@ -2204,7 +2204,7 @@ int main(int argc, char *argv[]) {
 
   const unsigned int p_degree[1] = {1};
   constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);
-  const unsigned int refinement[3] = {1,2,3};
+  const unsigned int refinement[4] = {1,2,3, 4};
   constexpr unsigned int refinement_size =
       sizeof(refinement) / sizeof(refinement[0]);
 
