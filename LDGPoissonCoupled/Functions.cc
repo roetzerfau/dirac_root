@@ -11,14 +11,14 @@
 // std::numbers::PI
 
 #define COUPLED 1
-#define lumpedAvarage 1
+#define lumpedAvarage 0
 #define TEST 1
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
 const double y_l = 0.0;
 const double z_l = 0.0;
-const double radius = 0.01;
+const double radius = 0.1;
 
 //https://math.libretexts.org/Bookshelves/Differential_Equations/Introduction_to_Partial_Differential_Equations_(Herman)/07%3A_Green%27s_Functions/7.05%3A_Greens_Functions_for_the_2D_Poisson_Equation
 constexpr unsigned int constructed_solution{3};   // 1:sin cos, 3: dangelo thesis log

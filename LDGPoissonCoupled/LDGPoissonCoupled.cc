@@ -107,6 +107,7 @@ const unsigned int dimension_gap = 0;
 const double extent = 1;
 const double half_length = 0.5;
 const double distance_tolerance = 10;
+const unsigned int N_quad_points = 7;
 
 template <int dim, int dim_omega> class LDGPoissonProblem {
 
@@ -468,7 +469,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
     pcout << "AVERAGE " << AVERAGE << std::endl;
     // weight
     if (AVERAGE) {
-      nof_quad_points = 3;
+      nof_quad_points = N_quad_points;
     } else {
       nof_quad_points = 1;
     }
@@ -1113,7 +1114,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
     
     // weight
     if (AVERAGE) {
-      nof_quad_points = 3;
+      nof_quad_points = N_quad_points;
     } else {
       nof_quad_points = 1;
     }
@@ -1302,12 +1303,12 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 #endif
 
 #if COUPLED
-         //      std::cout << "coupled " << std::endl;
+              //std::cout << "coupled " << std::endl;
               for (unsigned int q_avag = 0; q_avag < nof_quad_points;
                    q_avag++) {
                 // Quadrature weights and points
                 quadrature_point_trial = quadrature_points_circle[q_avag];
-                //std::cout<< "quadrature_point_trial " << quadrature_point_trial << std::endl;
+              //  std::cout<< "quadrature_point_trial " << quadrature_point_trial << std::endl;
                 double weight;
                 double C_avag;
                 if (AVERAGE) {
@@ -1318,7 +1319,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                   double weights_even =  2.0 / 3.0 * h_avag;
                   double weights_first_last = h_avag / 3.0;
 
-                  C_avag = 1.0 / perimeter;
+                  C_avag = 1.0 /(2.0 * numbers::PI);
                  // std::cout<< "h_avag " << h_avag <<" weights_odd "<< weights_odd<< " weights_even "<<weights_even<< " q_avag % 2 == 0 " << (int)(q_avag % 2 == 0)<< std::endl;
                   if (q_avag == 0) 
                     weight = 2 * weights_first_last;
@@ -1334,15 +1335,15 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                   weight = 1;
                   C_avag = 1;
                 }
-
-             //   std::cout<< "q_avag " << q_avag <<" weight "<< weight<<" nof_quad_points "<<nof_quad_points<<std::endl;
+              weight = 1.0/nof_quad_points;
+              C_avag = 1.0;
+           //    std::cout<< "q_avag " << q_avag <<" weight "<< weight<<" C_avag "<<C_avag<<" nof_quad_points "<<nof_quad_points<<std::endl;
                 unsigned int n_tr;
 #if TEST
                 auto cell_trial_array =
                     GridTools::find_all_active_cells_around_point(
                         mapping, dof_handler, quadrature_point_trial);
-                // pcout<< "cell_trial_array " << cell_trial_array.size() <<
-                // std::endl;
+               // pcout<< "cell_trial_array " << cell_trial_array.size() << std::endl;
                 n_tr = cell_trial_array.size();
                 // n_tr  =1;
                 for (auto cellpair_trial : cell_trial_array)
@@ -1400,10 +1401,10 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
               else
               {
                 insideCell_trial = false;
-               // std::cout<<"insideCell_trial = false"<<std::endl;
+             //   std::cout<<"insideCell_trial = false"<<std::endl;
               }
                 
-            // std::cout << "n_ftrial " << n_ftrial << " insideCell_trial " <<insideCell_trial<<std::endl;
+        //     std::cout << "n_ftrial " << n_ftrial << " insideCell_trial " <<insideCell_trial<<std::endl; // hier ist der Fehler: also unten, nicht jeder
 
 
               for(unsigned int ftest = 0; ftest < n_ftest; ftest++ )
@@ -1505,7 +1506,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                               -g *
                               psi_potential_test * 
                               fe_values_omega[Potential_omega].value(j, p) *
-                              fe_values_omega.JxW(p) *  1 / (n_tr *n_ftrial) * 1 / (n_te * n_ftest);
+                              fe_values_omega.JxW(p) *  1 / (n_tr *n_ftrial) * 1 / (n_te * n_ftest) *C_avag * weight ;
                         }
                       }
                       constraints.distribute_local_to_global(
@@ -1517,7 +1518,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                           v_u_matrix_coupling(i, j) +=
                               g * fe_values_omega[Potential_omega].value(j, p) *
                               fe_values_omega[Potential_omega].value(i, p) *
-                              fe_values_omega.JxW(p) *  1 / (n_tr *n_ftrial) * 1 / (n_te * n_ftest);
+                              fe_values_omega.JxW(p) *  1 / (n_tr *n_ftrial) * 1 / (n_te * n_ftest) *C_avag * weight;
                         }
                       }
                       constraints.distribute_local_to_global(
@@ -2202,9 +2203,9 @@ int main(int argc, char *argv[]) {
  */
   std::cout << "dimension_Omega " << dimension_Omega << std::endl;
 
-  const unsigned int p_degree[1] = {1};
+  const unsigned int p_degree[2] = {1,2};
   constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);
-  const unsigned int refinement[4] = {1,2,3, 4};
+  const unsigned int refinement[4] = {1,2,3,4};
   constexpr unsigned int refinement_size =
       sizeof(refinement) / sizeof(refinement[0]);
 
