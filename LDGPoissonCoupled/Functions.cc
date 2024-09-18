@@ -373,7 +373,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     } else {
       values(4) = 10; // U
     }
-    values(5) = 1 + x ;  // u
+    values(5) =  1 + x ;  // u
     values(3) = -(1 + x + 0.5 * std::pow(x,2)); //q
      }
      if(dim == 2)
@@ -390,7 +390,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     values(4) = 1 + x ;  // u
     }
     else
-      values(3) = 10;
+      values(3) = 1 ;
 
      }
          

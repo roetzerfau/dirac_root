@@ -279,7 +279,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
 
     if (dim == 3) {
       GridGenerator::cylinder(triangulation, 1, half_length);
-      shift_vector = Point<dim>(half_length + offset, 0 + offset, 0 + offset);
+      shift_vector = Point<dim>(half_length, 0 + offset, 0 + offset);
       pcout << "Shift vector " << shift_vector << std::endl;
       // Shift the cylinder by the half-length along the z-axis
       GridTools::shift(shift_vector, triangulation);
@@ -295,10 +295,17 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
  //  GridGenerator::hyper_cube(triangulation, -std::sqrt(0.5), std::sqrt(0.5));
 
   triangulation.refine_global(n_refine);
-
+ double max_diameter = 0.0;
   typename Triangulation<dim>::cell_iterator cell = triangulation.begin(),
                                              endc = triangulation.end();
   for (; cell != endc; ++cell) {
+    double cell_diameter = cell->diameter();  // Get the diameter of the cell
+    if (cell_diameter > max_diameter)
+    {
+      max_diameter = cell_diameter;
+    }
+
+
     for (unsigned int face_no = 0; face_no < GeometryInfo<dim>::faces_per_cell;
          face_no++) {
       Point<dim> p = cell->face(face_no)->center();
@@ -309,6 +316,11 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
       }
     }
   }
+    if(radius > max_diameter && !lumpedAvarage)
+    std::cout<<"!!!!!!!!!!!!!! MAX DIAMETER > RADIUS !!!!!!!!!!!!!!!!"<<std::endl;
+
+
+
   if (constructed_solution == 3)
     GridGenerator::hyper_cube(triangulation_omega, 0, 2 * half_length);
   else
@@ -325,6 +337,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
         cell_omega->face(face_no)->set_boundary_id(Dirichlet);
     }
   }
+
 }
 
 template <int dim, int dim_omega>
@@ -1082,6 +1095,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
     unsigned int nof_quad_points;
     bool AVERAGE = radius != 0 && !lumpedAvarage;
     pcout << "AVERAGE " << AVERAGE << std::endl;
+    
     // weight
     if (AVERAGE) {
       nof_quad_points = 3;
@@ -1130,6 +1144,8 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
         // test function
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
+
+       // std::cout<< "------quadrature_point_test " <<  quadrature_point_test << std::endl;
         unsigned int n_te;
 #if TEST
         auto cell_test_array = GridTools::find_all_active_cells_around_point(
@@ -1155,7 +1171,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
             if (cell_test->is_locally_owned())
 #endif
             {
-             // std::cout << cell_test->center() << std::endl;
+            //std::cout<< "cell_test " << cell_test<< " " <<cell_test->center() << std::endl;
               cell_test->get_dof_indices(local_dof_indices_test);
 
               std::vector<unsigned int> face_no_test;
@@ -1176,7 +1192,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
               }
               else
                 insideCell_test = false;
-              //std::cout << "n_ftest " << n_ftest << " insideCell_test " <<insideCell_test<<std::endl;
+            //  std::cout << "n_ftest " << n_ftest << " insideCell_test " <<insideCell_test<<std::endl;
 
 
                  Point<dim> quadrature_point_test_mapped_cell =
@@ -1271,30 +1287,35 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                    q_avag++) {
                 // Quadrature weights and points
                 quadrature_point_trial = quadrature_points_circle[q_avag];
-
+                //std::cout<< "quadrature_point_trial " << quadrature_point_trial << std::endl;
                 double weight;
                 double C_avag;
                 if (AVERAGE) {
-                  double perimeter = 2 * M_PI * radius;
-                  double h_avag = perimeter / (nof_quad_points - 1);
+                  double perimeter = 2.0 * numbers::PI * radius;
+                  double h_avag = perimeter / (nof_quad_points);
 
-                  double weights_odd = 4 / 3 * h_avag;
-                  double weights_even = 2 / 3 * h_avag;
-                  double weights_first_last = h_avag / 3;
+                  double weights_odd = 4.0 / 3.0 * h_avag;
+                  double weights_even =  2.0 / 3.0 * h_avag;
+                  double weights_first_last = h_avag / 3.0;
 
-                  C_avag = 1 / perimeter;
-                  if (q_avag == 0) //|| q_avag == nof_quad_points - 1
+                  C_avag = 1.0 / perimeter;
+                 // std::cout<< "h_avag " << h_avag <<" weights_odd "<< weights_odd<< " weights_even "<<weights_even<< " q_avag % 2 == 0 " << (int)(q_avag % 2 == 0)<< std::endl;
+                  if (q_avag == 0) 
                     weight = 2 * weights_first_last;
                   else {
+                    
                     if (q_avag % 2 == 0)
                       weight = weights_even;
                     else
                       weight = weights_odd;
                   }
+                  weight = ((2.0 * numbers::PI * radius)/(nof_quad_points)) ;
                 } else {
                   weight = 1;
                   C_avag = 1;
                 }
+
+             //   std::cout<< "q_avag " << q_avag <<" weight "<< weight<<" nof_quad_points "<<nof_quad_points<<std::endl;
                 unsigned int n_tr;
 #if TEST
                 auto cell_trial_array =
@@ -1318,7 +1339,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                   if (cell_trial != dof_handler.end())
                     if (cell_trial->is_locally_owned() &&
                         cell_test->is_locally_owned()) {
-
+                  //  std::cout<< "cell_trial " << cell_trial<< " " <<cell_trial->center() << std::endl;
                       cell_trial->get_dof_indices(local_dof_indices_trial);
 
                       //-----------------------cell--------------------------------------
@@ -1357,7 +1378,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
             }
               else
                 insideCell_trial = false;
-             // std::cout << "n_ftrial " << n_ftrial << " insideCell_trial " <<insideCell_trial<<std::endl;
+            // std::cout << "n_ftrial " << n_ftrial << " insideCell_trial " <<insideCell_trial<<std::endl;
 
 
               for(unsigned int ftest = 0; ftest < n_ftest; ftest++ )
@@ -1419,8 +1440,8 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                           V_U_matrix_coupling(i, j) +=
                               g *
                               psi_potential_test *
+                              psi_potential_trial * 
                               C_avag * weight *
-                              psi_potential_trial *
                               fe_values_omega.JxW(p) *  1 / (n_tr *n_ftrial) * 1 / (n_te * n_ftest);
                         }
                       }
@@ -2156,7 +2177,7 @@ int main(int argc, char *argv[]) {
  */
   std::cout << "dimension_Omega " << dimension_Omega << std::endl;
 
-  const unsigned int p_degree[1] = {1};
+  const unsigned int p_degree[2] = {1,2};
   constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);
   const unsigned int refinement[3] = {1,2,3};
   constexpr unsigned int refinement_size =
