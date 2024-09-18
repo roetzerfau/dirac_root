@@ -109,10 +109,15 @@ const double half_length = 0.5;
 const double distance_tolerance = 10;
 const unsigned int N_quad_points = 7;
 
+struct Parameters {
+  double radius;
+  bool lumpedAverage;
+};
 template <int dim, int dim_omega> class LDGPoissonProblem {
 
 public:
-  LDGPoissonProblem(const unsigned int degree, const unsigned int n_refine);
+  LDGPoissonProblem(const unsigned int degree, const unsigned int n_refine,
+                    Parameters parameters);
 
   ~LDGPoissonProblem();
 
@@ -178,6 +183,11 @@ private:
 
   enum { Dirichlet, Neumann };
 
+  // parameters
+  double radius;
+  double g;
+  bool lumpedAverage;
+
 #if USE_MPI
   parallel::distributed::Triangulation<dim> triangulation;
 
@@ -240,7 +250,8 @@ private:
 
 template <int dim, int dim_omega>
 LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
-    const unsigned int degree, const unsigned int n_refine)
+    const unsigned int degree, const unsigned int n_refine,
+    Parameters parameters)
     : degree(degree), n_refine(n_refine),
 #if USE_MPI
       triangulation(MPI_COMM_WORLD),
@@ -261,7 +272,12 @@ LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
 #endif
       solver_control(1), solver(solver_control), rhs_function(),
       Dirichlet_bc_function(), rhs_function_omega(),
-      Dirichlet_bc_function_omega() {
+      Dirichlet_bc_function_omega(), radius(parameters.radius),
+      lumpedAverage(parameters.lumpedAverage) {
+
+  g = constructed_solution == 3
+          ? (2 * numbers::PI) / (2 * numbers::PI + std::log(radius))
+          : 1;
 }
 
 template <int dim, int dim_omega>
@@ -296,46 +312,44 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
   } else
     GridGenerator::hyper_cube(triangulation, -extent, extent);
 #else
- 
-  //Point<dim> p1 = Point<dim>(1, -std::sqrt(0.5) +offset, -std::sqrt(0.5)+offset);
-  //Point<dim> p2 = Point<dim>(0, std::sqrt(0.5)+offset, std::sqrt(0.5)+offset);
 
-  Point<dim> p1 = Point<dim>(1, -std::sqrt(0.4) +offset, -std::sqrt(0.4)+offset);
-  Point<dim> p2 = Point<dim>(0, std::sqrt(0.4)+offset, std::sqrt(0.4)+offset);
- // std::cout<<"hyper_rectangle "<<p1 << " "<<p2<<std::endl;
+  // Point<dim> p1 = Point<dim>(1, -std::sqrt(0.5) +offset,
+  // -std::sqrt(0.5)+offset); Point<dim> p2 = Point<dim>(0,
+  // std::sqrt(0.5)+offset, std::sqrt(0.5)+offset);
+
+  Point<dim> p1 =
+      Point<dim>(1, -std::sqrt(0.4) + offset, -std::sqrt(0.4) + offset);
+  Point<dim> p2 =
+      Point<dim>(0, std::sqrt(0.4) + offset, std::sqrt(0.4) + offset);
+  // std::cout<<"hyper_rectangle "<<p1 << " "<<p2<<std::endl;
   GridGenerator::hyper_rectangle(triangulation, p1, p2);
 #endif
 
   triangulation.refine_global(n_refine);
- double max_diameter = 0.0;
+  double max_diameter = 0.0;
   typename Triangulation<dim>::cell_iterator cell = triangulation.begin(),
                                              endc = triangulation.end();
   for (; cell != endc; ++cell) {
-    double cell_diameter = cell->diameter();  // Get the diameter of the cell
-    if (cell_diameter > max_diameter)
-    {
+    double cell_diameter = cell->diameter(); // Get the diameter of the cell
+    if (cell_diameter > max_diameter) {
       max_diameter = cell_diameter;
     }
-
 
     for (unsigned int face_no = 0; face_no < GeometryInfo<dim>::faces_per_cell;
          face_no++) {
       Point<dim> p = cell->face(face_no)->center();
       if (cell->face(face_no)->at_boundary() && (p[0] != 0 || p[0] != 1)) {
         cell->face(face_no)->set_boundary_id(Dirichlet);
-        //if ((p[0] == 0 || p[0] == 1) && constructed_solution == 3 && dim == 3)
-          //cell->face(face_no)->set_boundary_id(Neumann);
+        // if ((p[0] == 0 || p[0] == 1) && constructed_solution == 3 && dim ==
+        // 3) cell->face(face_no)->set_boundary_id(Neumann);
       }
     }
   }
-    if(radius > max_diameter && !lumpedAvarage)
-    {
-      std::cout<<"!!!!!!!!!!!!!! MAX DIAMETER > RADIUS !!!!!!!!!!!!!!!!"<<max_diameter<<radius<< std::endl;
-      throw std::invalid_argument( "MAX DIAMETER > RADIUS" );
-    }
-
-
-
+  if (radius > max_diameter && !lumpedAverage) {
+    std::cout << "!!!!!!!!!!!!!! MAX DIAMETER > RADIUS !!!!!!!!!!!!!!!!"
+              << max_diameter << radius << std::endl;
+    throw std::invalid_argument("MAX DIAMETER > RADIUS");
+  }
 
   if (constructed_solution == 3)
     GridGenerator::hyper_cube(triangulation_omega, 0, 2 * half_length);
@@ -353,7 +367,6 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
         cell_omega->face(face_no)->set_boundary_id(Dirichlet);
     }
   }
-
 }
 
 template <int dim, int dim_omega>
@@ -465,7 +478,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
     std::vector<types::global_dof_index> local_dof_indices_omega(
         dofs_per_cell_omega);
     unsigned int nof_quad_points;
-    bool AVERAGE = radius != 0 && !lumpedAvarage;
+    bool AVERAGE = radius != 0 && !lumpedAverage;
     pcout << "AVERAGE " << AVERAGE << std::endl;
     // weight
     if (AVERAGE) {
@@ -520,7 +533,8 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
 #if TEST
         auto cell_test_array = GridTools::find_all_active_cells_around_point(
             mapping, dof_handler, quadrature_point_test);
-        //std::cout << "cell_test_array " << cell_test_array.size() << std::endl;
+        // std::cout << "cell_test_array " << cell_test_array.size() <<
+        // std::endl;
 
         for (auto cellpair : cell_test_array)
 #else
@@ -562,8 +576,8 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
                 auto cell_trial_array =
                     GridTools::find_all_active_cells_around_point(
                         mapping, dof_handler, quadrature_point_trial);
-              //  std::cout << "cell_trial_array " << cell_trial_array.size()
-                        //  << std::endl;
+                //  std::cout << "cell_trial_array " << cell_trial_array.size()
+                //  << std::endl;
 
                 for (auto cellpair_trial : cell_trial_array)
 #else
@@ -617,9 +631,13 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
                         }
                       }
                     }
+                  //       else
+                  // std::cout<<"düdüm"<<std::endl;
                 }
               }
             }
+          //   else
+          // std::cout<<"düdüm"<<std::endl;
         }
         // std::cout<<std::endl;
       }
@@ -1006,8 +1024,8 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
         if (cell_test->is_locally_owned())
 #endif
         {
-          //std::cout << "cell_test->center() " << cell_test->center()
-            //        << std::endl;
+          // std::cout << "cell_test->center() " << cell_test->center()
+          //         << std::endl;
           cell_test->get_dof_indices(local_dof_indices_test);
 
           //-------------face -----------------
@@ -1048,7 +1066,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                   fe_values_coupling_test_face.n_quadrature_points;
               unsigned int dofs_this_cell =
                   fe_values_coupling_test_face.dofs_per_cell;
-             // std::cout << "n_face_points " << n_face_points << std::endl;
+              // std::cout << "n_face_points " << n_face_points << std::endl;
               local_vector = 0;
               for (unsigned int q = 0; q < n_face_points; ++q) {
                 for (unsigned int i = 0; i < dofs_this_cell; ++i) {
@@ -1109,9 +1127,9 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
     bool insideCell_test = true;
     bool insideCell_trial = true;
     unsigned int nof_quad_points;
-    bool AVERAGE = radius != 0 && !lumpedAvarage;
+    bool AVERAGE = radius != 0 && !lumpedAverage;
     pcout << "AVERAGE " << AVERAGE << std::endl;
-    
+
     // weight
     if (AVERAGE) {
       nof_quad_points = N_quad_points;
@@ -1161,14 +1179,15 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
 
-       // std::cout<< "------quadrature_point_test " <<  quadrature_point_test << std::endl;
+        // std::cout<< "------quadrature_point_test " <<  quadrature_point_test
+        // << std::endl;
         unsigned int n_te;
 #if TEST
         auto cell_test_array = GridTools::find_all_active_cells_around_point(
             mapping, dof_handler, quadrature_point_test);
         n_te = cell_test_array.size();
         //   n_te = 1;
-       // pcout << "cell_test_array " << cell_test_array.size() << std::endl;
+        // pcout << "cell_test_array " << cell_test_array.size() << std::endl;
         for (auto cellpair : cell_test_array)
 #else
         auto cell_test = GridTools::find_active_cell_around_point(
@@ -1186,7 +1205,8 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
             if (cell_test->is_locally_owned())
 #endif
             {
-            //std::cout<< "cell_test " << cell_test<< " " <<cell_test->center() << std::endl;
+              // std::cout<< "cell_test " << cell_test<< " "
+              // <<cell_test->center() << std::endl;
               cell_test->get_dof_indices(local_dof_indices_test);
 
               std::vector<unsigned int> face_no_test;
@@ -1196,25 +1216,23 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                 typename DoFHandler<dim>::face_iterator face_test =
                     cell_test->face(face_no);
                 auto bounding_box = face_test->bounding_box();
-                n_ftest += bounding_box.point_inside(quadrature_point_test,
-                                                  distance_tolerance) == true;
-                face_no_test.push_back(face_no); 
+                n_ftest +=
+                    bounding_box.point_inside(quadrature_point_test,
+                                              distance_tolerance) == true;
+                face_no_test.push_back(face_no);
               }
-              if(n_ftest == 0)
-              {
+              if (n_ftest == 0) {
                 insideCell_test = true;
                 n_ftest = 1;
-              }
-              else
-              {
+              } else {
                 insideCell_test = false;
-                //std::cout<<"insideCell_test = false"<<std::endl;
+                // std::cout<<"insideCell_test = false"<<std::endl;
               }
-                
-             // std::cout << "n_ftest " << n_ftest << " insideCell_test " <<insideCell_test<<std::endl;
 
+              // std::cout << "n_ftest " << n_ftest << " insideCell_test "
+              // <<insideCell_test<<std::endl;
 
-                 Point<dim> quadrature_point_test_mapped_cell =
+              Point<dim> quadrature_point_test_mapped_cell =
                   mapping.transform_real_to_unit_cell(cell_test,
                                                       quadrature_point_test);
 
@@ -1223,14 +1241,13 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
               const Quadrature<dim> my_quadrature_formula_test(
                   my_quadrature_points_test, my_quadrature_weights);
               FEValues<dim> fe_values_coupling_test(
-                  fe, my_quadrature_formula_test,
-                  update_flags_coupling); 
+                  fe, my_quadrature_formula_test, update_flags_coupling);
               fe_values_coupling_test.reinit(cell_test);
 
 #if !COUPLED
-              std::cout<<"not coupled"<<std::endl;
+              std::cout << "not coupled" << std::endl;
               //-------------face -----------------
-              //n_ftest = 0;
+              // n_ftest = 0;
               if (!insideCell_test) {
                 pcout << "Omega rhs face " << std::endl;
                 for (unsigned int face_no = 0;
@@ -1243,21 +1260,22 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                           cell_test, face_no, quadrature_point_test);
 
                   auto bounding_box = face_test->bounding_box();
-                
+
                   if (bounding_box.point_inside(quadrature_point_test,
                                                 distance_tolerance) == true) {
-                      /*  std::cout << "face_test->center() " << face_test->center()
-                            << " quadrature_point_test_mapped_face "
-                            << quadrature_point_test_mapped_face << " isinside "
-                            << bounding_box.point_inside(quadrature_point_test,
-                                                         distance_tolerance)
-                            << std::endl;*/
+                    /*  std::cout << "face_test->center() " <<
+                       face_test->center()
+                          << " quadrature_point_test_mapped_face "
+                          << quadrature_point_test_mapped_face << " isinside "
+                          << bounding_box.point_inside(quadrature_point_test,
+                                                       distance_tolerance)
+                          << std::endl;*/
 
-                  std::vector<Point<dim - 1>> quadrature_point_test_face = {
+                    std::vector<Point<dim - 1>> quadrature_point_test_face = {
                         quadrature_point_test_mapped_face};
-                const Quadrature<dim - 1> my_quadrature_formula_test(
+                    const Quadrature<dim - 1> my_quadrature_formula_test(
                         quadrature_point_test_face, my_quadrature_weights);
-                FEFaceValues<dim> fe_values_coupling_test_face(
+                    FEFaceValues<dim> fe_values_coupling_test_face(
                         fe, my_quadrature_formula_test, update_flags_coupling);
                     fe_values_coupling_test_face.reinit(cell_test, face_no);
                     unsigned int n_face_points =
@@ -1271,31 +1289,28 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                         local_vector(i) +=
                             fe_values_coupling_test_face[Potential].value(i,
                                                                           q) *
-                            1 / (n_te * n_ftest) * (1 + quadrature_point_omega[0]) *
-                      fe_values_omega.JxW(p);
+                            1 / (n_te * n_ftest) *
+                            (1 + quadrature_point_omega[0]) *
+                            fe_values_omega.JxW(p);
                       }
                     }
                     constraints.distribute_local_to_global(
                         local_vector, local_dof_indices_test, system_rhs);
-
                   }
                 }
               }
               //-------------face ----------------- ende
 
-           
-
               if (insideCell_test) {
 
                 pcout << "Omega rhs insideCell" << std::endl;
-                local_vector = 0; 
+                local_vector = 0;
                 const unsigned int n_q_points = fe_values.n_quadrature_points;
                 // for (unsigned int q = 0; q < n_q_points; ++q) {
                 for (unsigned int i = 0; i < dofs_per_cell; i++) {
                   local_vector(i) +=
-                      fe_values_coupling_test[Potential].value(i, 0) * (1 + quadrature_point_omega[0]) *
-                      fe_values_omega.JxW(p);
-   
+                      fe_values_coupling_test[Potential].value(i, 0) *
+                      (1 + quadrature_point_omega[0]) * fe_values_omega.JxW(p);
                 }
                 constraints.distribute_local_to_global(
                     local_vector, local_dof_indices_test, system_rhs);
@@ -1303,12 +1318,13 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 #endif
 
 #if COUPLED
-              //std::cout << "coupled " << std::endl;
+              // std::cout << "coupled " << std::endl;
               for (unsigned int q_avag = 0; q_avag < nof_quad_points;
                    q_avag++) {
                 // Quadrature weights and points
                 quadrature_point_trial = quadrature_points_circle[q_avag];
-              //  std::cout<< "quadrature_point_trial " << quadrature_point_trial << std::endl;
+                //  std::cout<< "quadrature_point_trial " <<
+                //  quadrature_point_trial << std::endl;
                 double weight;
                 double C_avag;
                 if (AVERAGE) {
@@ -1316,34 +1332,39 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                   double h_avag = perimeter / (nof_quad_points);
 
                   double weights_odd = 4.0 / 3.0 * h_avag;
-                  double weights_even =  2.0 / 3.0 * h_avag;
+                  double weights_even = 2.0 / 3.0 * h_avag;
                   double weights_first_last = h_avag / 3.0;
 
-                  C_avag = 1.0 /(2.0 * numbers::PI);
-                 // std::cout<< "h_avag " << h_avag <<" weights_odd "<< weights_odd<< " weights_even "<<weights_even<< " q_avag % 2 == 0 " << (int)(q_avag % 2 == 0)<< std::endl;
-                  if (q_avag == 0) 
+                  C_avag = 1.0 / (2.0 * numbers::PI);
+                  // std::cout<< "h_avag " << h_avag <<" weights_odd "<<
+                  // weights_odd<< " weights_even "<<weights_even<< " q_avag % 2
+                  // == 0 " << (int)(q_avag % 2 == 0)<< std::endl;
+                  if (q_avag == 0)
                     weight = 2 * weights_first_last;
                   else {
-                    
+
                     if (q_avag % 2 == 0)
                       weight = weights_even;
                     else
                       weight = weights_odd;
                   }
-                  weight = ((2.0 * numbers::PI * radius)/(nof_quad_points)) ;
+                  weight = ((2.0 * numbers::PI * radius) / (nof_quad_points));
                 } else {
                   weight = 1;
                   C_avag = 1;
                 }
-              weight = 1.0/nof_quad_points;
-              C_avag = 1.0;
-           //    std::cout<< "q_avag " << q_avag <<" weight "<< weight<<" C_avag "<<C_avag<<" nof_quad_points "<<nof_quad_points<<std::endl;
+                weight = 1.0 / nof_quad_points;
+                C_avag = 1.0;
+                //    std::cout<< "q_avag " << q_avag <<" weight "<< weight<<"
+                //    C_avag "<<C_avag<<" nof_quad_points
+                //    "<<nof_quad_points<<std::endl;
                 unsigned int n_tr;
 #if TEST
                 auto cell_trial_array =
                     GridTools::find_all_active_cells_around_point(
                         mapping, dof_handler, quadrature_point_trial);
-               // pcout<< "cell_trial_array " << cell_trial_array.size() << std::endl;
+                // pcout<< "cell_trial_array " << cell_trial_array.size() <<
+                // std::endl;
                 n_tr = cell_trial_array.size();
                 // n_tr  =1;
                 for (auto cellpair_trial : cell_trial_array)
@@ -1360,7 +1381,8 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                   if (cell_trial != dof_handler.end())
                     if (cell_trial->is_locally_owned() &&
                         cell_test->is_locally_owned()) {
-                  //  std::cout<< "cell_trial " << cell_trial<< " " <<cell_trial->center() << std::endl;
+                      //  std::cout<< "cell_trial " << cell_trial<< " "
+                      //  <<cell_trial->center() << std::endl;
                       cell_trial->get_dof_indices(local_dof_indices_trial);
 
                       //-----------------------cell--------------------------------------
@@ -1379,160 +1401,176 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                           fe, my_quadrature_formula_trial,
                           update_flags_coupling);
                       fe_values_coupling_trial.reinit(cell_trial);
-                     
-                     
+
                       unsigned int n_ftrial = 0;
-              std::vector<unsigned int> face_no_trial;
-              for (unsigned int face_no = 0;
-                   face_no < GeometryInfo<dim>::faces_per_cell; face_no++) {
-                typename DoFHandler<dim>::face_iterator face_trial =
-                    cell_trial->face(face_no);
-                auto bounding_box = face_trial->bounding_box();
-                n_ftrial += bounding_box.point_inside(quadrature_point_trial,
-                                                  distance_tolerance) == true;
-                face_no_trial.push_back(face_no);                                  
-              }
-            if(n_ftrial == 0)
-            {
-                insideCell_trial = true;
-                n_ftrial = 1;
-                
-            }
-              else
-              {
-                insideCell_trial = false;
-             //   std::cout<<"insideCell_trial = false"<<std::endl;
-              }
-                
-        //     std::cout << "n_ftrial " << n_ftrial << " insideCell_trial " <<insideCell_trial<<std::endl; // hier ist der Fehler: also unten, nicht jeder
+                      std::vector<unsigned int> face_no_trial;
+                      for (unsigned int face_no = 0;
+                           face_no < GeometryInfo<dim>::faces_per_cell;
+                           face_no++) {
+                        typename DoFHandler<dim>::face_iterator face_trial =
+                            cell_trial->face(face_no);
+                        auto bounding_box = face_trial->bounding_box();
+                        n_ftrial += bounding_box.point_inside(
+                                        quadrature_point_trial,
+                                        distance_tolerance) == true;
+                        face_no_trial.push_back(face_no);
+                      }
+                      if (n_ftrial == 0) {
+                        insideCell_trial = true;
+                        n_ftrial = 1;
 
+                      } else {
+                        insideCell_trial = false;
+                        //   std::cout<<"insideCell_trial = false"<<std::endl;
+                      }
 
-              for(unsigned int ftest = 0; ftest < n_ftest; ftest++ )
-              {
-                Point<dim - 1> quadrature_point_test_mapped_face =
-                      mapping.project_real_point_to_unit_point_on_face(
-                          cell_test, face_no_test[ftest], quadrature_point_test);
-          
-                  std::vector<Point<dim - 1>> quadrature_point_test_face = {
-                        quadrature_point_test_mapped_face};
-                const Quadrature<dim - 1> my_quadrature_formula_test(
-                        quadrature_point_test_face, my_quadrature_weights);
-                FEFaceValues<dim> fe_values_coupling_test_face(
-                        fe, my_quadrature_formula_test, update_flags_coupling);
-                    fe_values_coupling_test_face.reinit(cell_test, face_no_test[ftest]);
+                      //     std::cout << "n_ftrial " << n_ftrial << "
+                      //     insideCell_trial " <<insideCell_trial<<std::endl;
+                      //     // hier ist der Fehler: also unten, nicht jeder
 
+                      for (unsigned int ftest = 0; ftest < n_ftest; ftest++) {
+                        Point<dim - 1> quadrature_point_test_mapped_face =
+                            mapping.project_real_point_to_unit_point_on_face(
+                                cell_test, face_no_test[ftest],
+                                quadrature_point_test);
 
-                  for(unsigned int ftrial = 0; ftrial < n_ftrial; ftrial++ )
-                  {
-                      
-                                    Point<dim - 1> quadrature_point_trial_mapped_face =
-                      mapping.project_real_point_to_unit_point_on_face(
-                          cell_trial, face_no_trial[ftrial], quadrature_point_trial);
-          
-                  std::vector<Point<dim - 1>> quadrature_point_trial_face = {
-                        quadrature_point_trial_mapped_face};
-                const Quadrature<dim - 1> my_quadrature_formula_trial(
-                        quadrature_point_trial_face, my_quadrature_weights);
-                FEFaceValues<dim> fe_values_coupling_trial_face(
-                        fe, my_quadrature_formula_trial, update_flags_coupling);
-                    fe_values_coupling_trial_face.reinit(cell_trial, face_no_trial[ftest]);
+                        std::vector<Point<dim - 1>> quadrature_point_test_face =
+                            {quadrature_point_test_mapped_face};
+                        const Quadrature<dim - 1> my_quadrature_formula_test(
+                            quadrature_point_test_face, my_quadrature_weights);
+                        FEFaceValues<dim> fe_values_coupling_test_face(
+                            fe, my_quadrature_formula_test,
+                            update_flags_coupling);
+                        fe_values_coupling_test_face.reinit(
+                            cell_test, face_no_test[ftest]);
 
+                        for (unsigned int ftrial = 0; ftrial < n_ftrial;
+                             ftrial++) {
 
-                      V_U_matrix_coupling = 0;
-                      v_U_matrix_coupling = 0;
-                      V_u_matrix_coupling = 0;
-                      v_u_matrix_coupling = 0;
+                          Point<dim - 1> quadrature_point_trial_mapped_face =
+                              mapping.project_real_point_to_unit_point_on_face(
+                                  cell_trial, face_no_trial[ftrial],
+                                  quadrature_point_trial);
 
-                      double psi_potential_test;
-                       double psi_potential_trial;
+                          std::vector<Point<dim - 1>>
+                              quadrature_point_trial_face = {
+                                  quadrature_point_trial_mapped_face};
+                          const Quadrature<dim - 1> my_quadrature_formula_trial(
+                              quadrature_point_trial_face,
+                              my_quadrature_weights);
+                          FEFaceValues<dim> fe_values_coupling_trial_face(
+                              fe, my_quadrature_formula_trial,
+                              update_flags_coupling);
+                          fe_values_coupling_trial_face.reinit(
+                              cell_trial, face_no_trial[ftest]);
 
+                          V_U_matrix_coupling = 0;
+                          v_U_matrix_coupling = 0;
+                          V_u_matrix_coupling = 0;
+                          v_u_matrix_coupling = 0;
 
+                          double psi_potential_test;
+                          double psi_potential_trial;
 
-                      for (unsigned int i = 0; i < dofs_per_cell; i++) {
-                        if(insideCell_test)
-                        psi_potential_test = fe_values_coupling_test[Potential].value(i, 0);
-                        else 
-                        psi_potential_test =  fe_values_coupling_test_face[Potential].value(i, 0);
-                       
+                          for (unsigned int i = 0; i < dofs_per_cell; i++) {
+                            if (insideCell_test)
+                              psi_potential_test =
+                                  fe_values_coupling_test[Potential].value(i,
+                                                                           0);
+                            else
+                              psi_potential_test =
+                                  fe_values_coupling_test_face[Potential].value(
+                                      i, 0);
 
+                            for (unsigned int j = 0; j < dofs_per_cell; j++) {
+                              if (insideCell_trial)
+                                psi_potential_trial =
+                                    fe_values_coupling_trial[Potential].value(
+                                        j, 0);
+                              else
+                                psi_potential_trial =
+                                    fe_values_coupling_trial_face[Potential]
+                                        .value(j, 0);
 
-                        
-                        for (unsigned int j = 0; j < dofs_per_cell; j++) {
-                          if(insideCell_trial)
-                            psi_potential_trial = fe_values_coupling_trial[Potential].value(j, 0);
-                          else 
-                            psi_potential_trial=  fe_values_coupling_trial_face[Potential].value(j, 0);
+                              V_U_matrix_coupling(i, j) +=
+                                  g * psi_potential_test * psi_potential_trial *
+                                  C_avag * weight * fe_values_omega.JxW(p) * 1 /
+                                  (n_tr * n_ftrial) * 1 / (n_te * n_ftest);
+                            }
+                          }
+                          constraints.distribute_local_to_global(
+                              V_U_matrix_coupling, local_dof_indices_test,
+                              local_dof_indices_trial, system_matrix);
 
-                          V_U_matrix_coupling(i, j) +=
-                              g *
-                              psi_potential_test *
-                              psi_potential_trial * 
-                              C_avag * weight *
-                              fe_values_omega.JxW(p) *  1 / (n_tr *n_ftrial) * 1 / (n_te * n_ftest);
+                          for (unsigned int i = 0; i < dofs_per_cell_omega;
+                               i++) {
+                            for (unsigned int j = 0; j < dofs_per_cell; j++) {
+                              if (insideCell_trial)
+                                psi_potential_trial =
+                                    fe_values_coupling_trial[Potential].value(
+                                        j, 0);
+                              else
+                                psi_potential_trial =
+                                    fe_values_coupling_trial_face[Potential]
+                                        .value(j, 0);
+
+                              v_U_matrix_coupling(i, j) +=
+                                  -g *
+                                  fe_values_omega[Potential_omega].value(i, p) *
+                                  C_avag * weight * psi_potential_trial *
+                                  fe_values_omega.JxW(p) * 1 /
+                                  (n_tr * n_ftrial) * 1 / (n_te * n_ftest);
+                            }
+                          }
+                          constraints.distribute_local_to_global(
+                              v_U_matrix_coupling, local_dof_indices_omega,
+                              local_dof_indices_trial, system_matrix);
+
+                          for (unsigned int i = 0; i < dofs_per_cell; i++) {
+                            if (insideCell_test)
+                              psi_potential_test =
+                                  fe_values_coupling_test[Potential].value(i,
+                                                                           0);
+                            else
+                              psi_potential_test =
+                                  fe_values_coupling_test_face[Potential].value(
+                                      i, 0);
+
+                            for (unsigned int j = 0; j < dofs_per_cell_omega;
+                                 j++) {
+                              V_u_matrix_coupling(i, j) +=
+                                  -g * psi_potential_test *
+                                  fe_values_omega[Potential_omega].value(j, p) *
+                                  fe_values_omega.JxW(p) * 1 /
+                                  (n_tr * n_ftrial) * 1 / (n_te * n_ftest) *
+                                  C_avag * weight;
+                            }
+                          }
+                          constraints.distribute_local_to_global(
+                              V_u_matrix_coupling, local_dof_indices_test,
+                              local_dof_indices_omega, system_matrix);
+
+                          for (unsigned int i = 0; i < dofs_per_cell_omega;
+                               i++) {
+                            for (unsigned int j = 0; j < dofs_per_cell_omega;
+                                 j++) {
+                              v_u_matrix_coupling(i, j) +=
+                                  g *
+                                  fe_values_omega[Potential_omega].value(j, p) *
+                                  fe_values_omega[Potential_omega].value(i, p) *
+                                  fe_values_omega.JxW(p) * 1 /
+                                  (n_tr * n_ftrial) * 1 / (n_te * n_ftest) *
+                                  C_avag * weight;
+                            }
+                          }
+                          constraints.distribute_local_to_global(
+                              v_u_matrix_coupling, local_dof_indices_omega,
+                              local_dof_indices_omega, system_matrix);
+
+                          // --------------------------cell ende
+                          // --------------------
                         }
                       }
-                      constraints.distribute_local_to_global(
-                          V_U_matrix_coupling, local_dof_indices_test,
-                          local_dof_indices_trial, system_matrix);
-
-
-                      for (unsigned int i = 0; i < dofs_per_cell_omega; i++) {
-                        for (unsigned int j = 0; j < dofs_per_cell; j++) {
-                          if(insideCell_trial)
-                          psi_potential_trial = fe_values_coupling_trial[Potential].value(j, 0);
-                          else
-                          psi_potential_trial = fe_values_coupling_trial_face[Potential].value(j, 0);
-
-                          v_U_matrix_coupling(i, j) +=
-                              -g *
-                              fe_values_omega[Potential_omega].value(i, p) *
-                              C_avag * weight *
-                              psi_potential_trial*
-                              fe_values_omega.JxW(p) * 1 / (n_tr *n_ftrial) * 1 / (n_te * n_ftest);
-                        }
-                      }
-                      constraints.distribute_local_to_global(
-                          v_U_matrix_coupling, local_dof_indices_omega,
-                          local_dof_indices_trial, system_matrix);
-
-                      for (unsigned int i = 0; i < dofs_per_cell; i++) {
-                        if(insideCell_test)
-                        psi_potential_test = fe_values_coupling_test[Potential].value(i, 0);
-                        else
-                        psi_potential_test = fe_values_coupling_test_face[Potential].value(i, 0);
-
-                        for (unsigned int j = 0; j < dofs_per_cell_omega; j++) {
-                          V_u_matrix_coupling(i, j) +=
-                              -g *
-                              psi_potential_test * 
-                              fe_values_omega[Potential_omega].value(j, p) *
-                              fe_values_omega.JxW(p) *  1 / (n_tr *n_ftrial) * 1 / (n_te * n_ftest) *C_avag * weight ;
-                        }
-                      }
-                      constraints.distribute_local_to_global(
-                          V_u_matrix_coupling, local_dof_indices_test,
-                          local_dof_indices_omega, system_matrix);
-
-                      for (unsigned int i = 0; i < dofs_per_cell_omega; i++) {
-                        for (unsigned int j = 0; j < dofs_per_cell_omega; j++) {
-                          v_u_matrix_coupling(i, j) +=
-                              g * fe_values_omega[Potential_omega].value(j, p) *
-                              fe_values_omega[Potential_omega].value(i, p) *
-                              fe_values_omega.JxW(p) *  1 / (n_tr *n_ftrial) * 1 / (n_te * n_ftest) *C_avag * weight;
-                        }
-                      }
-                      constraints.distribute_local_to_global(
-                          v_u_matrix_coupling, local_dof_indices_omega,
-                          local_dof_indices_omega, system_matrix);
-
-// --------------------------cell ende --------------------
-
-
-
-                  }
-              }
-                
-
                     }
                 }
               }
@@ -2164,7 +2202,7 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   make_dofs();
   assemble_system();
   solve();
-  output_results();
+  //  output_results();
   std::array<double, 4> results_array = compute_errors();
   return results_array;
 }
@@ -2195,44 +2233,65 @@ int main(int argc, char *argv[]) {
   // std::cout << "dimension_Omega " << dimension_Omega << " solution "
   //          << constructed_solution << std::endl;
 
- /*  LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(1,3);
-   std::array<double, 4> arr = LDGPoissonCoupled_s.run();
-   std::cout << rank << " Result_ende: U " << arr[0] << " Q " << arr[1] << " u "
-             << arr[2] << " q " << arr[3] << std::endl;
-   return 0;
- */
+  /*  LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(1,3);
+    std::array<double, 4> arr = LDGPoissonCoupled_s.run();
+    std::cout << rank << " Result_ende: U " << arr[0] << " Q " << arr[1] << " u
+    "
+              << arr[2] << " q " << arr[3] << std::endl;
+    return 0;
+  */
   std::cout << "dimension_Omega " << dimension_Omega << std::endl;
+  double radii[2] = { 0.1, 0.01 };
+  bool lumpedAverages[2] = {true, false};
+  std::vector<std::array<double, 4>> result_scenario;
+  std::vector<std::string> scenario_names;
+  for (unsigned int rad = 0; rad < 2; rad++) {
+    for (unsigned int LA = 0; LA < 2; LA++) {
+      
+      std::string LA_string = lumpedAverages[LA] ? "true" : "false";
+      std::string radius_string = std::to_string(radii[rad]);
+      std::string name= "_LA_" + LA_string + "_rad_" + radius_string;
+      scenario_names.push_back(name) ;
 
-  const unsigned int p_degree[2] = {1,2};
-  constexpr unsigned int p_degree_size = sizeof(p_degree) / sizeof(p_degree[0]);
-  const unsigned int refinement[4] = {1,2,3,4};
-  constexpr unsigned int refinement_size =
-      sizeof(refinement) / sizeof(refinement[0]);
 
-  std::array<double, 4> results[p_degree_size][refinement_size];
+      Parameters parameters;
+      parameters.radius =radii[rad];
+      parameters.lumpedAverage = lumpedAverages[LA];
+      const unsigned int p_degree[2] = {1,2};
+      constexpr unsigned int p_degree_size =
+          sizeof(p_degree) / sizeof(p_degree[0]);
+      const unsigned int refinement[3] = {1,2,3};
+      constexpr unsigned int refinement_size =
+          sizeof(refinement) / sizeof(refinement[0]);
 
-  std::vector<std::string> solution_names = {"U_Omega", "Q_Omega", "u_omega",
-                                             "q_omega"};
-  for (unsigned int r = 0; r < refinement_size; r++) {
-    for (unsigned int p = 0; p < p_degree_size; p++) {
-      LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled =
-          LDGPoissonProblem<dimension_Omega, 1>(p_degree[p], refinement[r]);
-      std::array<double, 4> arr = LDGPoissonCoupled.run();
-      std::cout << rank << " Result_ende: U " << arr[0] << " Q " << arr[1]
-                << " u " << arr[2] << " q " << arr[3] << std::endl;
-      results[p][r] = arr;
-    }
-  }
+      std::array<double, 4> results[p_degree_size][refinement_size];
+
+      std::vector<std::string> solution_names = {"U_Omega", "Q_Omega",
+                                                 "u_omega", "q_omega"};
+      for (unsigned int r = 0; r < refinement_size; r++) {
+        for (unsigned int p = 0; p < p_degree_size; p++) {
+          LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled =
+              LDGPoissonProblem<dimension_Omega, 1>(p_degree[p], refinement[r],
+                                                    parameters);
+          std::array<double, 4> arr = LDGPoissonCoupled.run();
+          std::cout << rank << " Result_ende: U " << arr[0] << " Q " << arr[1]
+                    << " u " << arr[2] << " q " << arr[3] << std::endl;
+          results[p][r] = arr;
+        }
+      }
+
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
     // std::cout << "--------" << std::endl;
     std::ofstream myfile;
     std::ofstream csvfile;
 #if COUPLED
-    myfile.open("convergence_results_coupled.txt");
-    csvfile.open("convergence_results_coupled.csv");
+    std::string filename = "convergence_results_coupled" + name;
+    myfile.open(filename +".txt");
+    csvfile.open(filename +".csv");
 #else
-    myfile.open("convergence_results_uncoupled.txt");
-    csvfile.open("convergence_results_uncoupled.csv");
+    std::string filename = "convergence_results_uncoupled" + name;
+    myfile.open(filename +".txt");
+    csvfile.open(filename +".csv");
 #endif
     for (unsigned int f = 0; f < solution_names.size(); f++) {
       myfile << solution_names[f] << "\n";
@@ -2286,6 +2345,7 @@ int main(int argc, char *argv[]) {
     myfile.close();
     csvfile.close();
   }
-
+    }
+  }
   return 0;
 }

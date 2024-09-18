@@ -11,18 +11,18 @@
 // std::numbers::PI
 
 #define COUPLED 1
-#define lumpedAvarage 0
+
 #define TEST 1
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
 const double y_l = 0.0;
 const double z_l = 0.0;
-const double radius = 0.1;
+
 
 //https://math.libretexts.org/Bookshelves/Differential_Equations/Introduction_to_Partial_Differential_Equations_(Herman)/07%3A_Green%27s_Functions/7.05%3A_Greens_Functions_for_the_2D_Poisson_Equation
 constexpr unsigned int constructed_solution{3};   // 1:sin cos, 3: dangelo thesis log
-const double g = constructed_solution == 3 ? (2 * numbers::PI) / (2 * numbers::PI + std::log(radius)): 1;
+
 
 template <int dim> double distance(Point<dim> point1, Point<dim> point2) {
   double d = 0;
@@ -488,13 +488,13 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
 
   for(unsigned int i = 0; i < n_components; i++)
   {
-    if(r < radius)
+    /*if(r < radius)
     {
        values(i) = 0;
        //std::cout<<r<<std::endl;
     }
     else  
-      values(i) = 1;
+      values(i) = 1;*/
   values(i) = std::pow(r,2*alpha);
   }
  //values = 1;
