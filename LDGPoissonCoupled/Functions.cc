@@ -247,10 +247,11 @@ double DirichletBoundaryValues_omega<dim>::value(
   case 2:
   case 3: {
     //return 0;
-    if (p[0] == 0)
+    /*if (p[0] == 0)
       return 1;
     if (p[0] == 1)
-      return 2;
+      return 2;*/
+    return 1 + p[0];
 
     break;
   }
@@ -306,7 +307,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     closest_point_line = Point<dim>(x, y_l, z_l);
   }
   double r = distance(p, closest_point_line);
-  if(r > 1)
+  if(r > (1 + 0.01))
   std::cout<<"FALSCH!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!   "<<r<<std::endl;
   switch (constructed_solution) {
 

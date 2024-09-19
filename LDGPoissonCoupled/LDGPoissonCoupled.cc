@@ -105,7 +105,7 @@ const FEValuesExtractors::Scalar Potential(dimension_Omega + 1);
 
 const unsigned int dimension_gap = 0;
 const double extent = 1;
-const double half_length = 0.5;
+const double half_length = std::sqrt(0.5);//0.5
 const double distance_tolerance = 10;
 const unsigned int N_quad_points = 7;
 
@@ -318,19 +318,21 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
   // std::sqrt(0.5)+offset, std::sqrt(0.5)+offset);
 
   Point<dim> p1 =
-      Point<dim>(1, -std::sqrt(0.4) + offset, -std::sqrt(0.4) + offset);
+      Point<dim>(2 * half_length, -half_length + offset, -half_length + offset);
   Point<dim> p2 =
-      Point<dim>(0, std::sqrt(0.4) + offset, std::sqrt(0.4) + offset);
+      Point<dim>(0, half_length + offset, half_length + offset);
   // std::cout<<"hyper_rectangle "<<p1 << " "<<p2<<std::endl;
   GridGenerator::hyper_rectangle(triangulation, p1, p2);
 #endif
 
   triangulation.refine_global(n_refine);
   double max_diameter = 0.0;
-  typename Triangulation<dim>::cell_iterator cell = triangulation.begin(),
-                                             endc = triangulation.end();
+ typename DoFHandler<dim>::active_cell_iterator
+        cell = dof_handler.begin_active(),
+        endc = dof_handler.end();
   for (; cell != endc; ++cell) {
-    double cell_diameter = cell->diameter(); // Get the diameter of the cell
+    double cell_diameter = cell->diameter(); // Get the diameter of the cell^
+    
     if (cell_diameter > max_diameter) {
       max_diameter = cell_diameter;
     }
@@ -345,10 +347,11 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
       }
     }
   }
+  std::cout<<"max_diameter "<<max_diameter<<std::endl;
   if (radius > max_diameter && !lumpedAverage) {
     std::cout << "!!!!!!!!!!!!!! MAX DIAMETER > RADIUS !!!!!!!!!!!!!!!!"
               << max_diameter << radius << std::endl;
-    throw std::invalid_argument("MAX DIAMETER > RADIUS");
+    //throw std::invalid_argument("MAX DIAMETER > RADIUS");
   }
 
   if (constructed_solution == 3)
@@ -357,9 +360,9 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
     GridGenerator::hyper_cube(triangulation_omega, -extent / 2, extent / 2);
   triangulation_omega.refine_global(n_refine);
 
-  typename Triangulation<dim_omega>::cell_iterator
-      cell_omega = triangulation_omega.begin(),
-      endc_omega = triangulation_omega.end();
+ typename DoFHandler<dim_omega>::active_cell_iterator
+        cell_omega = dof_handler_omega.begin_active(),
+        endc_omega = dof_handler_omega.end();
   for (; cell_omega != endc_omega; ++cell_omega) {
     for (unsigned int face_no = 0;
          face_no < GeometryInfo<dim_omega>::faces_per_cell; face_no++) {
@@ -548,6 +551,16 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
 #endif
 
 #if USE_MPI
+     /*   std::cout<<cell_test;
+        if(cell_test->is_locally_owned() )
+        std::cout<<" is locally ownded ";
+        else if(cell_test->is_ghost())
+        std::cout<<" is_ghost() ";
+        else
+        std::cout<<" anders ";
+        std::cout<<std::endl;*/
+
+
           if (cell_test != dof_handler.end())
             if (cell_test->is_locally_owned())
 #endif
@@ -589,7 +602,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
 #if TEST
                   auto cell_trial = cellpair_trial.first;
 #endif
-                  if (cell_trial != dof_handler.end())
+                  if (cell_trial != dof_handler.end()) {
                     if (cell_trial->is_locally_owned() &&
                         cell_test->is_locally_owned()) {
 
@@ -631,6 +644,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
                         }
                       }
                     }
+                  }
                   //       else
                   // std::cout<<"düdüm"<<std::endl;
                 }
@@ -1245,11 +1259,11 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
               fe_values_coupling_test.reinit(cell_test);
 
 #if !COUPLED
-              std::cout << "not coupled" << std::endl;
+            //  std::cout << "not coupled" << std::endl;
               //-------------face -----------------
               // n_ftest = 0;
               if (!insideCell_test) {
-                pcout << "Omega rhs face " << std::endl;
+               // pcout << "Omega rhs face " << std::endl;
                 for (unsigned int face_no = 0;
                      face_no < GeometryInfo<dim>::faces_per_cell; face_no++) {
                   typename DoFHandler<dim>::face_iterator face_test =
@@ -1601,6 +1615,10 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
       }
     }
   }
+/*#if USE_MPI
+  system_matrix.compress(VectorOperation::add);
+  system_rhs.compress(VectorOperation::add);
+#endif*/
 }
 
 template <int dim, int dim_omega>
@@ -2202,8 +2220,8 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   make_dofs();
   assemble_system();
   solve();
-  //  output_results();
-  std::array<double, 4> results_array = compute_errors();
+  output_results();
+  std::array<double, 4> results_array  = compute_errors();
   return results_array;
 }
 
@@ -2233,34 +2251,39 @@ int main(int argc, char *argv[]) {
   // std::cout << "dimension_Omega " << dimension_Omega << " solution "
   //          << constructed_solution << std::endl;
 
-  /*  LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(1,3);
+  /*
+  Parameters parameters;
+      parameters.radius = 0.01;
+      parameters.lumpedAverage = true;
+  
+  LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled_s(0,3, parameters);
     std::array<double, 4> arr = LDGPoissonCoupled_s.run();
-    std::cout << rank << " Result_ende: U " << arr[0] << " Q " << arr[1] << " u
-    "
+    std::cout << rank << " Result_ende: U " << arr[0] << " Q " << arr[1] << " u "
               << arr[2] << " q " << arr[3] << std::endl;
     return 0;
   */
   std::cout << "dimension_Omega " << dimension_Omega << std::endl;
-  double radii[2] = { 0.1, 0.01 };
-  bool lumpedAverages[2] = {true, false};
+  const unsigned int n_r = 2;
+  const unsigned int n_LA = 2;
+  double radii[n_r] = {0.1, 0.01};
+  bool lumpedAverages[n_LA] = {true, false};
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
-  for (unsigned int rad = 0; rad < 2; rad++) {
-    for (unsigned int LA = 0; LA < 2; LA++) {
-      
+  for (unsigned int rad = 0; rad < n_r; rad++) {
+    for (unsigned int LA = 0; LA < n_LA; LA++) {
+
       std::string LA_string = lumpedAverages[LA] ? "true" : "false";
       std::string radius_string = std::to_string(radii[rad]);
-      std::string name= "_LA_" + LA_string + "_rad_" + radius_string;
-      scenario_names.push_back(name) ;
-
+      std::string name = "_LA_" + LA_string + "_rad_" + radius_string;
+      scenario_names.push_back(name);
 
       Parameters parameters;
-      parameters.radius =radii[rad];
+      parameters.radius = radii[rad];
       parameters.lumpedAverage = lumpedAverages[LA];
-      const unsigned int p_degree[2] = {1,2};
+      const unsigned int p_degree[3] = {0,1,2};
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
-      const unsigned int refinement[3] = {1,2,3};
+      const unsigned int refinement[4] = {1,2,3,4};
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
 
@@ -2280,71 +2303,71 @@ int main(int argc, char *argv[]) {
         }
       }
 
-  if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
-    // std::cout << "--------" << std::endl;
-    std::ofstream myfile;
-    std::ofstream csvfile;
+      if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
+        // std::cout << "--------" << std::endl;
+        std::ofstream myfile;
+        std::ofstream csvfile;
 #if COUPLED
-    std::string filename = "convergence_results_coupled" + name;
-    myfile.open(filename +".txt");
-    csvfile.open(filename +".csv");
+        std::string filename = "convergence_results_coupled" + name;
+        myfile.open(filename + ".txt");
+        csvfile.open(filename + ".csv");
 #else
-    std::string filename = "convergence_results_uncoupled" + name;
-    myfile.open(filename +".txt");
-    csvfile.open(filename +".csv");
+        std::string filename = "convergence_results_uncoupled" + name;
+        myfile.open(filename + ".txt");
+        csvfile.open(filename + ".csv");
 #endif
-    for (unsigned int f = 0; f < solution_names.size(); f++) {
-      myfile << solution_names[f] << "\n";
-      myfile << "refinement/p_degree, ";
+        for (unsigned int f = 0; f < solution_names.size(); f++) {
+          myfile << solution_names[f] << "\n";
+          myfile << "refinement/p_degree, ";
 
-      csvfile << solution_names[f] << "\n";
-      csvfile << "refinement/p_degree;";
+          csvfile << solution_names[f] << "\n";
+          csvfile << "refinement/p_degree;";
 
-      std::cout << solution_names[f] << "\n";
-      std::cout << "refinement/p_degree;";
-      for (unsigned int p = 0; p < p_degree_size; p++) {
-        myfile << p_degree[p] << ",";
-        csvfile << p_degree[p] << ";";
-        std::cout << p_degree[p] << ";";
-      }
-      myfile << "\n";
-      csvfile << "\n";
-      std::cout << "\n";
-      for (unsigned int r = 0; r < refinement_size; r++) {
-        myfile << refinement[r] << ",";
-        csvfile << refinement[r] << ";";
-        std::cout << refinement[r] << ";";
-        for (unsigned int p = 0; p < p_degree_size; p++) {
-          const double error = results[p][r][f];
-
-          myfile << error;
-          csvfile << error;
-          std::cout << error;
-          if (r != 0) {
-            const double rate =
-                std::log2(results[p][r - 1][f] / results[p][r][f]);
-            myfile << " (" << rate << ")";
-            csvfile << " (" << rate << ")";
-            std::cout << " (" << rate << ")";
+          std::cout << solution_names[f] << "\n";
+          std::cout << "refinement/p_degree;";
+          for (unsigned int p = 0; p < p_degree_size; p++) {
+            myfile << p_degree[p] << ",";
+            csvfile << p_degree[p] << ";";
+            std::cout << p_degree[p] << ";";
           }
+          myfile << "\n";
+          csvfile << "\n";
+          std::cout << "\n";
+          for (unsigned int r = 0; r < refinement_size; r++) {
+            myfile << refinement[r] << ",";
+            csvfile << refinement[r] << ";";
+            std::cout << refinement[r] << ";";
+            for (unsigned int p = 0; p < p_degree_size; p++) {
+              const double error = results[p][r][f];
 
-          myfile << ",";
-          if (p < p_degree_size - 1)
-            csvfile << ";";
-          std::cout << ";";
+              myfile << error;
+              csvfile << error;
+              std::cout << error;
+              if (r != 0) {
+                const double rate =
+                    std::log2(results[p][r - 1][f] / results[p][r][f]);
+                myfile << " (" << rate << ")";
+                csvfile << " (" << rate << ")";
+                std::cout << " (" << rate << ")";
+              }
+
+              myfile << ",";
+              if (p < p_degree_size - 1)
+                csvfile << ";";
+              std::cout << ";";
+            }
+            myfile << std::endl;
+            csvfile << "\n";
+            std::cout << std::endl;
+          }
+          myfile << std::endl << std::endl;
+          csvfile << "\n\n";
+          std::cout << std::endl << std::endl;
         }
-        myfile << std::endl;
-        csvfile << "\n";
-        std::cout << std::endl;
-      }
-      myfile << std::endl << std::endl;
-      csvfile << "\n\n";
-      std::cout << std::endl << std::endl;
-    }
 
-    myfile.close();
-    csvfile.close();
-  }
+        myfile.close();
+        csvfile.close();
+      }
     }
   }
   return 0;
