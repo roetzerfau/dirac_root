@@ -86,10 +86,18 @@
 #include <deal.II/lac/trilinos_precondition.h>
 #include <deal.II/lac/trilinos_solver.h>
 #include <deal.II/meshworker/mesh_loop.h>
+ #include <deal.II/distributed/shared_tria.h>
+
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
 
+/*ic abe zwei mölickeiten:
+1. dofs auf stric zu den korrekten 3D cells zuorden in matrix und dann mit partition_custom_signal in trianulation, die kopplunsterme einem prozessor zuordnen (dann ist das Problem mit zu roßen radius verindert)
+2. add extra dof die nicts mit trianulation zu tun aben (klein omea dofs). die können dann von jedem prozessor zueriffen werden */
+
+// 2. variante ist warsceinlic besser
+//einfac die benötiten dofs an matrix iten dran. Dofandler witout zustzice FE , sparsity und so dementsprecen macjen. solution(dof.nof_dof + extraDof)
 #include "Functions.cc"
 
 using namespace dealii;
@@ -189,7 +197,8 @@ private:
   bool lumpedAverage;
 
 #if USE_MPI
-  parallel::distributed::Triangulation<dim> triangulation;
+ parallel::distributed::Triangulation<dim> triangulation;
+ //parallel::shared::Triangulation<dim> triangulation;
 
   TrilinosWrappers::SparseMatrix system_matrix;
   TrilinosWrappers::MPI::Vector solution;
@@ -417,18 +426,39 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
         << " start_Potential " << start_Potential << " start_Potential_omega "
         << start_Potential_omega << std::endl;
 
+  const unsigned int n_global_dofs = 10; 
+  IndexSet global_dofs_set(n_global_dofs);
+  global_dofs_set.add_range(0, n_global_dofs);
+  unsigned int n_dofs_general = dof_handler.n_dofs() + n_global_dofs;
+  
   constraints.clear();
   constraints.close();
 
   DynamicSparsityPattern dsp(dof_handler.n_dofs());
   DoFTools::make_flux_sparsity_pattern(dof_handler, dsp);
 
+
+
+  BlockDynamicSparsityPattern dsp_block(2, 2);
+
+  DynamicSparsityPattern dsp_mesh(dof_handler.n_dofs());
+  DoFTools::make_flux_sparsity_pattern(dof_handler, dsp_mesh);
+
+    // Block 1,1: Sparsity for the extra DoFs (global DoFs)
+  dsp_block.block(1, 1).reinit(dof_handler_omega.n_dofs(), dof_handler_omega.n_dofs());
+
+  // Block 0,1 and 1,0: Sparsity for connections between mesh-based and extra DoFs
+  dsp_block.block(0, 1).reinit(dof_handler.n_dofs(), dof_handler_omega.n_dofs());  // Block for coupling DoFs
+  dsp_block.block(1, 0).reinit(dof_handler_omega.n_dofs(), dof_handler.n_dofs());
+
+
+
   const std::vector<types::global_dof_index> dofs_per_component_omega =
       DoFTools::count_dofs_per_fe_component(dof_handler_omega);
   unsigned int n_dofs_VectorField_omega = dofs_per_component_omega[0];
   unsigned int n_dofs_Potential_omega = dofs_per_component_omega[1];
 
-  pcout << "start - extra dof coupling" << std::endl;
+ pcout << "start - extra dof coupling" << std::endl;
   // DoFs for 1D Inclusion. DoFs are fully connected, so spatial arrangment does
   // not matter
   for (unsigned int i = start_VectorField_omega;
@@ -551,17 +581,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
 #endif
 
 #if USE_MPI
-     /*   std::cout<<cell_test;
-        if(cell_test->is_locally_owned() )
-        std::cout<<" is locally ownded ";
-        else if(cell_test->is_ghost())
-        std::cout<<" is_ghost() ";
-        else
-        std::cout<<" anders ";
-        std::cout<<std::endl;*/
-
-
-          if (cell_test != dof_handler.end())
+         // if (cell_test != dof_handler.end())
             if (cell_test->is_locally_owned())
 #endif
             {
@@ -602,9 +622,9 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
 #if TEST
                   auto cell_trial = cellpair_trial.first;
 #endif
-                  if (cell_trial != dof_handler.end()) {
-                    if (cell_trial->is_locally_owned() &&
-                        cell_test->is_locally_owned()) {
+                  //if (cell_trial != dof_handler.end()) {
+                    //if (cell_trial->is_locally_owned() &&
+                     //   cell_test->is_locally_owned()) {
 
                       cell_trial->get_dof_indices(local_dof_indices_trial);
 
@@ -643,15 +663,15 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
                                   local_dof_indices_omega[j]);
                         }
                       }
-                    }
-                  }
-                  //       else
-                  // std::cout<<"düdüm"<<std::endl;
+                   // } else
+                  // std::cout<<"düdüm1"<<std::endl;
+                //  }else
+                  // std::cout<<"düdüm2"<<std::endl;
                 }
               }
             }
-          //   else
-          // std::cout<<"düdüm"<<std::endl;
+            // else
+          // std::cout<<"düdüm3"<<std::endl;
         }
         // std::cout<<std::endl;
       }
@@ -661,14 +681,19 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
 
 #if USE_MPI
 
+
+// IndexSet local_dofs = locally_owned_dofs.add_range()
   SparsityTools::distribute_sparsity_pattern(
       dsp, dof_handler.locally_owned_dofs(), MPI_COMM_WORLD,
       locally_relevant_dofs);
 
   system_matrix.reinit(locally_owned_dofs, locally_owned_dofs, dsp,
                        MPI_COMM_WORLD);
+                       //die extra dof müssen üerall inzudaddiert werden bzw. wenn man manuell die Cellen auf die prozessoren mact, dann nur bei dem spezillen Prozessor
 
-  solution.reinit(locally_relevant_dofs, MPI_COMM_WORLD);
+  solution.reinit(locally_relevant_dofs, MPI_COMM_WORLD);//locally relevant dof sind alle dof? Dof andler kennt auc bei parallel distributed anzal aller dof
+  //ier screiben: locally_relevant_dofs + extraDof
+  std::cout<<"locally_relevant_dofs "<<locally_relevant_dofs.size()<<std::endl;
   system_rhs.reinit(locally_owned_dofs, MPI_COMM_WORLD);
 
 #else
@@ -1034,7 +1059,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 #endif
 
 #if USE_MPI
-      if (cell_test != dof_handler.end())
+      //if (cell_test != dof_handler.end())
         if (cell_test->is_locally_owned())
 #endif
         {
@@ -1215,8 +1240,8 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 #endif
 
 #if USE_MPI
-          if (cell_test != dof_handler.end())
-            if (cell_test->is_locally_owned())
+         // if (cell_test != dof_handler.end())
+            //if (cell_test->is_locally_owned())
 #endif
             {
               // std::cout<< "cell_test " << cell_test<< " "
@@ -1392,9 +1417,10 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 #if TEST
                   auto cell_trial = cellpair_trial.first;
 #endif
-                  if (cell_trial != dof_handler.end())
-                    if (cell_trial->is_locally_owned() &&
-                        cell_test->is_locally_owned()) {
+                //  if (cell_trial != dof_handler.end())
+                   // if (cell_trial->is_locally_owned() &&
+                     //  cell_test->is_locally_owned()) 
+                     {
                       //  std::cout<< "cell_trial " << cell_trial<< " "
                       //  <<cell_trial->center() << std::endl;
                       cell_trial->get_dof_indices(local_dof_indices_trial);
@@ -2220,7 +2246,7 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   make_dofs();
   assemble_system();
   solve();
-  output_results();
+  //output_results();
   std::array<double, 4> results_array  = compute_errors();
   return results_array;
 }
@@ -2263,10 +2289,10 @@ int main(int argc, char *argv[]) {
     return 0;
   */
   std::cout << "dimension_Omega " << dimension_Omega << std::endl;
-  const unsigned int n_r = 2;
-  const unsigned int n_LA = 2;
-  double radii[n_r] = {0.1, 0.01};
-  bool lumpedAverages[n_LA] = {true, false};
+  const unsigned int n_r = 1;
+  const unsigned int n_LA = 1;
+  double radii[n_r] = {0.01};
+  bool lumpedAverages[n_LA] = { true};
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
   for (unsigned int rad = 0; rad < n_r; rad++) {
@@ -2280,10 +2306,10 @@ int main(int argc, char *argv[]) {
       Parameters parameters;
       parameters.radius = radii[rad];
       parameters.lumpedAverage = lumpedAverages[LA];
-      const unsigned int p_degree[3] = {0,1,2};
+      const unsigned int p_degree[1] = {1};
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
-      const unsigned int refinement[4] = {1,2,3,4};
+      const unsigned int refinement[2] = {1,2};
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
 
