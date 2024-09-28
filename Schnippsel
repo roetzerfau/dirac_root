@@ -1,0 +1,13 @@
+  IndexSet dofs_omega(dof_handler_omega.n_dofs());
+  dofs_omega.add_range(0, dof_handler_omega.n_dofs());
+
+  IndexSet local_dofs(dof_handler_Omega.n_dofs() + dof_handler_omega.n_dofs());
+  local_dofs.add_indices(locally_owned_dofs);
+  if(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+  local_dofs.add_indices(dofs_omega, dof_handler_Omega.n_dofs());
+
+  IndexSet relevant_dofs(locally_relevant_dofs.size() +  dof_handler_omega.n_dofs());
+  relevant_dofs.add_indices(locally_relevant_dofs);
+  if(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+  relevant_dofs.add_indices(dofs_omega, dof_handler_Omega.n_dofs());
+ 
