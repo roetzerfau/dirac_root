@@ -78,7 +78,7 @@ public:
 
 template <int dim> class TrueSolution : public Function<dim> {
 public:
-  TrueSolution() : Function<dim>(dim + 3) {}
+  TrueSolution() : Function<dim>(dim + 1) {}
 
   virtual void vector_value(const Point<dim> &p,
                             Vector<double> &values) const override;
@@ -93,7 +93,7 @@ public:
 template <int dim> class ProductFunction : public Function<dim> {
 public:
   ProductFunction (const Function<dim> &f1,
-                    const Function<dim> &f2) : Function<dim>(dim + 3), function1(f1), function2(f2) {}
+                    const Function<dim> &f2) : Function<dim>(dim + 1), function1(f1), function2(f2) {}
 
   virtual void vector_value(const Point<dim> &p,
                             Vector<double> &values) const override;
@@ -104,7 +104,7 @@ public:
 };
 template <int dim> class DistanceWeight : public Function<dim> {
 public:
-  DistanceWeight(double _alpha, double R = 0) : Function<dim>(dim + 3), alpha(_alpha), radius(R) {}
+  DistanceWeight(double _alpha, double R = 0) : Function<dim>(dim + 1), alpha(_alpha), radius(R) {}
 
   virtual void vector_value(const Point<dim> &p,
                             Vector<double> &values) const override;
@@ -180,10 +180,10 @@ double DirichletBoundaryValues<dim>::value(const Point<dim> &p,
   }
   case 2:
   case 3: {
-     Vector<double> values(dim + 3);
+     Vector<double> values(dim + 1);
       TrueSolution<dim> solution;
       solution.vector_value(p, values);
-      return values[dim +1];
+      return values[dim];
       //return 0;
     break;
   }
@@ -292,8 +292,8 @@ void KInverse<dim>::value_list(const std::vector<Point<dim>> &points,
 template <int dim>
 void TrueSolution<dim>::vector_value(const Point<dim> &p,
                                      Vector<double> &values) const {
-  Assert(values.size() == dim + 3,
-         ExcDimensionMismatch(values.size(), dim + 3));
+  Assert(values.size() == dim + 1,
+         ExcDimensionMismatch(values.size(), dim + 1));
   double x, y, z;
   x = p[0];
   y = p[1];
@@ -315,19 +315,14 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     if (dim == 2) {
       values(0) = w * std::sin(w * x) * std::cos(w * y); // Q
       values(1) = w * std::cos(w * x) * std::sin(w * y);
-      values(2) = w * std::sin(w * x) * std::cos(w * y_l); // q
-      values(3) = std::cos(w * x) * std::cos(w * y);       // U
-      values(4) = std::cos(w * x) * std::cos(w * y_l);     // u
+      values(2) = std::cos(w * x) * std::cos(w * y);       // U
     }
     if (dim == 3) 
     {
       values(0) = w * std::sin(w * x) * std::cos(w * y) * std::cos(w * z); // Q
       values(1) = w * std::cos(w * x) * std::sin(w * y) * std::cos(w * z);
       values(2) = w * std::cos(w * x) * std::cos(w * y) * std::sin(w * z);
-      values(3) =
-          w * std::sin(w * x) * std::cos(w * y_l) * std::cos(w * z_l);     // q
-      values(4) = std::cos(w * x) * std::cos(w * y) * std::cos(w * z);     // U
-      values(5) = std::cos(w * x) * std::cos(w * y_l) * std::cos(w * z_l); // u
+      values(3) = std::cos(w * x) * std::cos(w * y) * std::cos(w * z);     // U
     }
     break;
   }
@@ -338,12 +333,10 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
       values(0) =  0; //Q 
        values(1) =  (y/std::pow(r,2)); // Q
       values(2) =  (z/std::pow(r,2)); //Q
-      values(4) =  -std::log(r); // U  
+      values(3) =  -std::log(r); // U  
     } else {
-      values(4) = 1; // U
+      values(3) = 1; // U
     }
-    values(5) = 1 + x ;  // u
-    values(3) = -(1 + x + 0.5 * std::pow(x,2)); //q
      }
      if(dim == 2)
      {
@@ -354,12 +347,10 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     {
     values(0) =  (x/std::pow(r,2)); //Q 
     values(1) = (y/std::pow(r,2)); // Q
-    values(3) = -std::log(r); // U  
-    values(2) = -(1 + x + 0.5 * std::pow(x,2)); //q
-    values(4) = 1 + x ;  // u
+    values(2) = -std::log(r); // U  
     }
     else
-      values(3) = 1;
+      values(2) = 1; //U
      }
          
     break;
@@ -371,12 +362,10 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
       values(0) = 1/(2*numbers::PI) * std::log(r); //Q 
        values(1) = (1+x)/(2*numbers::PI) * (y/std::pow(r,2)); // Q
       values(2) = (1+x)/(2*numbers::PI) * (z/std::pow(r,2)); //Q
-      values(4) = -(1+x) / (2 * numbers::PI) * std::log(r); // U  
+      values(3) = -(1+x) / (2 * numbers::PI) * std::log(r); // U  
     } else {
-      values(4) = 1 + x ; // U
+      values(3) = 1 + x ; // U
     }
-    values(5) =  1 + x ;  // u
-    values(3) = -(1 + x + 0.5 * std::pow(x,2)); //q
      }
      if(dim == 2)
      {
@@ -387,12 +376,10 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     {
     values(0) =1/(2*numbers::PI) * (x/std::pow(r,2)); //Q 
     values(1) = 1/(2*numbers::PI) * (y/std::pow(r,2)); // Q
-    values(3) = -1 / (2 * numbers::PI) * std::log(r); // U  
-    values(2) = -(1 + x + 0.5 * std::pow(x,2)); //q
-    values(4) = 1 + x ;  // u
+    values(2) = -1 / (2 * numbers::PI) * std::log(r); // U  
     }
     else
-      values(3) = 1 ;
+      values(2) = 1 ;
 
      }
          
@@ -445,8 +432,8 @@ template <int dim>
 void ProductFunction<dim>::vector_value(const Point<dim> &p,
                                      Vector<double> &values) const 
 {
-    Assert(values.size() == dim + 3,
-         ExcDimensionMismatch(values.size(), dim + 3));
+    Assert(values.size() == dim + 1,
+         ExcDimensionMismatch(values.size(), dim + 1));
 
     const unsigned int n_components = function1.n_components;
    
@@ -470,9 +457,9 @@ void ProductFunction<dim>::vector_value(const Point<dim> &p,
 template <int dim>
 void DistanceWeight<dim>::vector_value(const Point<dim> &p,
                                      Vector<double> &values) const {
-  Assert(values.size() == dim + 3,
-         ExcDimensionMismatch(values.size(), dim + 3));
-  unsigned int n_components = dim + 3;
+  Assert(values.size() == dim +1,
+         ExcDimensionMismatch(values.size(), dim + 1));
+  unsigned int n_components = values.size();
   double x;//, y, z;
   x = p[0];
  // y = p[1];
