@@ -51,6 +51,7 @@
 #include <deal.II/lac/trilinos_solver.h>
 #include <deal.II/lac/trilinos_sparse_matrix.h>
 #include <deal.II/lac/trilinos_vector.h>
+#include <deal.II/lac/trilinos_block_sparse_matrix.h>
 //#include <deal.II/non_matching/fe_values.h>
 
 #include <deal.II/base/function.h>
@@ -76,7 +77,7 @@
 #include <deal.II/grid/tria.h>
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/vector_tools.h>
-//#include <deal.II/fe/fe_coupling_values.h>
+//#include <deal.II/fe_Omega/fe_coupling_values.h>
 
 #include <deal.II/base/tensor_function.h>
 #include <deal.II/base/timer.h>
@@ -94,14 +95,14 @@
 
 /*ic abe zwei mölickeiten:
 1. dofs auf stric zu den korrekten 3D cells zuorden in matrix und dann mit partition_custom_signal in trianulation, die kopplunsterme einem prozessor zuordnen (dann ist das Problem mit zu roßen radius verindert)
-2. add extra dof die nicts mit trianulation zu tun aben (klein omea dofs). die können dann von jedem prozessor zueriffen werden */
+2. add extra dof die nicts mit trianulation zu tun aben (klein omea dofs). die können dann von jedem prozessor zueriffen werden (falsch nur von dem ersten) */
 
 // 2. variante ist warsceinlic besser
 //einfac die benötiten dofs an matrix iten dran. Dofandler witout zustzice FE , sparsity und so dementsprecen macjen. solution(dof.nof_dof + extraDof)
 #include "Functions.cc"
 
 using namespace dealii;
-#define USE_MPI 1
+#define USE_MPI_ASSEMBLE 0
 #define USE_LDG 0
 
 constexpr unsigned int dimension_Omega{3};
@@ -109,7 +110,7 @@ const FEValuesExtractors::Vector VectorField_omega(0);
 const FEValuesExtractors::Scalar Potential_omega(1);
 
 const FEValuesExtractors::Vector VectorField(0);
-const FEValuesExtractors::Scalar Potential(dimension_Omega + 1);
+const FEValuesExtractors::Scalar Potential(dimension_Omega);
 
 const unsigned int dimension_gap = 0;
 const double extent = 1;
@@ -175,7 +176,7 @@ private:
 
   template <int _dim>
   void dof_omega_to_Omega(
-      const DoFHandler<_dim> &dof_handler,
+      const DoFHandler<_dim> &dof_handler_Omega,
       std::vector<types::global_dof_index> &local_dof_indices_omega);
 
   void solve();
@@ -196,33 +197,38 @@ private:
   double g;
   bool lumpedAverage;
 
-#if USE_MPI
- parallel::distributed::Triangulation<dim> triangulation;
+#if USE_MPI_ASSEMBLE
+ //parallel::distributed::Triangulation<dim> triangulation;
  //parallel::shared::Triangulation<dim> triangulation;
-
-  TrilinosWrappers::SparseMatrix system_matrix;
-  TrilinosWrappers::MPI::Vector solution;
-  TrilinosWrappers::MPI::Vector system_rhs;
-
 #else
   Triangulation<dim> triangulation;
-
-  SparseMatrix<double> system_matrix;
-  Vector<double> solution;
-  Vector<double> system_rhs;
-
 #endif
-  FESystem<dim> fe;
-  DoFHandler<dim> dof_handler;
+  TrilinosWrappers::SparseMatrix system_matrix_mpi;
+  TrilinosWrappers::MPI::Vector solution_mpi;
+  TrilinosWrappers::MPI::Vector system_rhs_mpi;
+
+
+
+  TrilinosWrappers::BlockSparsityPattern sparsity_pattern_mpi;
+  BlockSparsityPattern block_sparsity_pattern;
+  BlockSparseMatrix<double> system_matrix;
+  BlockVector<double> solution;
+  BlockVector<double> system_rhs;
+
+  // SparsityPattern sparsity_pattern;
+
+  FESystem<dim> fe_Omega;
+  DoFHandler<dim> dof_handler_Omega;
 
   Triangulation<dim_omega> triangulation_omega;
   FESystem<dim_omega> fe_omega;
   DoFHandler<dim_omega> dof_handler_omega;
   Vector<double> solution_omega;
+  Vector<double> solution_Omega;
 
   AffineConstraints<double> constraints;
 
-  SparsityPattern sparsity_pattern;
+
 
   ConditionalOStream pcout;
   TimerOutput computing_timer;
@@ -246,7 +252,7 @@ private:
   std::vector<Point<dim_omega>> unit_support_points_omega;
   unsigned int start_VectorField_omega;
   unsigned int start_Potential_omega;
-  unsigned int start_Potential;
+  unsigned int start_Potential_Omega;
 
   const UpdateFlags update_flags = update_values | update_gradients |
                                    update_quadrature_points | update_JxW_values;
@@ -262,16 +268,15 @@ LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
     const unsigned int degree, const unsigned int n_refine,
     Parameters parameters)
     : degree(degree), n_refine(n_refine),
-#if USE_MPI
+/*#if USE_MPI_ASSEMBLE
       triangulation(MPI_COMM_WORLD),
-#endif
-      fe(FESystem<dim>(FE_DGP<dim>(degree), dim), FE_DGP<dim>(degree),
-         FE_DGP<dim>(degree), FE_DGP<dim>(degree)),
-      dof_handler(triangulation),
+#endif*/
+      fe_Omega(FESystem<dim>(FE_DGP<dim>(degree), dim), FE_DGP<dim>(degree)),
+      dof_handler_Omega(triangulation),
       fe_omega(FESystem<dim_omega>(FE_DGP<dim_omega>(degree), dim_omega),
                FE_DGP<dim_omega>(degree)),
       dof_handler_omega(triangulation_omega),
-#if USE_MPI
+#if USE_MPI_ASSEMBLE
       pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0),
       computing_timer(MPI_COMM_WORLD, pcout, TimerOutput::summary,
                       TimerOutput::wall_times),
@@ -291,7 +296,7 @@ LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
 
 template <int dim, int dim_omega>
 LDGPoissonProblem<dim, dim_omega>::~LDGPoissonProblem() {
-  dof_handler.clear();
+  dof_handler_Omega.clear();
   dof_handler_omega.clear();
 }
 
@@ -337,8 +342,8 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
   triangulation.refine_global(n_refine);
   double max_diameter = 0.0;
  typename DoFHandler<dim>::active_cell_iterator
-        cell = dof_handler.begin_active(),
-        endc = dof_handler.end();
+        cell = dof_handler_Omega.begin_active(),
+        endc = dof_handler_Omega.end();
   for (; cell != endc; ++cell) {
     double cell_diameter = cell->diameter(); // Get the diameter of the cell^
     
@@ -385,123 +390,105 @@ template <int dim, int dim_omega>
 void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
   TimerOutput::Scope t(computing_timer, "setup");
 
-  dof_handler.distribute_dofs(fe);
-  const unsigned int dofs_per_cell = fe.dofs_per_cell;
+  dof_handler_Omega.distribute_dofs(fe_Omega);
+  const unsigned int dofs_per_cell = fe_Omega.dofs_per_cell;
   pcout << "dofs_per_cell " << dofs_per_cell << std::endl;
-  DoFRenumbering::component_wise(dof_handler);
+  DoFRenumbering::component_wise(dof_handler_Omega);
 
   dof_handler_omega.distribute_dofs(fe_omega);
   const unsigned int dofs_per_cell_omega = fe_omega.dofs_per_cell;
   pcout << "dofs_per_cell_omega " << dofs_per_cell_omega << std::endl;
   DoFRenumbering::component_wise(dof_handler_omega);
 
-#if USE_MPI
-  IndexSet locally_owned_dofs = dof_handler.locally_owned_dofs();
+#if USE_MPI_ASSEMBLE
+  IndexSet locally_owned_dofs = dof_handler_Omega.locally_owned_dofs();
   IndexSet locally_relevant_dofs;
-  DoFTools::extract_locally_relevant_dofs(dof_handler, locally_relevant_dofs);
+  DoFTools::extract_locally_relevant_dofs(dof_handler_Omega, locally_relevant_dofs);
 #endif
-  const std::vector<types::global_dof_index> dofs_per_component =
-      DoFTools::count_dofs_per_fe_component(dof_handler);
 
-  unsigned int n_dofs_Potential = dofs_per_component[dim + dim_omega];
-  const unsigned int n_vector_field =
-      dim * dofs_per_component[0] + dim_omega * dofs_per_component[dim];
-  const unsigned int n_potential = dofs_per_component[dim + dim_omega] +
-                                   dofs_per_component[dim + dim_omega + 1];
+  const std::vector<types::global_dof_index> dofs_per_component_Omega =
+      DoFTools::count_dofs_per_fe_component(dof_handler_Omega);
 
-  for (unsigned int i = 0; i < dofs_per_component.size(); i++)
-    pcout << "dofs_per_component " << dofs_per_component[i] << std::endl;
+  const unsigned int n_vector_field_Omega = dim * dofs_per_component_Omega[0];
+  const unsigned int n_potential_Omega = dofs_per_component_Omega[dofs_per_component_Omega.size()-1];
 
-  pcout << "Number of global active cells Omega: "
+  for (unsigned int i = 0; i < dofs_per_component_Omega.size(); i++)
+    pcout << "dofs_per_component_Omega " << dofs_per_component_Omega[i] << std::endl;
+
+  pcout <<  "Omega ----------------------------"<<std::endl
+        <<"Number of global active cells: "
         << triangulation.n_global_active_cells() << std::endl
-        << "Number of degrees of freedom: " << dof_handler.n_dofs() << " ("
-        << n_vector_field << " + " << n_potential << ")" << std::endl;
-  pcout << "Number of active cells omega: "
-        << triangulation_omega.n_global_active_cells() << std::endl;
+        << "Number of degrees of freedom: " << dof_handler_Omega.n_dofs() << " ("
+        << n_vector_field_Omega << " + " << n_potential_Omega << ")" << std::endl;
 
-  start_VectorField_omega = dim * dofs_per_component[0];
-  start_Potential_omega = n_vector_field + dofs_per_component[dim + dim_omega];
-  start_Potential = n_vector_field;
+
+const std::vector<types::global_dof_index> dofs_per_component_omega =
+      DoFTools::count_dofs_per_fe_component(dof_handler_omega);
+
+  const unsigned int n_vector_field_omega = dim_omega * dofs_per_component_omega[0];
+  const unsigned int n_potential_omega = dofs_per_component_omega[dofs_per_component_omega.size()-1];
+
+   pcout <<  "omega ----------------------------"<<std::endl
+       << "Number of global active cells: "
+        << triangulation_omega.n_global_active_cells() << std::endl
+        << "Number of degrees of freedom: " << dof_handler_omega.n_dofs() << " ("
+        << n_vector_field_omega << " + " << n_potential_omega << ")" << std::endl;
+
+
+
+  start_VectorField_omega = dof_handler_Omega.n_dofs();
+  start_Potential_omega =  dof_handler_Omega.n_dofs() + dofs_per_component_omega[0];
+  start_Potential_Omega = n_vector_field_Omega;
   pcout << " start_VectorField_omega " << start_VectorField_omega
-        << " start_Potential " << start_Potential << " start_Potential_omega "
+        << " start_Potential_Omega " << start_Potential_Omega << " start_Potential_omega "
         << start_Potential_omega << std::endl;
 
-  const unsigned int n_global_dofs = 10; 
-  IndexSet global_dofs_set(n_global_dofs);
-  global_dofs_set.add_range(0, n_global_dofs);
-  unsigned int n_dofs_general = dof_handler.n_dofs() + n_global_dofs;
+
   
   constraints.clear();
   constraints.close();
-
-  DynamicSparsityPattern dsp(dof_handler.n_dofs());
-  DoFTools::make_flux_sparsity_pattern(dof_handler, dsp);
-
-
-
-  BlockDynamicSparsityPattern dsp_block(2, 2);
-
-  DynamicSparsityPattern dsp_mesh(dof_handler.n_dofs());
-  DoFTools::make_flux_sparsity_pattern(dof_handler, dsp_mesh);
-
+  unsigned int n_dofs_total = dof_handler_Omega.n_dofs() + dof_handler_omega.n_dofs();
+  BlockDynamicSparsityPattern dsp_block(2,2);
+  dsp_block.block(0, 0).reinit(dof_handler_Omega.n_dofs(), dof_handler_Omega.n_dofs());
     // Block 1,1: Sparsity for the extra DoFs (global DoFs)
   dsp_block.block(1, 1).reinit(dof_handler_omega.n_dofs(), dof_handler_omega.n_dofs());
 
   // Block 0,1 and 1,0: Sparsity for connections between mesh-based and extra DoFs
-  dsp_block.block(0, 1).reinit(dof_handler.n_dofs(), dof_handler_omega.n_dofs());  // Block for coupling DoFs
-  dsp_block.block(1, 0).reinit(dof_handler_omega.n_dofs(), dof_handler.n_dofs());
+  dsp_block.block(0, 1).reinit(dof_handler_Omega.n_dofs(), dof_handler_omega.n_dofs());  // Block for coupling DoFs
+  dsp_block.block(1, 0).reinit(dof_handler_omega.n_dofs(), dof_handler_Omega.n_dofs());
+
+  //dsp_block.collect_sizes();
+
+  DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, dsp_block.block(0,0) );
+  DoFTools::make_flux_sparsity_pattern(dof_handler_omega, dsp_block.block(1,1) );
+  // for(unsigned int i = 0; i < dof_handler_Omega.n_dofs(); i++)
+  // for(unsigned int j = 0; j < dof_handler_omega.n_dofs(); j++)
+  // {
+  //   dsp_block.block(0, 1).add(i,j);
+  //   dsp_block.block(1, 0).add(j,i);
+  // }
 
 
+  dsp_block.collect_sizes();
 
-  const std::vector<types::global_dof_index> dofs_per_component_omega =
-      DoFTools::count_dofs_per_fe_component(dof_handler_omega);
-  unsigned int n_dofs_VectorField_omega = dofs_per_component_omega[0];
-  unsigned int n_dofs_Potential_omega = dofs_per_component_omega[1];
+std::vector<unsigned int> dofs_per_block;
+dofs_per_block.push_back(dof_handler_Omega.n_dofs());
+dofs_per_block.push_back(dof_handler_omega.n_dofs());
 
- pcout << "start - extra dof coupling" << std::endl;
-  // DoFs for 1D Inclusion. DoFs are fully connected, so spatial arrangment does
-  // not matter
-  for (unsigned int i = start_VectorField_omega;
-       i < start_VectorField_omega + n_dofs_VectorField_omega; i++) {
-    for (unsigned int j = start_VectorField_omega;
-         j < start_VectorField_omega + n_dofs_VectorField_omega; j++) {
-      dsp.add(i, j);
-    }
-  }
 
-  for (unsigned int i = start_Potential_omega;
-       i < start_Potential_omega + n_dofs_Potential_omega; i++) {
-    for (unsigned int j = start_Potential_omega;
-         j < start_Potential_omega + n_dofs_Potential_omega; j++) {
-      dsp.add(i, j);
-    }
-  }
+  pcout<<"Sparsity "  <<dsp_block.n_rows()<<" "<<dsp_block.n_cols()<<std::endl;
 
-  for (unsigned int i = start_Potential_omega;
-       i < start_Potential_omega + n_dofs_Potential_omega; i++) {
-    for (unsigned int j = start_VectorField_omega;
-         j < start_VectorField_omega + n_dofs_VectorField_omega; j++) {
-      dsp.add(i, j);
-    }
-  }
-  for (unsigned int i = start_VectorField_omega;
-       i < start_VectorField_omega + n_dofs_VectorField_omega; i++) {
-    for (unsigned int j = start_Potential_omega;
-         j < start_Potential_omega + n_dofs_Potential_omega; j++) {
-      dsp.add(i, j);
-    }
-  }
 
 #if COUPLED
   {
 
     // coupling
 
-    QGauss<dim> quadrature_formula(fe.degree + 1);
-    FEValues<dim> fe_values(fe, quadrature_formula, update_flags);
+    QGauss<dim> quadrature_formula(fe_Omega.degree + 1);
+    FEValues<dim> fe_values(fe_Omega, quadrature_formula, update_flags);
     const Mapping<dim> &mapping = fe_values.get_mapping();
 
-    QGauss<dim_omega> quadrature_formula_omega(fe.degree + 1);
+    QGauss<dim_omega> quadrature_formula_omega(fe_Omega.degree + 1);
     FEValues<dim_omega> fe_values_omega(fe_omega, quadrature_formula_omega,
                                         update_flags);
 
@@ -565,14 +552,14 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
 
 #if TEST
         auto cell_test_array = GridTools::find_all_active_cells_around_point(
-            mapping, dof_handler, quadrature_point_test);
+            mapping, dof_handler_Omega, quadrature_point_test);
         // std::cout << "cell_test_array " << cell_test_array.size() <<
         // std::endl;
 
         for (auto cellpair : cell_test_array)
 #else
         auto cell_test = GridTools::find_active_cell_around_point(
-            dof_handler, quadrature_point_test);
+            dof_handler_Omega, quadrature_point_test);
 #endif
 
         {
@@ -580,8 +567,8 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
           auto cell_test = cellpair.first;
 #endif
 
-#if USE_MPI
-         // if (cell_test != dof_handler.end())
+#if USE_MPI_ASSEMBLE
+         if (cell_test != dof_handler_Omega.end())
             if (cell_test->is_locally_owned())
 #endif
             {
@@ -596,7 +583,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
               const Quadrature<dim> my_quadrature_formula_test(
                   my_quadrature_points_test, my_quadrature_weights);
               FEValues<dim> fe_values_coupling_test(
-                  fe, my_quadrature_formula_test, update_flags_coupling);
+                  fe_Omega, my_quadrature_formula_test, update_flags_coupling);
               fe_values_coupling_test.reinit(cell_test);
 
               // std::cout << "coupled " << std::endl;
@@ -608,23 +595,23 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
 #if TEST
                 auto cell_trial_array =
                     GridTools::find_all_active_cells_around_point(
-                        mapping, dof_handler, quadrature_point_trial);
+                        mapping, dof_handler_Omega, quadrature_point_trial);
                 //  std::cout << "cell_trial_array " << cell_trial_array.size()
                 //  << std::endl;
 
                 for (auto cellpair_trial : cell_trial_array)
 #else
               auto cell_trial = GridTools::find_active_cell_around_point(
-                  dof_handler, quadrature_point_trial);
+                  dof_handler_Omega, quadrature_point_trial);
 #endif
 
                 {
 #if TEST
                   auto cell_trial = cellpair_trial.first;
 #endif
-                  //if (cell_trial != dof_handler.end()) {
-                    //if (cell_trial->is_locally_owned() &&
-                     //   cell_test->is_locally_owned()) {
+                  if (cell_trial != dof_handler_Omega.end()) {
+                    if (cell_trial->is_locally_owned() &&
+                        cell_test->is_locally_owned()) {
 
                       cell_trial->get_dof_indices(local_dof_indices_trial);
 
@@ -632,7 +619,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
                            i < local_dof_indices_test.size(); i++) {
                         for (unsigned int j = 0;
                              j < local_dof_indices_trial.size(); j++) {
-                          dsp.add(local_dof_indices_test[i],
+                          dsp_block.add(local_dof_indices_test[i],
                                   local_dof_indices_trial[j]);
                         }
                       }
@@ -641,7 +628,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
                            i < local_dof_indices_omega.size(); i++) {
                         for (unsigned int j = 0;
                              j < local_dof_indices_trial.size(); j++) {
-                          dsp.add(local_dof_indices_omega[i],
+                          dsp_block.add(local_dof_indices_omega[i],
                                   local_dof_indices_trial[j]);
                         }
                       }
@@ -650,7 +637,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
                            i < local_dof_indices_test.size(); i++) {
                         for (unsigned int j = 0;
                              j < local_dof_indices_omega.size(); j++) {
-                          dsp.add(local_dof_indices_test[i],
+                          dsp_block.add(local_dof_indices_test[i],
                                   local_dof_indices_omega[j]);
                         }
                       }
@@ -659,13 +646,15 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
                            i < local_dof_indices_omega.size(); i++) {
                         for (unsigned int j = 0;
                              j < local_dof_indices_omega.size(); j++) {
-                          dsp.add(local_dof_indices_omega[i],
+                          dsp_block.add(local_dof_indices_omega[i],
                                   local_dof_indices_omega[j]);
                         }
                       }
-                   // } else
+                   } 
+                   //else
                   // std::cout<<"düdüm1"<<std::endl;
-                //  }else
+                  }
+                //else
                   // std::cout<<"düdüm2"<<std::endl;
                 }
               }
@@ -679,32 +668,51 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
   }
 #endif
 
-#if USE_MPI
 
 
-// IndexSet local_dofs = locally_owned_dofs.add_range()
-  SparsityTools::distribute_sparsity_pattern(
-      dsp, dof_handler.locally_owned_dofs(), MPI_COMM_WORLD,
-      locally_relevant_dofs);
 
-  system_matrix.reinit(locally_owned_dofs, locally_owned_dofs, dsp,
-                       MPI_COMM_WORLD);
-                       //die extra dof müssen üerall inzudaddiert werden bzw. wenn man manuell die Cellen auf die prozessoren mact, dann nur bei dem spezillen Prozessor
 
-  solution.reinit(locally_relevant_dofs, MPI_COMM_WORLD);//locally relevant dof sind alle dof? Dof andler kennt auc bei parallel distributed anzal aller dof
-  //ier screiben: locally_relevant_dofs + extraDof
-  std::cout<<"locally_relevant_dofs "<<locally_relevant_dofs.size()<<std::endl;
-  system_rhs.reinit(locally_owned_dofs, MPI_COMM_WORLD);
 
-#else
 
-  sparsity_pattern.copy_from(dsp);
-  system_matrix.reinit(sparsity_pattern);
 
-  solution.reinit(dof_handler.n_dofs());
-  system_rhs.reinit(dof_handler.n_dofs());
 
-#endif
+
+
+  IndexSet dofs_omega(dof_handler_omega.n_dofs());
+  dofs_omega.add_range(0, dof_handler_omega.n_dofs());
+
+
+
+   /* SparsityTools::distribute_sparsity_pattern(
+      dsp_block, local_dofs, MPI_COMM_WORLD,
+       relevant_dofs);*/
+
+
+
+
+
+
+  /*
+        Table<2, DoFTools::Coupling> coupling(dim + 1, dim + 1);
+        for (unsigned int c = 0; c < dim + 1; ++c)
+          for (unsigned int d = 0; d < dim + 1; ++d)
+            if (!((c == dim) && (d == dim)))
+              coupling[c][d] = DoFTools::always;
+            else
+              coupling[c][d] = DoFTools::none;
+  
+        DoFTools::make_sparsity_pattern(
+          dof_handler, coupling, dsp, constraints, false);*/
+  
+  block_sparsity_pattern.copy_from(dsp_block);                                         
+
+  std::ofstream out("sparsity-pattern-2.svg");
+   block_sparsity_pattern.print_svg(out);
+
+  system_matrix.reinit(block_sparsity_pattern);
+  solution.reinit(dofs_per_block);
+  system_rhs.reinit(dofs_per_block);
+
 }
 
 template <int dim, int dim_omega>
@@ -712,22 +720,22 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
   TimerOutput::Scope t(computing_timer, "assembly");
   pcout << "assemble_system" << std::endl;
 
-  QGauss<dim> quadrature_formula(fe.degree + 1);
-  QGauss<dim - 1> face_quadrature_formula(fe.degree + 1);
+  QGauss<dim> quadrature_formula(fe_Omega.degree + 1);
+  QGauss<dim - 1> face_quadrature_formula(fe_Omega.degree + 1);
 
-  const unsigned int dofs_per_cell = fe.dofs_per_cell;
+  const unsigned int dofs_per_cell = fe_Omega.dofs_per_cell;
   std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
   std::vector<types::global_dof_index> local_neighbor_dof_indices(
       dofs_per_cell);
 
-  const IndexSet &locally_owned_dofs = dof_handler.locally_owned_dofs();
+  const IndexSet &locally_owned_dofs = dof_handler_Omega.locally_owned_dofs();
 
-  FEValues<dim> fe_values(fe, quadrature_formula, update_flags);
+  FEValues<dim> fe_values(fe_Omega, quadrature_formula, update_flags);
 
-  FEFaceValues<dim> fe_face_values(fe, face_quadrature_formula,
+  FEFaceValues<dim> fe_face_values(fe_Omega, face_quadrature_formula,
                                    face_update_flags);
 
-  FEFaceValues<dim> fe_neighbor_face_values(fe, face_quadrature_formula,
+  FEFaceValues<dim> fe_neighbor_face_values(fe_Omega, face_quadrature_formula,
                                             face_update_flags);
 
   FullMatrix<double> local_matrix(dofs_per_cell, dofs_per_cell);
@@ -761,16 +769,16 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
     //         exterior of this cell's face and the solution function
     //         from the exterior of this cell.
 
-    typename DoFHandler<dim>::active_cell_iterator cell = dof_handler
+    typename DoFHandler<dim>::active_cell_iterator cell = dof_handler_Omega
                                                               .begin_active(),
-                                                   endc = dof_handler.end();
+                                                   endc = dof_handler_Omega.end();
     // unsigned int cell_number = 0;
     for (; cell != endc; ++cell) {
       // std::cout<<"cell_number "<<cell_number<<std::endl;
       // cell_number++;
       // unsigned int cell_id = cell->index();
       // std::cout<<cell_id<<std::endl;
-#if USE_MPI
+#if USE_MPI_ASSEMBLE
       if (cell->is_locally_owned())
 #endif
       {
@@ -784,6 +792,9 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                             Potential);
 
         cell->get_dof_indices(local_dof_indices);
+        // for(unsigned int dof : local_dof_indices)
+        // std::cout<<dof<<" ";
+        // std::cout<<std::endl;
 
         for (unsigned int face_no = 0;
              face_no < GeometryInfo<dim>::faces_per_cell; face_no++) {
@@ -850,14 +861,14 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
   }
 #endif
   // std::cout << "loop z uend" << std::endl;
-#if USE_MPI
+#if USE_MPI_ASSEMBLE
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
 #endif
 
   // omega
-  QGauss<dim_omega> quadrature_formula_omega(fe.degree + 1);
-  QGauss<dim_omega - 1> face_quadrature_formula_omega(fe.degree + 1);
+  QGauss<dim_omega> quadrature_formula_omega(fe_Omega.degree + 1);
+  QGauss<dim_omega - 1> face_quadrature_formula_omega(fe_Omega.degree + 1);
 
   FEValues<dim_omega> fe_values_omega(fe_omega, quadrature_formula_omega,
                                       update_flags);
@@ -899,7 +910,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
       cell_omega = dof_handler_omega.begin_active(),
       endc_omega = dof_handler_omega.end();
 
-#if USE_MPI
+#if USE_MPI_ASSEMBLE
 // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 #endif
   {
@@ -1023,13 +1034,13 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
       //#endif
     }
   }
-#if USE_MPI
+#if USE_MPI_ASSEMBLE
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
 #endif
   // std::cout << "ende omega loop" << std::endl;
-
-#if USE_MPI
+#if 1
+#if USE_MPI_ASSEMBLE
 // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 #endif
   if (dim == 2 && constructed_solution == 3) {
@@ -1041,7 +1052,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
     unsigned int n_te;
 #if TEST
     auto cell_test_array = GridTools::find_all_active_cells_around_point(
-        mapping, dof_handler, quadrature_point_test);
+        mapping, dof_handler_Omega, quadrature_point_test);
     n_te = cell_test_array.size();
     //   n_te = 1;
     pcout << "cell_test_array " << cell_test_array.size() << std::endl;
@@ -1049,7 +1060,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
     for (auto cellpair : cell_test_array)
 #else
     auto cell_test = GridTools::find_active_cell_around_point(
-        dof_handler, quadrature_point_test);
+        dof_handler_Omega, quadrature_point_test);
     n_te = 1;
 #endif
 
@@ -1058,8 +1069,8 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
       auto cell_test = cellpair.first;
 #endif
 
-#if USE_MPI
-      //if (cell_test != dof_handler.end())
+#if USE_MPI_ASSEMBLE
+      if (cell_test != dof_handler_Omega.end())
         if (cell_test->is_locally_owned())
 #endif
         {
@@ -1099,7 +1110,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
               const Quadrature<dim - 1> my_quadrature_formula_test(
                   quadrature_point_test_face, my_quadrature_weights);
               FEFaceValues<dim> fe_values_coupling_test_face(
-                  fe, my_quadrature_formula_test, update_flags_coupling);
+                  fe_Omega, my_quadrature_formula_test, update_flags_coupling);
               fe_values_coupling_test_face.reinit(cell_test, face_no);
               unsigned int n_face_points =
                   fe_values_coupling_test_face.n_quadrature_points;
@@ -1130,7 +1141,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
             const Quadrature<dim> my_quadrature_formula_test(
                 my_quadrature_points_test, my_quadrature_weights);
             FEValues<dim> fe_values_coupling_test(
-                fe, my_quadrature_formula_test,
+                fe_Omega, my_quadrature_formula_test,
                 update_flags_coupling); // hier ist der fehler. wenn zweimal in
                                         // einer Cell integriert wird, stimmt es
                                         // nicht
@@ -1223,14 +1234,14 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
         unsigned int n_te;
 #if TEST
         auto cell_test_array = GridTools::find_all_active_cells_around_point(
-            mapping, dof_handler, quadrature_point_test);
+            mapping, dof_handler_Omega, quadrature_point_test);
         n_te = cell_test_array.size();
         //   n_te = 1;
         // pcout << "cell_test_array " << cell_test_array.size() << std::endl;
         for (auto cellpair : cell_test_array)
 #else
         auto cell_test = GridTools::find_active_cell_around_point(
-            dof_handler, quadrature_point_test);
+            dof_handler_Omega, quadrature_point_test);
         n_te = 1;
 #endif
 
@@ -1239,9 +1250,9 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
           auto cell_test = cellpair.first;
 #endif
 
-#if USE_MPI
-         // if (cell_test != dof_handler.end())
-            //if (cell_test->is_locally_owned())
+#if USE_MPI_ASSEMBLE
+          if (cell_test != dof_handler_Omega.end())
+            if (cell_test->is_locally_owned())
 #endif
             {
               // std::cout<< "cell_test " << cell_test<< " "
@@ -1280,7 +1291,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
               const Quadrature<dim> my_quadrature_formula_test(
                   my_quadrature_points_test, my_quadrature_weights);
               FEValues<dim> fe_values_coupling_test(
-                  fe, my_quadrature_formula_test, update_flags_coupling);
+                  fe_Omega, my_quadrature_formula_test, update_flags_coupling);
               fe_values_coupling_test.reinit(cell_test);
 
 #if !COUPLED
@@ -1315,7 +1326,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                     const Quadrature<dim - 1> my_quadrature_formula_test(
                         quadrature_point_test_face, my_quadrature_weights);
                     FEFaceValues<dim> fe_values_coupling_test_face(
-                        fe, my_quadrature_formula_test, update_flags_coupling);
+                        fe_Omega, my_quadrature_formula_test, update_flags_coupling);
                     fe_values_coupling_test_face.reinit(cell_test, face_no);
                     unsigned int n_face_points =
                         fe_values_coupling_test_face.n_quadrature_points;
@@ -1401,7 +1412,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 #if TEST
                 auto cell_trial_array =
                     GridTools::find_all_active_cells_around_point(
-                        mapping, dof_handler, quadrature_point_trial);
+                        mapping, dof_handler_Omega, quadrature_point_trial);
                 // pcout<< "cell_trial_array " << cell_trial_array.size() <<
                 // std::endl;
                 n_tr = cell_trial_array.size();
@@ -1409,7 +1420,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                 for (auto cellpair_trial : cell_trial_array)
 #else
                 auto cell_trial = GridTools::find_active_cell_around_point(
-                    dof_handler, quadrature_point_trial);
+                    dof_handler_Omega, quadrature_point_trial);
                 n_tr = 1;
 #endif
 
@@ -1417,9 +1428,9 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 #if TEST
                   auto cell_trial = cellpair_trial.first;
 #endif
-                //  if (cell_trial != dof_handler.end())
-                   // if (cell_trial->is_locally_owned() &&
-                     //  cell_test->is_locally_owned()) 
+                 if (cell_trial != dof_handler_Omega.end())
+                    if (cell_trial->is_locally_owned() &&
+                       cell_test->is_locally_owned()) 
                      {
                       //  std::cout<< "cell_trial " << cell_trial<< " "
                       //  <<cell_trial->center() << std::endl;
@@ -1438,7 +1449,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                           my_quadrature_points_trial, my_quadrature_weights);
 
                       FEValues<dim> fe_values_coupling_trial(
-                          fe, my_quadrature_formula_trial,
+                          fe_Omega, my_quadrature_formula_trial,
                           update_flags_coupling);
                       fe_values_coupling_trial.reinit(cell_trial);
 
@@ -1479,7 +1490,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                         const Quadrature<dim - 1> my_quadrature_formula_test(
                             quadrature_point_test_face, my_quadrature_weights);
                         FEFaceValues<dim> fe_values_coupling_test_face(
-                            fe, my_quadrature_formula_test,
+                            fe_Omega, my_quadrature_formula_test,
                             update_flags_coupling);
                         fe_values_coupling_test_face.reinit(
                             cell_test, face_no_test[ftest]);
@@ -1499,7 +1510,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                               quadrature_point_trial_face,
                               my_quadrature_weights);
                           FEFaceValues<dim> fe_values_coupling_trial_face(
-                              fe, my_quadrature_formula_trial,
+                              fe_Omega, my_quadrature_formula_trial,
                               update_flags_coupling);
                           fe_values_coupling_trial_face.reinit(
                               cell_trial, face_no_trial[ftest]);
@@ -1623,15 +1634,16 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
     }
   }
 
-#if USE_MPI
+#if USE_MPI_ASSEMBLE
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
+#endif
 #endif
   // std::cout << "ende coupling loop" << std::endl;
 
   // std::cout << "set ii " << std::endl;
 
-  for (unsigned int i = 0; i < dof_handler.n_dofs(); i++) // dof_table.size()
+  for (unsigned int i = 0; i < dof_handler_Omega.n_dofs(); i++) // dof_table.size()
   {
     // if(dof_table[i].first.first == 1 || dof_table[i].first.first == 3)
     {
@@ -1641,7 +1653,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
       }
     }
   }
-/*#if USE_MPI
+/*#if USE_MPI_ASSEMBLE
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
 #endif*/
@@ -1650,18 +1662,21 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 template <int dim, int dim_omega>
 template <int _dim>
 void LDGPoissonProblem<dim, dim_omega>::dof_omega_to_Omega(
-    const DoFHandler<_dim> &dof_handler,
+    const DoFHandler<_dim> &dof_handler_omega,
     std::vector<types::global_dof_index> &local_dof_indices_omega) {
-  const std::vector<types::global_dof_index> dofs_per_component =
-      DoFTools::count_dofs_per_fe_component(dof_handler);
+
+  const std::vector<types::global_dof_index> dofs_per_component_omega =
+      DoFTools::count_dofs_per_fe_component(dof_handler_omega);
+
   for (unsigned int i = 0; i < local_dof_indices_omega.size(); ++i) {
     const unsigned int base_i =
-        dof_handler.get_fe().system_to_base_index(i).first.first;
+        dof_handler_omega.get_fe().system_to_base_index(i).first.first;
 
     local_dof_indices_omega[i] =
         base_i == 0 ? local_dof_indices_omega[i] + start_VectorField_omega
-                    : local_dof_indices_omega[i] - dofs_per_component[0] +
-                          start_Potential_omega;
+                    : local_dof_indices_omega[i] - dofs_per_component_omega[0] + start_Potential_omega;
+                    
+                    //local_dof_indices_omega[i] - dofs_per_component_omega[0] + start_Potential_omega;
   }
 }
 
@@ -1943,10 +1958,10 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
   double global_potential_l2_error_omega, global_vectorfield_l2_error_omega;
   // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
   {
-    const ComponentSelectFunction<dim> potential_mask(dim + 1,
-                                                      dim + dim_omega + 2);
+    const ComponentSelectFunction<dim> potential_mask(dim,
+                                                      dim + 1);
     const ComponentSelectFunction<dim> vectorfield_mask(std::make_pair(0, dim),
-                                                        dim + dim_omega + 2);
+                                                        dim + 1);
     double alpha = 0.5;
     const DistanceWeight<dim> distance_weight(alpha, radius); //, radius
 
@@ -1957,9 +1972,9 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
 
     Vector<double> cellwise_errors(triangulation.n_active_cells());
     pcout << "triangulation.n_active_cells() " << triangulation.n_active_cells()
-          << " dof_handler.n_dofs() " << dof_handler.n_dofs()
-          << " dof_handler.n_locally_owned_dofs() "
-          << dof_handler.n_locally_owned_dofs() << " solution size "
+          << " dof_handler_Omega.n_dofs() " << dof_handler_Omega.n_dofs()
+          << " dof_handler_Omega.n_locally_owned_dofs() "
+          << dof_handler_Omega.n_locally_owned_dofs() << " solution size "
           << solution.size() << " mpi "
           << Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) << std::endl;
 
@@ -1967,14 +1982,14 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
     const QIterated<dim> quadrature(q_trapez, degree + 2);
 
     VectorTools::integrate_difference(
-        dof_handler, solution, true_solution, cellwise_errors, quadrature,
+        dof_handler_Omega, solution_Omega, true_solution, cellwise_errors, quadrature,
         VectorTools::L2_norm, &connected_function_potential); //
     /*  std::cout<<"cellwise_error.size() "<<cellwise_errors.size()<<std::endl;
      for (unsigned int i = 0; i < cellwise_errors.size(); i++)
       std::cout << cellwise_errors[i] << " "<<std::endl;
 
       std::cout<<"--------------------"<<std::endl; */
-    /*#if USE_MPI
+    /*#if USE_MPI_ASSEMBLE
         cellwise_errors.compress(VectorOperation::add); // TODO scauen was es
     noc  // fpr #endif
     */
@@ -1984,11 +1999,11 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
     // potential_l2_error "<<potential_l2_error<<std::endl;
     //  vectorfield Omega
     VectorTools::integrate_difference(
-        dof_handler, solution, true_solution, cellwise_errors, quadrature,
+        dof_handler_Omega, solution_Omega, true_solution, cellwise_errors, quadrature,
         VectorTools::L2_norm, &connected_function_vectorfield);
 
     /*
-    #if USE_MPI
+    #if USE_MPI_ASSEMBLE
         cellwise_errors.compress(VectorOperation::add); // TODO scauen was es
     noc #endif
     */
@@ -1997,6 +2012,8 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
 
     // std::cout<<"mpi  "<<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<< "
     // vectorfield_l2_error "<<vectorfield_l2_error<<std::endl;
+
+    std::cout<<"omega"<<std::endl;
     //-------------omega----------------------------------
     if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
       // if (locally_owned_dofs.is_element(dof_index)) TODO allgemeine MPI
@@ -2066,17 +2083,18 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
 template <int dim, int dim_omega>
 void LDGPoissonProblem<dim, dim_omega>::solve() {
   TimerOutput::Scope t(computing_timer, "solve");
-  pcout << "Solving linear system... ";
-#if USE_MPI
-
+  pcout << "Solving linear system... "<<std::endl;
+#if USE_MPI_ASSEMBLE
+  std::cout<< dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" systemmatrix: m "<<system_matrix.m() << " n "<<system_matrix.n()<< " local size "<<system_matrix.local_size()
+  <<" local range "<<system_matrix.local_range().first<<" "<<system_matrix.local_range().second<<std::endl;
   IndexSet locally_relevant_dofs;
-  DoFTools::extract_locally_relevant_dofs(dof_handler, locally_relevant_dofs);
-  const IndexSet &locally_owned_dofs = dof_handler.locally_owned_dofs();
+  DoFTools::extract_locally_relevant_dofs(dof_handler_Omega, locally_relevant_dofs);
+  const IndexSet &locally_owned_dofs = dof_handler_Omega.locally_owned_dofs();
 
   TrilinosWrappers::MPI::Vector completely_distributed_solution(
       locally_owned_dofs, MPI_COMM_WORLD);
 
-  SolverControl solver_control(dof_handler.n_dofs(), 1e-12);
+  SolverControl solver_control(dof_handler_Omega.n_dofs(), 1e-12);
   TrilinosWrappers::SolverGMRES solver(solver_control);
 
   // TrilinosWrappers::PreconditionIdentity preconditioner;
@@ -2122,29 +2140,25 @@ void LDGPoissonProblem<dim, dim_omega>::solve() {
 
 #endif
 
-  const std::vector<types::global_dof_index> dofs_per_component_omega =
-      DoFTools::count_dofs_per_fe_component(dof_handler_omega);
-  // std::cout<<"nof compoent "<<dofs_per_component_omega.size()<<std::endl;
+  solution_Omega.reinit(dof_handler_Omega.n_dofs());
+  for (unsigned int i = 0; i < dof_handler_Omega.n_dofs(); i++) {
+    types::global_dof_index dof_index =  i;
+#if USE_MPI_ASSEMBLE
+    if (locally_owned_dofs.is_element(dof_index))
+#endif
+      solution_Omega[i] = solution[dof_index];
+  }
 
-  solution_omega.reinit(dofs_per_component_omega[0] +
-                        dofs_per_component_omega[1]);
-  for (unsigned int i = 0; i < dofs_per_component_omega[0]; i++) {
+  solution_omega.reinit(dof_handler_omega.n_dofs());
+  for (unsigned int i = 0; i < dof_handler_omega.n_dofs(); i++) {
     types::global_dof_index dof_index = start_VectorField_omega + i;
-#if USE_MPI
+#if USE_MPI_ASSEMBLE
     if (locally_owned_dofs.is_element(dof_index))
 #endif
       solution_omega[i] = solution[dof_index];
   }
 
-  for (unsigned int i = 0; i < dofs_per_component_omega[1]; i++) {
-    types::global_dof_index dof_index = start_Potential_omega + i;
-#if USE_MPI
-    if (locally_owned_dofs.is_element(dof_index))
-#endif
-      solution_omega[dofs_per_component_omega[0] + i] = solution[dof_index];
-  }
-
-#if USE_MPI
+#if USE_MPI_ASSEMBLE
   // solution_omega.compress(VectorOperation::add);//TODO scauen was es noc fpr
 #endif
 }
@@ -2184,7 +2198,7 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
   }
 
   DataOut<dim> data_out;
-  data_out.attach_dof_handler(dof_handler);
+  data_out.attach_dof_handler(dof_handler_Omega);
   data_out.add_data_vector(solution,
                            solution_names); //, DataOut<dim>::type_cell_data
 
@@ -2247,13 +2261,13 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   assemble_system();
   solve();
   //output_results();
-  std::array<double, 4> results_array  = compute_errors();
+  std::array<double, 4> results_array= compute_errors();
   return results_array;
 }
 
 int main(int argc, char *argv[]) {
-  std::cout << "USE_MPI " << USE_MPI << std::endl;
-#if USE_MPI
+  std::cout << "USE_MPI_ASSEMBLE " << USE_MPI_ASSEMBLE << std::endl;
+#if 1
   deallog.depth_console(0);
 
   Utilities::MPI::MPI_InitFinalize mpi_initialization(
@@ -2309,7 +2323,7 @@ int main(int argc, char *argv[]) {
       const unsigned int p_degree[1] = {1};
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
-      const unsigned int refinement[2] = {1,2};
+      const unsigned int refinement[5] = {3,4,5,6,7};
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
 
