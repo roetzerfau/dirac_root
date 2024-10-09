@@ -699,21 +699,6 @@ marked_vertices.push_back(false);
   }
 #endif
 
-
-
-
-
-
-
-
-
-
-
-  IndexSet dofs_omega(dof_handler_omega.n_dofs());
-  dofs_omega.add_range(0, dof_handler_omega.n_dofs());
-
-
-
    /* SparsityTools::distribute_sparsity_pattern(
       dsp_block, local_dofs, MPI_COMM_WORLD,
        relevant_dofs);*/
@@ -1836,20 +1821,33 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_flux_terms(
   const unsigned int n_face_points = fe_face_values.n_quadrature_points;
   const unsigned int dofs_this_cell = fe_face_values.dofs_per_cell;
   const unsigned int dofs_neighbor_cell = fe_neighbor_face_values.dofs_per_cell;
-
+  const unsigned int dofs_cell = dofs_this_cell;
+  
   for (unsigned int q = 0; q < n_face_points; ++q) {
-    for (unsigned int i = 0; i < dofs_this_cell; ++i) {
+    // ------------- test -----------------------------
+    for (unsigned int i = 0; i < dofs_cell; ++i) {
+      //this
       const Tensor<1, _dim> psi_i_field_minus =
           fe_face_values[VectorField].value(i, q);
       const double psi_i_potential_minus =
           fe_face_values[Potential].value(i, q);
 
-      for (unsigned int j = 0; j < dofs_this_cell; ++j) {
+    //neighbor
+    const Tensor<1, _dim> psi_i_field_plus =
+          fe_neighbor_face_values[VectorField].value(i, q);
+      const double psi_i_potential_plus =
+          fe_neighbor_face_values[Potential].value(i, q);
+      // --------------------- trial -------------------------------
+      for (unsigned int j = 0; j < dofs_cell; ++j) {
         const Tensor<1, _dim> psi_j_field_minus =
             fe_face_values[VectorField].value(j, q);
         const double psi_j_potential_minus =
             fe_face_values[Potential].value(j, q);
-
+        const Tensor<1, _dim> psi_j_field_plus =
+            fe_neighbor_face_values[VectorField].value(j, q);
+        const double psi_j_potential_plus =
+            fe_neighbor_face_values[Potential].value(j, q);
+        //this this
         vi_ui_matrix(i, j) +=
             (0.5 * (psi_i_field_minus * fe_face_values.normal_vector(q) *
                         psi_j_potential_minus +
@@ -1859,17 +1857,8 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_flux_terms(
 
              ) *
             fe_face_values.JxW(q);
-      }
 
-      for (unsigned int j = 0; j < dofs_neighbor_cell; ++j) {
-        const Tensor<1, _dim> psi_j_field_plus =
-            fe_neighbor_face_values[VectorField].value(j, q);
-        const double psi_j_potential_plus =
-            fe_neighbor_face_values[Potential].value(j, q);
-
-        // We compute the flux matrix where the test function is
-        // from the interior of this elements face and solution
-        // function is taken from the exterior.
+        //this neighbor      
         vi_ue_matrix(i, j) +=
             (0.5 * (psi_i_field_minus * fe_face_values.normal_vector(q) *
                         psi_j_potential_plus +
@@ -1877,85 +1866,36 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_flux_terms(
                         psi_j_field_plus) -
              (penalty / h) * psi_i_potential_minus * psi_j_potential_plus) *
             fe_face_values.JxW(q);
-      }
-    }
 
-    for (unsigned int i = 0; i < dofs_neighbor_cell; ++i) {
-      const Tensor<1, _dim> psi_i_field_plus =
-          fe_neighbor_face_values[VectorField].value(i, q);
-      const double psi_i_potential_plus =
-          fe_neighbor_face_values[Potential].value(i, q);
-
-      for (unsigned int j = 0; j < dofs_this_cell; ++j) {
-        const Tensor<1, _dim> psi_j_field_minus =
-            fe_face_values[VectorField].value(j, q);
-        const double psi_j_potential_minus =
-            fe_face_values[Potential].value(j, q);
-
-        // We compute the flux matrix where the test function is
-        // from the exterior of this elements face and solution
-        // function is taken from the interior.
-        ve_ui_matrix(i, j) += 0;
+        //neighbor this
         ve_ui_matrix(i, j) +=
-
             (-0.5 * (psi_i_field_plus * fe_face_values.normal_vector(q) *
                          psi_j_potential_minus +
                      psi_i_potential_plus * fe_face_values.normal_vector(q) *
                          psi_j_field_minus) -
              (penalty / h) * psi_i_potential_plus * psi_j_potential_minus) *
             fe_face_values.JxW(q);
-      }
 
-      for (unsigned int j = 0; j < dofs_neighbor_cell; ++j) {
-        const Tensor<1, _dim> psi_j_field_plus =
-            fe_neighbor_face_values[VectorField].value(j, q);
-        const double psi_j_potential_plus =
-            fe_neighbor_face_values[Potential].value(j, q);
 
-        // And lastly we compute the flux matrix where the test
-        // function and solution function are taken from the exterior
-        // cell to this face.
-        ve_ue_matrix(i, j) += 0;
+         //neighbor neighbor
         ve_ue_matrix(i, j) +=
-
             (-0.5 * (psi_i_field_plus * fe_face_values.normal_vector(q) *
                          psi_j_potential_plus +
                      psi_i_potential_plus * fe_face_values.normal_vector(q) *
                          psi_j_field_plus) +
              (penalty / h) * psi_i_potential_plus * psi_j_potential_plus) *
             fe_face_values.JxW(q);
+
+
+        
       }
+
+
     }
+
   }
 }
 
-// @sect4{distribute_local_flux_to_global}
-// In this function we use the ConstraintMatrix to distribute
-// the local flux matrices to the global system matrix.
-// Since I have to do this twice in assembling the
-// system matrix, I made function to do it rather than have
-// repeated code.
-// We remark that the reader take special note of
-// the which matrices we are distributing and the order
-// in which we pass the dof indices vectors. In distributing
-// the first matrix, i.e. <code>vi_ui_matrix</code>, we are
-// taking the test function and solution function values from
-// the interior of this cell and therefore only need the
-// <code>local_dof_indices</code> since it contains the dof
-// indices to this cell. When we distribute the second matrix,
-// <code>vi_ue_matrix</code>, the test function is taken
-// form the inteior of
-// this cell while the solution function is taken from the
-// exterior, i.e. the neighbor cell.  Notice that the order
-// degrees of freedom index vectors matrch this pattern: first
-// the <code>local_dof_indices</code> which is local to
-// this cell and then
-// the <code>local_neighbor_dof_indices</code> which is
-// local to the neighbor's
-// cell.  The order in which we pass the dof indices for the
-// matrices is paramount to constructing our global system
-// matrix properly.  The ordering of the last two matrices
-// follow the same logic as the first two we discussed.
 template <int dim, int dim_omega>
 void LDGPoissonProblem<dim, dim_omega>::distribute_local_flux_to_global(
     FullMatrix<double> &vi_ui_matrix, FullMatrix<double> &vi_ue_matrix,
