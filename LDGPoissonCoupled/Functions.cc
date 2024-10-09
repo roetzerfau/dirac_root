@@ -476,14 +476,14 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
 
   for(unsigned int i = 0; i < n_components; i++)
   {
-    /*if(r < radius)
+    if(r < radius)
     {
        values(i) = 0;
        //std::cout<<r<<std::endl;
     }
     else  
-      values(i) = 1;*/
-  values(i) = std::pow(r,2*alpha);
+      values(i) = 1;
+  values(i) = values(i) * std::pow(r,2*alpha);
   }
  //values = 1;
  /* if(values[0] == 0)

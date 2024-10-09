@@ -197,12 +197,13 @@ private:
   double g;
   bool lumpedAverage;
 
-#if USE_MPI_ASSEMBLE
- //parallel::distributed::Triangulation<dim> triangulation;
- //parallel::shared::Triangulation<dim> triangulation;
-#else
+
+  //parallel::distributed::Triangulation<dim> triangulation_mpi;
+
+  parallel::shared::Triangulation<dim> triangulation_mpi;
+
   Triangulation<dim> triangulation;
-#endif
+
   TrilinosWrappers::SparseMatrix system_matrix_mpi;
   TrilinosWrappers::MPI::Vector solution_mpi;
   TrilinosWrappers::MPI::Vector system_rhs_mpi;
@@ -228,7 +229,7 @@ private:
 
   AffineConstraints<double> constraints;
 
-
+  std::vector<bool> marked_vertices;
 
   ConditionalOStream pcout;
   TimerOutput computing_timer;
@@ -271,6 +272,7 @@ LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
 /*#if USE_MPI_ASSEMBLE
       triangulation(MPI_COMM_WORLD),
 #endif*/
+      triangulation_mpi(MPI_COMM_WORLD),
       fe_Omega(FESystem<dim>(FE_DGP<dim>(degree), dim), FE_DGP<dim>(degree)),
       dof_handler_Omega(triangulation),
       fe_omega(FESystem<dim_omega>(FE_DGP<dim_omega>(degree), dim_omega),
@@ -340,6 +342,8 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
 #endif
 
   triangulation.refine_global(n_refine);
+  
+
   double max_diameter = 0.0;
  typename DoFHandler<dim>::active_cell_iterator
         cell = dof_handler_Omega.begin_active(),
@@ -367,7 +371,8 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
               << max_diameter << radius << std::endl;
     //throw std::invalid_argument("MAX DIAMETER > RADIUS");
   }
-
+  triangulation_mpi.copy_triangulation(triangulation);
+//---------------omega-------------------------
   if (constructed_solution == 3)
     GridGenerator::hyper_cube(triangulation_omega, 0, 2 * half_length);
   else
@@ -478,6 +483,32 @@ dofs_per_block.push_back(dof_handler_omega.n_dofs());
 
   pcout<<"Sparsity "  <<dsp_block.n_rows()<<" "<<dsp_block.n_cols()<<std::endl;
 
+//marked_vertices.resize(triangulation.n_vertices());
+Point<dim> corner1 =  Point<dim>(0, - 2*radius , - 2*radius);
+Point<dim> corner2 =  Point<dim>(2 * half_length,  2*radius,  2*radius);
+std::pair<Point<dim>, Point<dim>> corner_pair(corner1, corner2);     
+    
+BoundingBox<dim> bbox(corner_pair);
+
+const std::vector<Point<dim>> &vertices = triangulation.get_vertices();
+
+for (const auto &vertex : vertices)
+{
+ 
+    if (bbox.point_inside(vertex))
+    {
+       std::cout<<vertex<<" ";
+      std::cout<<true<<" "<<std::endl;
+        marked_vertices.push_back(true);
+    }
+    else
+    {
+       /*std::cout<<vertex<<" ";
+       std::cout<<false<<" "<<std::endl;*/
+marked_vertices.push_back(false);
+    }
+   
+}
 
 #if COUPLED
   {
@@ -499,14 +530,14 @@ dofs_per_block.push_back(dof_handler_omega.n_dofs());
         dofs_per_cell_omega);
     unsigned int nof_quad_points;
     bool AVERAGE = radius != 0 && !lumpedAverage;
-    pcout << "AVERAGE " << AVERAGE << std::endl;
+    pcout << "AVERAGE (use circel) " << AVERAGE << std::endl;
     // weight
     if (AVERAGE) {
       nof_quad_points = N_quad_points;
     } else {
       nof_quad_points = 1;
     }
-
+    std::cout<<"nof_quad_points "<<nof_quad_points<<std::endl;
     typename DoFHandler<dim_omega>::active_cell_iterator
         cell_omega = dof_handler_omega.begin_active(),
         endc_omega = dof_handler_omega.end();
@@ -552,7 +583,7 @@ dofs_per_block.push_back(dof_handler_omega.n_dofs());
 
 #if TEST
         auto cell_test_array = GridTools::find_all_active_cells_around_point(
-            mapping, dof_handler_Omega, quadrature_point_test);
+            mapping, dof_handler_Omega, quadrature_point_test, 1e-10, marked_vertices);
         // std::cout << "cell_test_array " << cell_test_array.size() <<
         // std::endl;
 
@@ -595,7 +626,7 @@ dofs_per_block.push_back(dof_handler_omega.n_dofs());
 #if TEST
                 auto cell_trial_array =
                     GridTools::find_all_active_cells_around_point(
-                        mapping, dof_handler_Omega, quadrature_point_trial);
+                        mapping, dof_handler_Omega, quadrature_point_trial, 1e-10, marked_vertices);
                 //  std::cout << "cell_trial_array " << cell_trial_array.size()
                 //  << std::endl;
 
@@ -1052,7 +1083,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
     unsigned int n_te;
 #if TEST
     auto cell_test_array = GridTools::find_all_active_cells_around_point(
-        mapping, dof_handler_Omega, quadrature_point_test);
+        mapping, dof_handler_Omega, quadrature_point_test, 1e-10, marked_vertices);
     n_te = cell_test_array.size();
     //   n_te = 1;
     pcout << "cell_test_array " << cell_test_array.size() << std::endl;
@@ -1234,7 +1265,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
         unsigned int n_te;
 #if TEST
         auto cell_test_array = GridTools::find_all_active_cells_around_point(
-            mapping, dof_handler_Omega, quadrature_point_test);
+            mapping, dof_handler_Omega, quadrature_point_test, 1e-10, marked_vertices);
         n_te = cell_test_array.size();
         //   n_te = 1;
         // pcout << "cell_test_array " << cell_test_array.size() << std::endl;
@@ -1412,7 +1443,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 #if TEST
                 auto cell_trial_array =
                     GridTools::find_all_active_cells_around_point(
-                        mapping, dof_handler_Omega, quadrature_point_trial);
+                        mapping, dof_handler_Omega, quadrature_point_trial, 1e-10, marked_vertices);
                 // pcout<< "cell_trial_array " << cell_trial_array.size() <<
                 // std::endl;
                 n_tr = cell_trial_array.size();
@@ -1956,6 +1987,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
       vectorfield_l2_error_omega;
   //  double global_potential_l2_error,global_vectorfield_l2_error,
   double global_potential_l2_error_omega, global_vectorfield_l2_error_omega;
+  
   // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
   {
     const ComponentSelectFunction<dim> potential_mask(dim,
@@ -2323,7 +2355,7 @@ int main(int argc, char *argv[]) {
       const unsigned int p_degree[1] = {1};
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
-      const unsigned int refinement[5] = {3,4,5,6,7};
+      const unsigned int refinement[1] = {4};
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
 
