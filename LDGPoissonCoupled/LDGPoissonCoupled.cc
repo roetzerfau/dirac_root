@@ -100,6 +100,9 @@
  #include <deal.II/base/partitioner.h>
  #include <deal.II/base/index_set.h>
  #include <deal.II/lac/solver_gmres.h>
+ #include <deal.II/lac/linear_operator.h>
+#include <deal.II/lac/linear_operator_tools.h>
+#include <deal.II/lac/precondition_block.h>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -2122,23 +2125,61 @@ const auto locally_owned = partitioner.locally_owned_range();
 
   // solution = completely_distributed_solution;
 #else
-  Timer timer;
-
-  SparseDirectUMFPACK A_direct;
-
-  solution = system_rhs;
- // A_direct.solve(system_matrix, solution);
-
    const unsigned int max_iterations = solution.size();
     SolverControl      solver_control(max_iterations);
-    SolverGMRES<BlockVector<double>> solver(solver_control);//
+solution = system_rhs;
+  Timer timer;
+
+ SparseDirectUMFPACK A_direct;
+ // A_direct.solve(system_matrix, solution);
+
+
+    SolverGMRES<BlockVector<double>> solver_direct(solver_control);//
    PreconditionJacobi<BlockSparseMatrix<double>> preconditioner;
    preconditioner.initialize(system_matrix, 1.0);
-    solver.solve(system_matrix, solution, system_rhs, preconditioner);//PreconditionIdentity()
+   //solver_direct.solve(system_matrix, solution, system_rhs, preconditioner);//PreconditionIdentity()
 
-  timer.stop();
+  
+#if 1
+SparseDirectUMFPACK K_inv_umfpack;
+K_inv_umfpack.initialize(system_matrix.block(0,0));
+
+auto K  = linear_operator(system_matrix.block(0,0));
+auto k = linear_operator(system_matrix.block(1,1));
+
+auto Ct = linear_operator(system_matrix.block(0,1));
+//auto C  = transpose_operator(Ct);
+auto C = linear_operator(system_matrix.block(1,0));
+
+SolverCG<Vector<double>> solver_cg(solver_control);
+SolverGMRES<Vector<double>> solver_gmres(solver_control);
+PreconditionJacobi<SparseMatrix<double>> preconditioner_gmres;
+preconditioner_gmres.initialize(system_matrix.block(0,0), 1.0);
+
+PreconditionBlockJacobi<SparseMatrix<double>> preconditioner_K;
+PreconditionBlockJacobi<SparseMatrix<double>>::AdditionalData data(fe_Omega.dofs_per_cell);
+preconditioner_K.initialize(system_matrix.block(0,0), data);
+ 
+ReductionControl reduction_control_K(2000, 1.0e-18, 1.0e-10);
+SolverGMRES<Vector<double>>  solver_K(solver_control);
+
+
+auto K_inv= inverse_operator(K, solver_K, preconditioner_gmres);
+//auto K_inv = linear_operator(K, K_inv_umfpack);
+ 
+auto S = k - C * K_inv * Ct;
+
+auto S_inv = inverse_operator(S, solver_gmres, PreconditionIdentity());
+ 
+
+
+solution.block(1) = S_inv * ( system_rhs.block(1)- C * K_inv *system_rhs.block(0));
+ 
+solution.block(0) = K_inv * (system_rhs.block(0) - Ct * solution.block(1)); 
+#endif
+
+timer.stop();
   std::cout << "done (" << timer.cpu_time() << "s)" << std::endl;
-
 #endif
 
   solution_Omega.reinit(dof_handler_Omega.n_dofs());
