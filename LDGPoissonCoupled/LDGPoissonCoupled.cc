@@ -4,6 +4,15 @@
 //  The code begins as per usual with a long list of the the included
 //  files from the deal.ii library.
 
+
+// step_55 step_32 step_40 
+// lagrangian step_60 step_70
+
+//custom trianulation jeder Wurzel in einem Prozessor
+
+//TODO
+// 1) solve über aufteilun lösen Scurkomplement etc
+// 2 mace pralell 
 #include <deal.II/base/function.h>
 #include <deal.II/base/logstream.h>
 #include <deal.II/base/quadrature_lib.h>
@@ -88,7 +97,9 @@
 #include <deal.II/lac/trilinos_solver.h>
 #include <deal.II/meshworker/mesh_loop.h>
  #include <deal.II/distributed/shared_tria.h>
-
+ #include <deal.II/base/partitioner.h>
+ #include <deal.II/base/index_set.h>
+ #include <deal.II/lac/solver_gmres.h>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -99,6 +110,8 @@
 
 // 2. variante ist warsceinlic besser
 //einfac die benötiten dofs an matrix iten dran. Dofandler witout zustzice FE , sparsity und so dementsprecen macjen. solution(dof.nof_dof + extraDof)
+
+//TODO man kann Omea trinualtion parallel macen also deren dof andler, und der rest wird auf jedem Porzessor emact
 #include "Functions.cc"
 
 using namespace dealii;
@@ -189,6 +202,7 @@ private:
   double penalty;
   double h_max;
   double h_min;
+  unsigned int nof_degrees;
 
   enum { Dirichlet, Neumann };
 
@@ -482,7 +496,7 @@ dofs_per_block.push_back(dof_handler_omega.n_dofs());
 
 
   pcout<<"Sparsity "  <<dsp_block.n_rows()<<" "<<dsp_block.n_cols()<<std::endl;
-
+nof_degrees = dsp_block.n_rows();
 //marked_vertices.resize(triangulation.n_vertices());
 Point<dim> corner1 =  Point<dim>(0, - 2*radius , - 2*radius);
 Point<dim> corner2 =  Point<dim>(2 * half_length,  2*radius,  2*radius);
@@ -2056,6 +2070,20 @@ template <int dim, int dim_omega>
 void LDGPoissonProblem<dim, dim_omega>::solve() {
   TimerOutput::Scope t(computing_timer, "solve");
   pcout << "Solving linear system... "<<std::endl;
+
+/*Utilities::MPI::Partitioner partitioner(complete_index_set(nof_degrees),MPI_COMM_WORLD);
+const unsigned int local_size = partitioner.locally_owned_range().size();
+const unsigned int n_elements = partitioner.locally_owned_range().n_elements();
+std::cout<<"nof_degrees "<<nof_degrees<< " local_size "<<local_size<<" n_elements "<<n_elements<<std::endl;
+for(auto idx = partitioner.locally_owned_range().begin(); idx != partitioner.locally_owned_range().end(); idx++)
+  std::cout<<*idx<<std::endl;
+
+//system_matrix_mpi.reinit(partitioner, partitioner, MPI_COMM_WORLD);
+const auto locally_owned = partitioner.locally_owned_range();
+//std::cout<<locally_owned[1]<<std::endl;*/
+
+
+
 #if USE_MPI_ASSEMBLE
   std::cout<< dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" systemmatrix: m "<<system_matrix.m() << " n "<<system_matrix.n()<< " local size "<<system_matrix.local_size()
   <<" local range "<<system_matrix.local_range().first<<" "<<system_matrix.local_range().second<<std::endl;
@@ -2099,13 +2127,14 @@ void LDGPoissonProblem<dim, dim_omega>::solve() {
   SparseDirectUMFPACK A_direct;
 
   solution = system_rhs;
-  A_direct.solve(system_matrix, solution);
+ // A_direct.solve(system_matrix, solution);
 
-  /*  const unsigned int max_iterations = solution.size();
+   const unsigned int max_iterations = solution.size();
     SolverControl      solver_control(max_iterations);
-    SolverCG<>         solver(solver_control);
-    solver.solve(system_matrix, solution, system_rhs,
-    PreconditionIdentity());*/
+    SolverGMRES<BlockVector<double>> solver(solver_control);//
+   PreconditionJacobi<BlockSparseMatrix<double>> preconditioner;
+   preconditioner.initialize(system_matrix, 1.0);
+    solver.solve(system_matrix, solution, system_rhs, preconditioner);//PreconditionIdentity()
 
   timer.stop();
   std::cout << "done (" << timer.cpu_time() << "s)" << std::endl;
@@ -2295,7 +2324,7 @@ int main(int argc, char *argv[]) {
       const unsigned int p_degree[1] = {1};
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
-      const unsigned int refinement[1] = {4};
+      const unsigned int refinement[1] = {3};
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
 
