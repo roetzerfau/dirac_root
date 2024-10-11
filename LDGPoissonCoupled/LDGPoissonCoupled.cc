@@ -103,6 +103,7 @@
  #include <deal.II/lac/linear_operator.h>
 #include <deal.II/lac/linear_operator_tools.h>
 #include <deal.II/lac/precondition_block.h>
+#include <deal.II/lac/solver_bicgstab.h>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -120,6 +121,7 @@
 using namespace dealii;
 #define USE_MPI_ASSEMBLE 0
 #define USE_LDG 0
+#define BLOCKS 1
 
 constexpr unsigned int dimension_Omega{3};
 const FEValuesExtractors::Vector VectorField_omega(0);
@@ -470,7 +472,19 @@ const std::vector<types::global_dof_index> dofs_per_component_omega =
   constraints.clear();
   constraints.close();
   unsigned int n_dofs_total = dof_handler_Omega.n_dofs() + dof_handler_omega.n_dofs();
-  BlockDynamicSparsityPattern dsp_block(2,2);
+
+
+     const std::vector<types::global_dof_index> block_sizes_Omega = {n_vector_field_Omega, n_potential_Omega};
+      BlockDynamicSparsityPattern                dsp_Omega(block_sizes_Omega, block_sizes_Omega);
+      DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, dsp_Omega);
+
+     const std::vector<types::global_dof_index> block_sizes_omega = {n_vector_field_omega, n_potential_omega};
+      BlockDynamicSparsityPattern                dsp_omega(block_sizes_omega, block_sizes_omega);
+      DoFTools::make_flux_sparsity_pattern(dof_handler_omega, dsp_omega);
+
+
+#if BLOCKS
+BlockDynamicSparsityPattern dsp_block(2,2);
   dsp_block.block(0, 0).reinit(dof_handler_Omega.n_dofs(), dof_handler_Omega.n_dofs());
     // Block 1,1: Sparsity for the extra DoFs (global DoFs)
   dsp_block.block(1, 1).reinit(dof_handler_omega.n_dofs(), dof_handler_omega.n_dofs());
@@ -479,10 +493,37 @@ const std::vector<types::global_dof_index> dofs_per_component_omega =
   dsp_block.block(0, 1).reinit(dof_handler_Omega.n_dofs(), dof_handler_omega.n_dofs());  // Block for coupling DoFs
   dsp_block.block(1, 0).reinit(dof_handler_omega.n_dofs(), dof_handler_Omega.n_dofs());
 
-  //dsp_block.collect_sizes();
 
   DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, dsp_block.block(0,0) );
   DoFTools::make_flux_sparsity_pattern(dof_handler_omega, dsp_block.block(1,1) );
+#else
+//https://mathoverflow.net/questions/158437/how-to-write-this-result-successive-schur-complements-compose-nicely?rq=1
+//TODO macen das entries reinescrieben werden 
+  BlockDynamicSparsityPattern dsp_block(4,4);
+  dsp_block.block(0, 0).reinit(n_vector_field_Omega, n_vector_field_Omega, dsp_Omega.block(0,0).row_index_set());
+  dsp_block.block(1, 0).reinit(n_potential_Omega, n_vector_field_Omega, dsp_Omega.block(1,0).row_index_set());
+  dsp_block.block(0, 1).reinit(n_vector_field_Omega, n_potential_Omega, dsp_Omega.block(0,1).row_index_set());
+  dsp_block.block(1, 1).reinit(n_potential_Omega, n_potential_Omega, dsp_Omega.block(1,1).row_index_set());
+
+  dsp_block.block(2, 2).reinit(n_vector_field_omega, n_vector_field_omega, dsp_omega.block(0,0).row_index_set());
+  dsp_block.block(3, 2).reinit(n_potential_omega, n_vector_field_omega, dsp_omega.block(1,0).row_index_set());
+  dsp_block.block(2, 3).reinit(n_vector_field_omega, n_potential_omega, dsp_omega.block(0,1).row_index_set());
+  dsp_block.block(3, 3).reinit(n_potential_omega, n_potential_omega, dsp_omega.block(1,1).row_index_set());
+
+
+  dsp_block.block(2, 0).reinit(n_vector_field_omega, n_vector_field_Omega);
+  dsp_block.block(3, 0).reinit(n_potential_omega, n_vector_field_Omega);
+  dsp_block.block(2, 1).reinit(n_vector_field_omega, n_potential_Omega);
+  dsp_block.block(3, 1).reinit(n_potential_omega, n_potential_Omega);
+
+
+  dsp_block.block(0, 2).reinit(n_vector_field_Omega, n_vector_field_omega);
+  dsp_block.block(1, 2).reinit(n_potential_Omega, n_vector_field_omega);
+  dsp_block.block(0, 3).reinit(n_vector_field_Omega, n_potential_omega);
+  dsp_block.block(1, 3).reinit(n_potential_Omega, n_potential_omega);
+#endif
+
+  
   // for(unsigned int i = 0; i < dof_handler_Omega.n_dofs(); i++)
   // for(unsigned int j = 0; j < dof_handler_omega.n_dofs(); j++)
   // {
@@ -491,11 +532,18 @@ const std::vector<types::global_dof_index> dofs_per_component_omega =
   // }
 
 
-  dsp_block.collect_sizes();
+dsp_block.collect_sizes();
 
 std::vector<unsigned int> dofs_per_block;
+#if BLOCKS
 dofs_per_block.push_back(dof_handler_Omega.n_dofs());
 dofs_per_block.push_back(dof_handler_omega.n_dofs());
+#else
+dofs_per_block.push_back(n_vector_field_Omega);
+dofs_per_block.push_back(n_potential_Omega);
+dofs_per_block.push_back(n_vector_field_omega);
+dofs_per_block.push_back(n_potential_omega);
+#endif
 
 
   pcout<<"Sparsity "  <<dsp_block.n_rows()<<" "<<dsp_block.n_cols()<<std::endl;
@@ -737,10 +785,11 @@ marked_vertices.push_back(false);
         DoFTools::make_sparsity_pattern(
           dof_handler, coupling, dsp, constraints, false);*/
   
-  block_sparsity_pattern.copy_from(dsp_block);                                         
+  block_sparsity_pattern.copy_from(dsp_block);     
+  std::cout<<"n_nonzero_elements "<<block_sparsity_pattern.n_nonzero_elements() <<std::endl;                                    
 
-  std::ofstream out("sparsity-pattern-2.svg");
-   block_sparsity_pattern.print_svg(out);
+  //std::ofstream out("sparsity-pattern-2.svg");
+  // block_sparsity_pattern.print_svg(out);
 
   system_matrix.reinit(block_sparsity_pattern);
   solution.reinit(dofs_per_block);
@@ -2161,18 +2210,18 @@ PreconditionBlockJacobi<SparseMatrix<double>>::AdditionalData data(fe_Omega.dofs
 preconditioner_K.initialize(system_matrix.block(0,0), data);
  
 ReductionControl reduction_control_K(2000, 1.0e-18, 1.0e-10);
-SolverGMRES<Vector<double>>  solver_K(solver_control);
+SolverBicgstab<Vector<double>>  solver_K(solver_control);
 
 
 auto K_inv= inverse_operator(K, solver_K, preconditioner_gmres);
 //auto K_inv = linear_operator(K, K_inv_umfpack);
- 
+ //TODO das paralkek macen. akso alle cellen mit wurzel auf einen processsor andere verteilen
 auto S = k - C * K_inv * Ct;
 
 auto S_inv = inverse_operator(S, solver_gmres, PreconditionIdentity());
  
 
-
+ 
 solution.block(1) = S_inv * ( system_rhs.block(1)- C * K_inv *system_rhs.block(0));
  
 solution.block(0) = K_inv * (system_rhs.block(0) - Ct * solution.block(1)); 
