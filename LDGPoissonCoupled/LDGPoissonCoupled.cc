@@ -13,6 +13,7 @@
 //TODO
 // 1) solve über aufteilun lösen Scurkomplement etc
 // 2 mace pralell 
+#include <deal.II/lac/lapack_full_matrix.h>
 #include <deal.II/base/function.h>
 #include <deal.II/base/logstream.h>
 #include <deal.II/base/quadrature_lib.h>
@@ -2186,10 +2187,9 @@ solution = system_rhs;
     SolverGMRES<BlockVector<double>> solver_direct(solver_control);//
    PreconditionJacobi<BlockSparseMatrix<double>> preconditioner;
    preconditioner.initialize(system_matrix, 1.0);
-   //solver_direct.solve(system_matrix, solution, system_rhs, preconditioner);//PreconditionIdentity()
-
+   solver_direct.solve(system_matrix, solution, system_rhs, preconditioner);//PreconditionIdentity()
   
-#if 1
+#if 0
 SparseDirectUMFPACK K_inv_umfpack;
 K_inv_umfpack.initialize(system_matrix.block(0,0));
 
@@ -2202,28 +2202,34 @@ auto C = linear_operator(system_matrix.block(1,0));
 
 SolverCG<Vector<double>> solver_cg(solver_control);
 SolverGMRES<Vector<double>> solver_gmres(solver_control);
-PreconditionJacobi<SparseMatrix<double>> preconditioner_gmres;
-preconditioner_gmres.initialize(system_matrix.block(0,0), 1.0);
 
+PreconditionJacobi<SparseMatrix<double>> preconditioner_K;
+preconditioner_K.initialize(system_matrix.block(0,0), 1.0);
+/*
 PreconditionBlockJacobi<SparseMatrix<double>> preconditioner_K;
 PreconditionBlockJacobi<SparseMatrix<double>>::AdditionalData data(fe_Omega.dofs_per_cell);
 preconditioner_K.initialize(system_matrix.block(0,0), data);
- 
+ */
+/*PreconditionLU<double> LU;
+ LAPACKFullMatrix<double> m;
+ m.copy_from(system_matrix.block(0,0));
+LU.initialize(m);*/
+
 ReductionControl reduction_control_K(2000, 1.0e-18, 1.0e-10);
-SolverBicgstab<Vector<double>>  solver_K(solver_control);
+SolverGMRES<Vector<double>>  solver_K(solver_control);
 
 
-auto K_inv= inverse_operator(K, solver_K, preconditioner_gmres);
-//auto K_inv = linear_operator(K, K_inv_umfpack);
+//auto K_inv= inverse_operator(K, solver_K, preconditioner_K );
+auto K_inv = linear_operator(K, K_inv_umfpack);
  //TODO das paralkek macen. akso alle cellen mit wurzel auf einen processsor andere verteilen
 auto S = k - C * K_inv * Ct;
 
 auto S_inv = inverse_operator(S, solver_gmres, PreconditionIdentity());
  
 
- 
-solution.block(1) = S_inv * ( system_rhs.block(1)- C * K_inv *system_rhs.block(0));
- 
+  
+  auto temp = system_rhs.block(1)- C * K_inv *system_rhs.block(0);
+solution.block(1) = S_inv * ( temp);
 solution.block(0) = K_inv * (system_rhs.block(0) - Ct * solution.block(1)); 
 #endif
 
