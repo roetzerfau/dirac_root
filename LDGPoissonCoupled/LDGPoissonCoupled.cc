@@ -320,12 +320,25 @@ private:
   DoFHandler<dim> dof_handler_Omega;
 
   Triangulation<dim_omega> triangulation_omega;
+  //parallel::shared::Triangulation<dim_omega> triangulation_omega;
   FESystem<dim_omega> fe_omega;
   DoFHandler<dim_omega> dof_handler_omega;
   Vector<double> solution_omega;
   Vector<double> solution_Omega;
 
+
+
+  IndexSet locally_owned_dofs_Omega;
+  IndexSet locally_relevant_dofs_Omega;
+
+  IndexSet locally_owned_dofs_omega;
+  IndexSet locally_relevant_dofs_omega;
+
+  IndexSet locally_owned_dofs_total;
+  IndexSet locally_relevant_dofs_total;
+
   std::vector<IndexSet> locally_owned_dofs_block;
+  std::vector<IndexSet> locally_relevant_dofs_block;
 
   AffineConstraints<double> constraints;
 
@@ -370,6 +383,7 @@ LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
     Parameters parameters)
     : degree(degree), n_refine(n_refine),
       triangulation(MPI_COMM_WORLD),
+      //triangulation_omega(MPI_COMM_WORLD),
       fe_Omega(FESystem<dim>(FE_DGP<dim>(degree), dim), FE_DGP<dim>(degree)),
       dof_handler_Omega(triangulation),
       fe_omega(FESystem<dim_omega>(FE_DGP<dim_omega>(degree), dim_omega),
@@ -514,15 +528,6 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
   pcout << "dofs_per_cell_omega " << dofs_per_cell_omega << std::endl;
   DoFRenumbering::component_wise(dof_handler_omega);
 
-#if USE_MPI_ASSEMBLE
-  IndexSet locally_owned_dofs_Omega = dof_handler_Omega.locally_owned_dofs();
-  IndexSet locally_relevant_dofs_Omega;
-  DoFTools::extract_locally_relevant_dofs(dof_handler_Omega, locally_relevant_dofs_Omega);
-
-  IndexSet locally_owned_dofs_omega = dof_handler_omega.locally_owned_dofs();
-  IndexSet locally_relevant_dofs_omega;
-  DoFTools::extract_locally_relevant_dofs(dof_handler_Omega, locally_relevant_dofs_omega);
-#endif
 
   const std::vector<types::global_dof_index> dofs_per_component_Omega =
       DoFTools::count_dofs_per_fe_component(dof_handler_Omega);
@@ -567,6 +572,74 @@ const std::vector<types::global_dof_index> dofs_per_component_omega =
   constraints.close();
   unsigned int n_dofs_total = dof_handler_Omega.n_dofs() + dof_handler_omega.n_dofs();
 
+
+  #if USE_MPI_ASSEMBLE
+  locally_owned_dofs_Omega = dof_handler_Omega.locally_owned_dofs();
+  locally_relevant_dofs_Omega;
+  DoFTools::extract_locally_relevant_dofs(dof_handler_Omega, locally_relevant_dofs_Omega);
+
+  locally_owned_dofs_omega = dof_handler_omega.locally_owned_dofs();
+  locally_relevant_dofs_omega;
+  DoFTools::extract_locally_relevant_dofs(dof_handler_omega, locally_relevant_dofs_omega);
+
+ 
+ // if(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
+  {
+    locally_owned_dofs_total.set_size(locally_owned_dofs_Omega.size() + locally_owned_dofs_omega.size());
+    locally_relevant_dofs_total.set_size(locally_relevant_dofs_Omega.size() + locally_relevant_dofs_omega.size());
+  }
+ /* else
+  {
+    locally_owned_dofs_total.set_size(locally_owned_dofs_Omega.size());
+    locally_relevant_dofs_total.set_size(locally_relevant_dofs_Omega.size());
+  }*/
+  locally_owned_dofs_block.push_back(locally_owned_dofs_Omega);
+  locally_owned_dofs_total.add_indices(locally_owned_dofs_Omega);
+  locally_relevant_dofs_block.push_back(locally_relevant_dofs_Omega);
+  locally_relevant_dofs_total.add_indices(locally_relevant_dofs_Omega);
+
+  if(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
+  {
+   locally_owned_dofs_block.push_back(locally_owned_dofs_omega);
+   locally_owned_dofs_total.add_indices(locally_owned_dofs_omega,  dof_handler_Omega.n_dofs());
+
+    locally_relevant_dofs_block.push_back(locally_relevant_dofs_omega);
+     locally_relevant_dofs_total.add_indices(locally_relevant_dofs_omega, dof_handler_Omega.n_dofs());
+  }
+
+  locally_owned_dofs_total.compress();
+  locally_relevant_dofs_total.compress();
+
+  /*std::cout <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" locally_owned_dofs_Omega "<<  locally_owned_dofs_Omega.size()<<" elem "<<locally_owned_dofs_Omega.n_elements()<<std::endl;
+  for (auto index : locally_owned_dofs_Omega)
+        std::cout << index << " ";
+    std::cout << std::endl;
+  std::cout <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" locally_owned_dofs_omega "<<  locally_owned_dofs_omega.size()<<" elem "<<locally_owned_dofs_omega.n_elements()<< std::endl;
+  for (auto index : locally_owned_dofs_omega)
+        std::cout << index << " ";
+    std::cout << std::endl;*/
+
+    std::cout <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" locally_owned_dofs_total "<<  locally_owned_dofs_total.size()<< " elem "<<locally_owned_dofs_total.n_elements()<<std::endl;
+  for (auto index : locally_owned_dofs_total)
+        std::cout << index << " ";
+    std::cout << std::endl;
+
+std::cout <<"----------------------------------- "<<  std::endl;
+ /* std::cout <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" locally_relevant_dofs_Omega "<<  locally_relevant_dofs_Omega.size()<<" elem "<<locally_relevant_dofs_Omega.n_elements()<< std::endl;
+  for (auto index : locally_relevant_dofs_Omega)
+        std::cout << index << " ";
+    std::cout << std::endl;
+  std::cout <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" locally_relevant_dofs_omega "<<  locally_relevant_dofs_omega.size()<<" elem "<<locally_relevant_dofs_omega.n_elements()<< std::endl;
+  for (auto index : locally_relevant_dofs_omega)
+        std::cout << index << " ";
+    std::cout << std::endl;*/
+
+    std::cout <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" locally_relevant_dofs_total "<<  locally_relevant_dofs_total.size()<< " elem "<<locally_relevant_dofs_total.n_elements()<< std::endl;
+  for (auto index : locally_relevant_dofs_total)
+        std::cout << index << " ";
+    std::cout << std::endl;
+#endif
+
 #if BLOCKS
 BlockDynamicSparsityPattern dsp_block(2,2);
 //dsp_block =  TrilinosWrappers::BlockSparsityPattern(2,2);
@@ -581,6 +654,19 @@ BlockDynamicSparsityPattern dsp_block(2,2);
 
   DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, dsp_block.block(0,0) );
   DoFTools::make_flux_sparsity_pattern(dof_handler_omega, dsp_block.block(1,1) );
+
+ /* SparsityTools::distribute_sparsity_pattern(dsp_block.block(0,0),
+                                                 locally_owned_dofs_Omega,
+                                                 MPI_COMM_WORLD,
+                                                 locally_relevant_dofs_Omega);*/
+ /*SparsityTools::distribute_sparsity_pattern(dsp_block.block(1,1),
+                                                 locally_owned_dofs_omega,
+                                                 MPI_COMM_WORLD,
+                                                 locally_relevant_dofs_omega);*/
+/*SparsityTools::distribute_sparsity_pattern(dsp_block,
+                                                 locally_owned_dofs_total,
+                                                 MPI_COMM_WORLD,
+                                                 locally_relevant_dofs_total);*/
 #else
     const std::vector<types::global_dof_index> block_sizes_Omega = {n_vector_field_Omega, n_potential_Omega};
     BlockDynamicSparsityPattern                dsp_Omega(block_sizes_Omega, block_sizes_Omega);
@@ -641,12 +727,16 @@ dofs_per_block.push_back(n_potential_omega);
 
   pcout<<"Sparsity "  <<dsp_block.n_rows()<<" "<<dsp_block.n_cols()<<std::endl;
 nof_degrees = dsp_block.n_rows();
+
+
+#if COUPLED
+  {
 //marked_vertices.resize(triangulation.n_vertices());
 Point<dim> corner1, corner2;
 if(dim == 3)
 {
-corner1 =  Point<dim>(0, - 2*radius , - 2*radius);
-corner2 =  Point<dim>(2 * half_length,  2*radius,  2*radius);
+corner1 =  Point<dim>(0, - radius , - radius);
+corner2 =  Point<dim>(2 * half_length,  radius,  radius);
 }
 if(dim == 2)
 {
@@ -664,8 +754,8 @@ for (const auto &vertex : vertices)
 // marked_vertices.push_back(true);
     if (bbox.point_inside(vertex))
     {
-       std::cout<<vertex<<" ";
-      std::cout<<true<<" "<<std::endl;
+       //std::cout<<vertex<<" ";
+     // std::cout<<true<<" "<<std::endl;
       marked_vertices.push_back(true);
     }
     else
@@ -676,10 +766,6 @@ for (const auto &vertex : vertices)
     }
    
 }
-
-#if COUPLED
-  {
-
     // coupling
 
     QGauss<dim> quadrature_formula(fe_Omega.degree + 1);
@@ -749,10 +835,24 @@ for (const auto &vertex : vertices)
         quadrature_point_test = quadrature_point_coupling;
 
 #if TEST
-        auto cell_test_array = GridTools::find_all_active_cells_around_point(
-            mapping, dof_handler_Omega, quadrature_point_test, 1e-10, marked_vertices);
+      auto start = std::chrono::high_resolution_clock::now();  //Start time
+    auto cell_test_array = GridTools::find_all_active_cells_around_point(
+        mapping, dof_handler_Omega, quadrature_point_test, 1e-10);
+    auto end = std::chrono::high_resolution_clock::now();    // End time
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+  //  std::cout << "Time taken to execute find_all_active_cells_around_point: " << duration << " ms" << std::endl;
        // std::cout << "cell_test_array " << cell_test_array.size() <<
         // std::endl;
+   /* auto map = GridTools::vertex_to_cell_map(triangulation);
+    auto start1 = std::chrono::high_resolution_clock::now();
+    auto cell_test = GridTools::find_active_cell_around_point(
+            mapping, dof_handler_Omega, quadrature_point_test, marked_vertices);
+    auto all_cells  = GridTools::find_all_active_cells_around_point(
+                       mapping, dof_handler_Omega, quadrature_point_test,1e-10 ,cell_test);
+      auto end1 = std::chrono::high_resolution_clock::now();    // End time
+    auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
+    std::cout << "Time taken to execute find_active_cell_around_secondvariant: " 
+              << duration1 << " ms" << std::endl;*/
 
         for (auto cellpair : cell_test_array)
 #else
@@ -791,9 +891,12 @@ for (const auto &vertex : vertices)
                 quadrature_point_trial = quadrature_points_circle[q_avag];
 
 #if TEST
-                auto cell_trial_array =
-                    GridTools::find_all_active_cells_around_point(
-                        mapping, dof_handler_Omega, quadrature_point_trial, 1e-10, marked_vertices);
+                    auto start = std::chrono::high_resolution_clock::now();  //Start time
+    auto cell_trial_array = GridTools::find_all_active_cells_around_point(
+        mapping, dof_handler_Omega, quadrature_point_trial, 1e-10, marked_vertices);
+    auto end = std::chrono::high_resolution_clock::now();    // End time
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    //std::cout << "Time taken to execute find_all_active_cells_around_point_trial: " << duration << " ms" << std::endl;
                 //  std::cout << "cell_trial_array " << cell_trial_array.size()
                 //  << std::endl;
 
@@ -848,12 +951,15 @@ for (const auto &vertex : vertices)
                                   local_dof_indices_omega[j]);
                         }
                       }
+
+
+
                    } 
-                   //else
-                  // std::cout<<"düdüm1"<<std::endl;
+                   else
+                  std::cout<<"düdüm1"<<std::endl;
                   }
                 //else
-                  // std::cout<<"düdüm2"<<std::endl;
+                 // std::cout<<"düdüm2"<<std::endl;
                 }
               }
             }
@@ -889,14 +995,10 @@ for (const auto &vertex : vertices)
   // block_sparsity_pattern.print_svg(out);
   //dsp_block.compress();
 
-  locally_owned_dofs_block.push_back(locally_owned_dofs_Omega);
-  if(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
-    locally_owned_dofs_block.push_back(locally_owned_dofs_omega);
-
   system_matrix.reinit(locally_owned_dofs_block, block_sparsity_pattern, MPI_COMM_WORLD);
   solution.reinit(locally_owned_dofs_block,  MPI_COMM_WORLD);
   system_rhs.reinit(locally_owned_dofs_block,  MPI_COMM_WORLD);
-
+  std::cout<<"Ende setup dof"<<std::endl;
 }
 
 template <int dim, int dim_omega>
@@ -2569,8 +2671,8 @@ int main(int argc, char *argv[]) {
   std::cout << "dimension_Omega " << dimension_Omega << std::endl;
   const unsigned int n_r = 1;
   const unsigned int n_LA = 1;
-  double radii[n_r] = {0.1};
-  bool lumpedAverages[n_LA] = { false};
+  double radii[n_r] = {0.01};
+  bool lumpedAverages[n_LA] = { true};
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
   for (unsigned int rad = 0; rad < n_r; rad++) {
@@ -2584,10 +2686,10 @@ int main(int argc, char *argv[]) {
       Parameters parameters;
       parameters.radius = radii[rad];
       parameters.lumpedAverage = lumpedAverages[LA];
-      const unsigned int p_degree[1] = {1};
+      const unsigned int p_degree[1] = {0};
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
-      const unsigned int refinement[1] = {3};
+      const unsigned int refinement[1] = {2};
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
 

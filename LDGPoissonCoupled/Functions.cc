@@ -10,7 +10,7 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 1
+#define COUPLED 0
 
 #define TEST 1
 
