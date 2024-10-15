@@ -120,7 +120,7 @@
 #include "Functions.cc"
 
 using namespace dealii;
-#define USE_MPI_ASSEMBLE 0
+#define USE_MPI_ASSEMBLE 1
 #define USE_LDG 0
 #define BLOCKS 1
 
@@ -141,6 +141,84 @@ struct Parameters {
   double radius;
   bool lumpedAverage;
 };
+
+
+  class InverseMatrix : public Subscriptor
+  {
+  public:
+    InverseMatrix(const TrilinosWrappers::SparseMatrix &m)
+                      : matrix(&m)
+    {}
+ 
+    void vmult(TrilinosWrappers::MPI::Vector       &dst,
+                   const TrilinosWrappers::MPI::Vector &src) const
+    {
+    dst = 0;
+   /* SolverControl solver_control(src.size(), 1e-6 * src.l2_norm());
+    TrilinosWrappers::SolverDirect solver(solver_control);
+    solver.initialize(*matrix);
+    solver.solve(dst,src);*/
+ TrilinosWrappers::PreconditionILU preconditioner;
+  TrilinosWrappers::PreconditionILU::AdditionalData data;
+  preconditioner.initialize(*matrix, data);
+
+    SolverControl solver_control(src.size());//, 1e-7 * src.l2_norm());
+    TrilinosWrappers::SolverCG solver(solver_control);
+    solver.solve(*matrix, dst,  src, preconditioner );
+    }
+ 
+  private:
+    const SmartPointer<const  TrilinosWrappers::SparseMatrix> matrix;
+  };
+
+
+    class SchurComplement : public Subscriptor
+    {
+    public:
+      SchurComplement(
+        const TrilinosWrappers::BlockSparseMatrix &system_matrix,
+        const InverseMatrix &A_inverse)
+         : system_matrix(&system_matrix)
+      , A_inverse(&A_inverse)
+      , tmp1(complete_index_set(system_matrix.block(0, 0).m()))
+      , tmp2(complete_index_set(system_matrix.block(0, 0).m()))
+      , tmp3(complete_index_set(system_matrix.block(1, 1).m()))
+      , tmp4(complete_index_set(system_matrix.block(1, 1).m()))
+
+      {std::cout<<"system_matrix.block(0, 0).m() "<<system_matrix.block(0, 0).m()<<" system_matrix.block(1, 1).m() "<<system_matrix.block(1, 1).m()<<std::endl;}
+
+      void vmult(TrilinosWrappers::MPI::Vector &dst, const TrilinosWrappers::MPI::Vector &src) const
+      {
+      system_matrix->block(0, 1).vmult(tmp1, src);
+      A_inverse->vmult(tmp2, tmp1);
+      system_matrix->block(1, 0).vmult(tmp3, tmp2);
+      //dst = tmp3;
+       system_matrix->block(1, 1).vmult(tmp4, src);
+       dst = tmp3- tmp4;
+   /*   std::cout<<"---------src----------"<<std::endl;
+      src.print(std::cout);      
+      std::cout<<"---------tmp1----------"<<std::endl;
+      tmp1.print(std::cout);
+      std::cout<<"---------tmp2----------"<<std::endl;
+      tmp2.print(std::cout);
+      std::cout<<"---------dst----------"<<std::endl;
+      dst.print(std::cout);
+      std::cout<<std::endl<<"***************************"<<std::endl<<std::endl;*/
+      }
+  
+  
+    private:
+      const SmartPointer<const TrilinosWrappers::BlockSparseMatrix> system_matrix;
+      const SmartPointer< const InverseMatrix> A_inverse;
+  
+      mutable TrilinosWrappers::MPI::Vector tmp1, tmp2, tmp3, tmp4;
+    };
+
+
+
+
+
+
 template <int dim, int dim_omega> class LDGPoissonProblem {
 
 public:
@@ -220,21 +298,21 @@ private:
 
   //parallel::distributed::Triangulation<dim> triangulation_mpi;
 
-  parallel::shared::Triangulation<dim> triangulation_mpi;
+  //parallel::shared::Triangulation<dim> triangulation_mpi;
 
-  Triangulation<dim> triangulation;
+  parallel::shared::Triangulation<dim> triangulation;
 
-  TrilinosWrappers::SparseMatrix system_matrix_mpi;
-  TrilinosWrappers::MPI::Vector solution_mpi;
-  TrilinosWrappers::MPI::Vector system_rhs_mpi;
+  TrilinosWrappers::BlockSparseMatrix system_matrix;
+  TrilinosWrappers::MPI::BlockVector solution;
+  TrilinosWrappers::MPI::BlockVector system_rhs;
 
 
 
-  TrilinosWrappers::BlockSparsityPattern sparsity_pattern_mpi;
+ //TrilinosWrappers::BlockSparsityPattern  dsp_block;
   BlockSparsityPattern block_sparsity_pattern;
-  BlockSparseMatrix<double> system_matrix;
+ /* BlockSparseMatrix<double> system_matrix;
   BlockVector<double> solution;
-  BlockVector<double> system_rhs;
+  BlockVector<double> system_rhs;*/
 
   // SparsityPattern sparsity_pattern;
 
@@ -246,6 +324,8 @@ private:
   DoFHandler<dim_omega> dof_handler_omega;
   Vector<double> solution_omega;
   Vector<double> solution_Omega;
+
+  std::vector<IndexSet> locally_owned_dofs_block;
 
   AffineConstraints<double> constraints;
 
@@ -289,10 +369,7 @@ LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
     const unsigned int degree, const unsigned int n_refine,
     Parameters parameters)
     : degree(degree), n_refine(n_refine),
-/*#if USE_MPI_ASSEMBLE
       triangulation(MPI_COMM_WORLD),
-#endif*/
-      triangulation_mpi(MPI_COMM_WORLD),
       fe_Omega(FESystem<dim>(FE_DGP<dim>(degree), dim), FE_DGP<dim>(degree)),
       dof_handler_Omega(triangulation),
       fe_omega(FESystem<dim_omega>(FE_DGP<dim_omega>(degree), dim_omega),
@@ -352,17 +429,27 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
   // Point<dim> p1 = Point<dim>(1, -std::sqrt(0.5) +offset,
   // -std::sqrt(0.5)+offset); Point<dim> p2 = Point<dim>(0,
   // std::sqrt(0.5)+offset, std::sqrt(0.5)+offset);
-
-  Point<dim> p1 =
+  Point<dim> p1, p2;
+if (dim == 3) {
+   p1 =
       Point<dim>(2 * half_length, -half_length + offset, -half_length + offset);
-  Point<dim> p2 =
+   p2 =
       Point<dim>(0, half_length + offset, half_length + offset);
   // std::cout<<"hyper_rectangle "<<p1 << " "<<p2<<std::endl;
-  GridGenerator::hyper_rectangle(triangulation, p1, p2);
+ 
+}
+ if (dim == 2) {
+   p1 =
+      Point<dim>(-half_length + offset, -half_length + offset);
+   p2 =
+      Point<dim>(half_length + offset, half_length + offset);
+
+ }
+ GridGenerator::hyper_rectangle(triangulation, p1, p2);
 #endif
 
+
   triangulation.refine_global(n_refine);
-  
 
   double max_diameter = 0.0;
  typename DoFHandler<dim>::active_cell_iterator
@@ -391,7 +478,9 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
               << max_diameter << radius << std::endl;
     //throw std::invalid_argument("MAX DIAMETER > RADIUS");
   }
-  triangulation_mpi.copy_triangulation(triangulation);
+
+
+
 //---------------omega-------------------------
   if (constructed_solution == 3)
     GridGenerator::hyper_cube(triangulation_omega, 0, 2 * half_length);
@@ -426,9 +515,13 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
   DoFRenumbering::component_wise(dof_handler_omega);
 
 #if USE_MPI_ASSEMBLE
-  IndexSet locally_owned_dofs = dof_handler_Omega.locally_owned_dofs();
-  IndexSet locally_relevant_dofs;
-  DoFTools::extract_locally_relevant_dofs(dof_handler_Omega, locally_relevant_dofs);
+  IndexSet locally_owned_dofs_Omega = dof_handler_Omega.locally_owned_dofs();
+  IndexSet locally_relevant_dofs_Omega;
+  DoFTools::extract_locally_relevant_dofs(dof_handler_Omega, locally_relevant_dofs_Omega);
+
+  IndexSet locally_owned_dofs_omega = dof_handler_omega.locally_owned_dofs();
+  IndexSet locally_relevant_dofs_omega;
+  DoFTools::extract_locally_relevant_dofs(dof_handler_Omega, locally_relevant_dofs_omega);
 #endif
 
   const std::vector<types::global_dof_index> dofs_per_component_Omega =
@@ -474,18 +567,9 @@ const std::vector<types::global_dof_index> dofs_per_component_omega =
   constraints.close();
   unsigned int n_dofs_total = dof_handler_Omega.n_dofs() + dof_handler_omega.n_dofs();
 
-
-     const std::vector<types::global_dof_index> block_sizes_Omega = {n_vector_field_Omega, n_potential_Omega};
-      BlockDynamicSparsityPattern                dsp_Omega(block_sizes_Omega, block_sizes_Omega);
-      DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, dsp_Omega);
-
-     const std::vector<types::global_dof_index> block_sizes_omega = {n_vector_field_omega, n_potential_omega};
-      BlockDynamicSparsityPattern                dsp_omega(block_sizes_omega, block_sizes_omega);
-      DoFTools::make_flux_sparsity_pattern(dof_handler_omega, dsp_omega);
-
-
 #if BLOCKS
 BlockDynamicSparsityPattern dsp_block(2,2);
+//dsp_block =  TrilinosWrappers::BlockSparsityPattern(2,2);
   dsp_block.block(0, 0).reinit(dof_handler_Omega.n_dofs(), dof_handler_Omega.n_dofs());
     // Block 1,1: Sparsity for the extra DoFs (global DoFs)
   dsp_block.block(1, 1).reinit(dof_handler_omega.n_dofs(), dof_handler_omega.n_dofs());
@@ -498,6 +582,14 @@ BlockDynamicSparsityPattern dsp_block(2,2);
   DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, dsp_block.block(0,0) );
   DoFTools::make_flux_sparsity_pattern(dof_handler_omega, dsp_block.block(1,1) );
 #else
+    const std::vector<types::global_dof_index> block_sizes_Omega = {n_vector_field_Omega, n_potential_Omega};
+    BlockDynamicSparsityPattern                dsp_Omega(block_sizes_Omega, block_sizes_Omega);
+    DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, dsp_Omega);
+
+    const std::vector<types::global_dof_index> block_sizes_omega = {n_vector_field_omega, n_potential_omega};
+    BlockDynamicSparsityPattern                dsp_omega(block_sizes_omega, block_sizes_omega);
+    DoFTools::make_flux_sparsity_pattern(dof_handler_omega, dsp_omega);
+
 //https://mathoverflow.net/questions/158437/how-to-write-this-result-successive-schur-complements-compose-nicely?rq=1
 //TODO macen das entries reinescrieben werden 
   BlockDynamicSparsityPattern dsp_block(4,4);
@@ -550,8 +642,17 @@ dofs_per_block.push_back(n_potential_omega);
   pcout<<"Sparsity "  <<dsp_block.n_rows()<<" "<<dsp_block.n_cols()<<std::endl;
 nof_degrees = dsp_block.n_rows();
 //marked_vertices.resize(triangulation.n_vertices());
-Point<dim> corner1 =  Point<dim>(0, - 2*radius , - 2*radius);
-Point<dim> corner2 =  Point<dim>(2 * half_length,  2*radius,  2*radius);
+Point<dim> corner1, corner2;
+if(dim == 3)
+{
+corner1 =  Point<dim>(0, - 2*radius , - 2*radius);
+corner2 =  Point<dim>(2 * half_length,  2*radius,  2*radius);
+}
+if(dim == 2)
+{
+corner1 =  Point<dim>( - 2*radius , - 2*radius);
+corner2 =  Point<dim>( 2*radius,  2*radius);
+}
 std::pair<Point<dim>, Point<dim>> corner_pair(corner1, corner2);     
     
 BoundingBox<dim> bbox(corner_pair);
@@ -560,18 +661,18 @@ const std::vector<Point<dim>> &vertices = triangulation.get_vertices();
 
 for (const auto &vertex : vertices)
 {
- 
+// marked_vertices.push_back(true);
     if (bbox.point_inside(vertex))
     {
        std::cout<<vertex<<" ";
       std::cout<<true<<" "<<std::endl;
-        marked_vertices.push_back(true);
+      marked_vertices.push_back(true);
     }
     else
     {
        /*std::cout<<vertex<<" ";
        std::cout<<false<<" "<<std::endl;*/
-marked_vertices.push_back(false);
+      marked_vertices.push_back(false);
     }
    
 }
@@ -650,7 +751,7 @@ marked_vertices.push_back(false);
 #if TEST
         auto cell_test_array = GridTools::find_all_active_cells_around_point(
             mapping, dof_handler_Omega, quadrature_point_test, 1e-10, marked_vertices);
-        // std::cout << "cell_test_array " << cell_test_array.size() <<
+       // std::cout << "cell_test_array " << cell_test_array.size() <<
         // std::endl;
 
         for (auto cellpair : cell_test_array)
@@ -769,11 +870,6 @@ marked_vertices.push_back(false);
       dsp_block, local_dofs, MPI_COMM_WORLD,
        relevant_dofs);*/
 
-
-
-
-
-
   /*
         Table<2, DoFTools::Coupling> coupling(dim + 1, dim + 1);
         for (unsigned int c = 0; c < dim + 1; ++c)
@@ -787,14 +883,19 @@ marked_vertices.push_back(false);
           dof_handler, coupling, dsp, constraints, false);*/
   
   block_sparsity_pattern.copy_from(dsp_block);     
-  std::cout<<"n_nonzero_elements "<<block_sparsity_pattern.n_nonzero_elements() <<std::endl;                                    
+  //std::cout<<"n_nonzero_elements "<<block_sparsity_pattern.n_nonzero_elements() <<std::endl;                                    
 
   //std::ofstream out("sparsity-pattern-2.svg");
   // block_sparsity_pattern.print_svg(out);
+  //dsp_block.compress();
 
-  system_matrix.reinit(block_sparsity_pattern);
-  solution.reinit(dofs_per_block);
-  system_rhs.reinit(dofs_per_block);
+  locally_owned_dofs_block.push_back(locally_owned_dofs_Omega);
+  if(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
+    locally_owned_dofs_block.push_back(locally_owned_dofs_omega);
+
+  system_matrix.reinit(locally_owned_dofs_block, block_sparsity_pattern, MPI_COMM_WORLD);
+  solution.reinit(locally_owned_dofs_block,  MPI_COMM_WORLD);
+  system_rhs.reinit(locally_owned_dofs_block,  MPI_COMM_WORLD);
 
 }
 
@@ -944,7 +1045,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
   }
 #endif
   // std::cout << "loop z uend" << std::endl;
-#if USE_MPI_ASSEMBLE
+#if 0// USE_MPI_ASSEMBLE
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
 #endif
@@ -993,7 +1094,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
       cell_omega = dof_handler_omega.begin_active(),
       endc_omega = dof_handler_omega.end();
 
-#if USE_MPI_ASSEMBLE
+#if 0// USE_MPI_ASSEMBLE
 // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 #endif
   {
@@ -1117,13 +1218,13 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
       //#endif
     }
   }
-#if USE_MPI_ASSEMBLE
+#if 0// USE_MPI_ASSEMBLE
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
 #endif
   // std::cout << "ende omega loop" << std::endl;
 #if 1
-#if USE_MPI_ASSEMBLE
+#if 0// USE_MPI_ASSEMBLE
 // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 #endif
   if (dim == 2 && constructed_solution == 3) {
@@ -1152,7 +1253,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
       auto cell_test = cellpair.first;
 #endif
 
-#if USE_MPI_ASSEMBLE
+#if 0// USE_MPI_ASSEMBLE
       if (cell_test != dof_handler_Omega.end())
         if (cell_test->is_locally_owned())
 #endif
@@ -1333,7 +1434,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
           auto cell_test = cellpair.first;
 #endif
 
-#if USE_MPI_ASSEMBLE
+#if 0// USE_MPI_ASSEMBLE
           if (cell_test != dof_handler_Omega.end())
             if (cell_test->is_locally_owned())
 #endif
@@ -1717,7 +1818,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
     }
   }
 
-#if USE_MPI_ASSEMBLE
+#if 0// USE_MPI_ASSEMBLE
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
 #endif
@@ -2009,7 +2110,8 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
     const ProductFunction<dim> connected_function_vectorfield(vectorfield_mask,
                                                               distance_weight);
 
-    Vector<double> cellwise_errors(triangulation.n_active_cells());
+    Vector<double> cellwise_errors_Q(triangulation.n_active_cells());
+    Vector<double> cellwise_errors_U(triangulation.n_active_cells());
     pcout << "triangulation.n_active_cells() " << triangulation.n_active_cells()
           << " dof_handler_Omega.n_dofs() " << dof_handler_Omega.n_dofs()
           << " dof_handler_Omega.n_locally_owned_dofs() "
@@ -2021,7 +2123,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
     const QIterated<dim> quadrature(q_trapez, degree + 2);
 
     VectorTools::integrate_difference(
-        dof_handler_Omega, solution_Omega, true_solution, cellwise_errors, quadrature,
+        dof_handler_Omega, solution_Omega, true_solution, cellwise_errors_U, quadrature,
         VectorTools::L2_norm, &connected_function_potential); //
     /*  std::cout<<"cellwise_error.size() "<<cellwise_errors.size()<<std::endl;
      for (unsigned int i = 0; i < cellwise_errors.size(); i++)
@@ -2033,12 +2135,12 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
     noc  // fpr #endif
     */
     potential_l2_error = VectorTools::compute_global_error(
-        triangulation, cellwise_errors, VectorTools::L2_norm);
+        triangulation, cellwise_errors_U, VectorTools::L2_norm);
     // std::cout<<"mpi  "<<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<< "
     // potential_l2_error "<<potential_l2_error<<std::endl;
     //  vectorfield Omega
     VectorTools::integrate_difference(
-        dof_handler_Omega, solution_Omega, true_solution, cellwise_errors, quadrature,
+        dof_handler_Omega, solution_Omega, true_solution, cellwise_errors_Q, quadrature,
         VectorTools::L2_norm, &connected_function_vectorfield);
 
     /*
@@ -2047,10 +2149,20 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
     noc #endif
     */
     vectorfield_l2_error = VectorTools::compute_global_error(
-        triangulation, cellwise_errors, VectorTools::L2_norm);
+        triangulation, cellwise_errors_Q, VectorTools::L2_norm);
 
     // std::cout<<"mpi  "<<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<< "
     // vectorfield_l2_error "<<vectorfield_l2_error<<std::endl;
+
+
+    DataOut<dim> data_out;
+    data_out.attach_triangulation(triangulation);
+    data_out.add_data_vector(cellwise_errors_Q, "Q");
+    data_out.add_data_vector(cellwise_errors_U, "U");
+    data_out.build_patches();
+    std::ofstream output("error.vtk");
+    data_out.write_vtk(output);
+
 
     std::cout<<"omega"<<std::endl;
     //-------------omega----------------------------------
@@ -2123,7 +2235,7 @@ template <int dim, int dim_omega>
 void LDGPoissonProblem<dim, dim_omega>::solve() {
   TimerOutput::Scope t(computing_timer, "solve");
   pcout << "Solving linear system... "<<std::endl;
-
+solution = system_rhs;
 /*Utilities::MPI::Partitioner partitioner(complete_index_set(nof_degrees),MPI_COMM_WORLD);
 const unsigned int local_size = partitioner.locally_owned_range().size();
 const unsigned int n_elements = partitioner.locally_owned_range().n_elements();
@@ -2136,13 +2248,10 @@ const auto locally_owned = partitioner.locally_owned_range();
 //std::cout<<locally_owned[1]<<std::endl;*/
 
 
-
-#if USE_MPI_ASSEMBLE
+#if 0//USE_MPI_ASSEMBLE
   std::cout<< dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" systemmatrix: m "<<system_matrix.m() << " n "<<system_matrix.n()<< " local size "<<system_matrix.local_size()
   <<" local range "<<system_matrix.local_range().first<<" "<<system_matrix.local_range().second<<std::endl;
-  IndexSet locally_relevant_dofs;
-  DoFTools::extract_locally_relevant_dofs(dof_handler_Omega, locally_relevant_dofs);
-  const IndexSet &locally_owned_dofs = dof_handler_Omega.locally_owned_dofs();
+
 
   TrilinosWrappers::MPI::Vector completely_distributed_solution(
       locally_owned_dofs, MPI_COMM_WORLD);
@@ -2177,20 +2286,66 @@ const auto locally_owned = partitioner.locally_owned_range();
 #else
    const unsigned int max_iterations = solution.size();
     SolverControl      solver_control(max_iterations);
-solution = system_rhs;
+
   Timer timer;
 
  SparseDirectUMFPACK A_direct;
- // A_direct.solve(system_matrix, solution);
+  //A_direct.solve(system_matrix, solution);
 
 
-    SolverGMRES<BlockVector<double>> solver_direct(solver_control);//
+  /*  SolverGMRES<BlockVector<double>> solver_direct(solver_control);//
    PreconditionJacobi<BlockSparseMatrix<double>> preconditioner;
    preconditioner.initialize(system_matrix, 1.0);
-   solver_direct.solve(system_matrix, solution, system_rhs, preconditioner);//PreconditionIdentity()
-  
+  solver_direct.solve(system_matrix, solution, system_rhs, preconditioner);//PreconditionIdentity()*/
+ /* SparseMatrix sparse_matrix;
+  sparse_matrix.reinit()*/
+
+  // SolverGMRES<TrilinosWrappers::MPI::BlockVector> solver_direct(solver_control);//
+  //TrilinosWrappers::PreconditionBlockJacobi preconditioner;
+  // preconditioner.initialize(system_matrix);
+  // solver_direct.solve(system_matrix, solution, system_rhs);//PreconditionIdentity() , preconditioner
+  const InverseMatrix A_inverse(system_matrix.block(0,0));
+  TrilinosWrappers::MPI::Vector tmp(solution.block(0));
+
+ 
+  TrilinosWrappers::MPI::Vector schur_rhs(solution.block(1));
+  A_inverse.vmult(tmp, system_rhs.block(0));
+  system_matrix.block(1, 0).vmult(schur_rhs, tmp);
+  schur_rhs -= system_rhs.block(1);
+  schur_rhs.print(std::cout);
+
+ SchurComplement schur_complement(system_matrix, A_inverse);
+
+
+  SolverControl solver_control1(solution.block(1).size());
+  SolverGMRES<TrilinosWrappers::MPI::Vector > solver(solver_control1);
+ 
+  /*SparseILU<double> preconditioner;
+  preconditioner.initialize(preconditioner_matrix.block(1, 1),
+                            SparseILU<double>::AdditionalData());
+
+  InverseMatrix<SparseMatrix<double>, SparseILU<double>> m_inverse(
+    preconditioner_matrix.block(1, 1), preconditioner);
+*/
+TrilinosWrappers::PreconditionILU preconditioner;
+  TrilinosWrappers::PreconditionILU::AdditionalData data;
+  preconditioner.initialize(system_matrix.block(1, 1), data);
+
+  solver.solve(schur_complement, solution.block(1),schur_rhs, preconditioner);
+
+
+  system_matrix.block(0, 1).vmult(tmp, solution.block(1));
+  tmp *= -1;
+  tmp += system_rhs.block(0);
+ 
+  A_inverse.vmult(solution.block(0), tmp);
+
 #if 0
+BlockVector<double> rhs =  BlockVector<double>(system_rhs);
+
 SparseDirectUMFPACK K_inv_umfpack;
+SparseMatrix<double> sparse_matrix;
+sparse_matrix.copy_from(system_matrix.block(0,0));
 K_inv_umfpack.initialize(system_matrix.block(0,0));
 
 auto K  = linear_operator(system_matrix.block(0,0));
@@ -2203,8 +2358,8 @@ auto C = linear_operator(system_matrix.block(1,0));
 SolverCG<Vector<double>> solver_cg(solver_control);
 SolverGMRES<Vector<double>> solver_gmres(solver_control);
 
-PreconditionJacobi<SparseMatrix<double>> preconditioner_K;
-preconditioner_K.initialize(system_matrix.block(0,0), 1.0);
+//PreconditionJacobi<SparseMatrix<double>> preconditioner_K;
+//preconditioner_K.initialize(sparse_matrix, 1.0);
 /*
 PreconditionBlockJacobi<SparseMatrix<double>> preconditioner_K;
 PreconditionBlockJacobi<SparseMatrix<double>>::AdditionalData data(fe_Omega.dofs_per_cell);
@@ -2227,20 +2382,39 @@ auto S = k - C * K_inv * Ct;
 auto S_inv = inverse_operator(S, solver_gmres, PreconditionIdentity());
  
 
-  
-  auto temp = system_rhs.block(1)- C * K_inv *system_rhs.block(0);
-solution.block(1) = S_inv * ( temp);
-solution.block(0) = K_inv * (system_rhs.block(0) - Ct * solution.block(1)); 
-#endif
 
-timer.stop();
-  std::cout << "done (" << timer.cpu_time() << "s)" << std::endl;
+auto temp = rhs.block(1)- C * K_inv * rhs.block(0);
+solution.block(1) = S_inv * ( temp);
+Vector<double> sol = Vector(solution.block(1));
+solution.block(0) = K_inv * (rhs.block(0) - Ct * sol);
+
+
+/*auto temp = system_rhs.block(1)- C * K_inv * system_rhs.block(0);
+solution.block(1) = S_inv * ( temp);
+solution.block(0) = K_inv * (system_rhs.block(0) - Ct * solution.block(1)); */
 #endif
+#endif
+#if 0
+      TrilinosWrappers::MPI::Vector tmp_Omega = solution.block(0);
+      TrilinosWrappers::MPI::Vector tmp_omega = solution.block(1);
+      TrilinosWrappers::SparseMatrix& K = system_matrix.block(0, 0);
+      TrilinosWrappers::SparseMatrix& k = system_matrix.block(1, 1);
+
+      TrilinosWrappers::SparseMatrix& Ct = system_matrix.block(0,1);
+      TrilinosWrappers::SparseMatrix& C = system_matrix.block(1,0);
+
+     TrilinosWrappers::MPI::Vector& f_Omega =  system_rhs.block(0);
+     TrilinosWrappers::MPI::Vector& f_omega =  system_rhs.block(0);
+
+#endif
+  timer.stop();
+  std::cout << "done (" << timer.cpu_time() << "s)" << std::endl;
+
 
   solution_Omega.reinit(dof_handler_Omega.n_dofs());
   for (unsigned int i = 0; i < dof_handler_Omega.n_dofs(); i++) {
     types::global_dof_index dof_index =  i;
-#if USE_MPI_ASSEMBLE
+#if 0// USE_MPI_ASSEMBLE
     if (locally_owned_dofs.is_element(dof_index))
 #endif
       solution_Omega[i] = solution[dof_index];
@@ -2249,13 +2423,13 @@ timer.stop();
   solution_omega.reinit(dof_handler_omega.n_dofs());
   for (unsigned int i = 0; i < dof_handler_omega.n_dofs(); i++) {
     types::global_dof_index dof_index = start_VectorField_omega + i;
-#if USE_MPI_ASSEMBLE
+#if 0// USE_MPI_ASSEMBLE
     if (locally_owned_dofs.is_element(dof_index))
 #endif
       solution_omega[i] = solution[dof_index];
   }
 
-#if USE_MPI_ASSEMBLE
+#if 0// USE_MPI_ASSEMBLE
   // solution_omega.compress(VectorOperation::add);//TODO scauen was es noc fpr
 #endif
 }
@@ -2267,27 +2441,21 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
   switch (dim) {
   case 1:
     solution_names.push_back("Q_x");
-    solution_names.push_back("q");
     solution_names.push_back("U");
-    solution_names.push_back("u");
 
     break;
 
   case 2:
     solution_names.push_back("Q_x");
     solution_names.push_back("Q_y");
-    solution_names.push_back("q");
     solution_names.push_back("U");
-    solution_names.push_back("u");
     break;
 
   case 3:
     solution_names.push_back("Q_x");
     solution_names.push_back("Q_y");
     solution_names.push_back("Q_z");
-    solution_names.push_back("q");
     solution_names.push_back("U");
-    solution_names.push_back("u");
     break;
 
   default:
@@ -2296,7 +2464,7 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
 
   DataOut<dim> data_out;
   data_out.attach_dof_handler(dof_handler_Omega);
-  data_out.add_data_vector(solution,
+  data_out.add_data_vector(solution_Omega,
                            solution_names); //, DataOut<dim>::type_cell_data
 
   data_out.build_patches(degree);
@@ -2308,7 +2476,6 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
   std::cout << "analytical solution" << std::endl;
   DoFHandler<dim> dof_handler_Lag(triangulation);
   FESystem<dim> fe_Lag(FESystem<dim>(FE_DGQ<dim>(degree), dim),
-                       FE_DGQ<dim>(degree), FE_DGQ<dim>(degree),
                        FE_DGQ<dim>(degree));
   dof_handler_Lag.distribute_dofs(fe_Lag);
   TrilinosWrappers::MPI::Vector solution_const;
@@ -2357,7 +2524,7 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   make_dofs();
   assemble_system();
   solve();
-  //output_results();
+  output_results();
   std::array<double, 4> results_array= compute_errors();
   return results_array;
 }
@@ -2402,8 +2569,8 @@ int main(int argc, char *argv[]) {
   std::cout << "dimension_Omega " << dimension_Omega << std::endl;
   const unsigned int n_r = 1;
   const unsigned int n_LA = 1;
-  double radii[n_r] = {0.01};
-  bool lumpedAverages[n_LA] = { true};
+  double radii[n_r] = {0.1};
+  bool lumpedAverages[n_LA] = { false};
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
   for (unsigned int rad = 0; rad < n_r; rad++) {
