@@ -21,7 +21,7 @@ const double z_l = 0.0;
 
 
 //https://math.libretexts.org/Bookshelves/Differential_Equations/Introduction_to_Partial_Differential_Equations_(Herman)/07%3A_Green%27s_Functions/7.05%3A_Greens_Functions_for_the_2D_Poisson_Equation
-constexpr unsigned int constructed_solution{3};   // 1:sin cos, 3: dangelo thesis log
+constexpr unsigned int constructed_solution{1};   // 1:sin cos, 3: dangelo thesis log
 
 
 template <int dim> double distance(Point<dim> point1, Point<dim> point2) {

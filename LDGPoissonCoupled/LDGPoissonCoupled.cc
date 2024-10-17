@@ -124,7 +124,7 @@ using namespace dealii;
 #define USE_LDG 0
 #define BLOCKS 1
 
-constexpr unsigned int dimension_Omega{3};
+constexpr unsigned int dimension_Omega{2};
 const FEValuesExtractors::Vector VectorField_omega(0);
 const FEValuesExtractors::Scalar Potential_omega(1);
 
@@ -148,23 +148,30 @@ struct Parameters {
   public:
     InverseMatrix(const TrilinosWrappers::SparseMatrix &m)
                       : matrix(&m)
-    {}
+    {
+      std::cout<<"m.local_size() "<<m.local_size()<<" m.m() "<<m.m()<<std::endl;
+    }
  
     void vmult(TrilinosWrappers::MPI::Vector       &dst,
                    const TrilinosWrappers::MPI::Vector &src) const
     {
     dst = 0;
-   /* SolverControl solver_control(src.size(), 1e-6 * src.l2_norm());
+    //std::cout<<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" src "<<std::endl;
+    //src.print(std::cout);
+  /*  SolverControl solver_control(src.size(), 1e-6 * src.l2_norm());
     TrilinosWrappers::SolverDirect solver(solver_control);
     solver.initialize(*matrix);
     solver.solve(dst,src);*/
- TrilinosWrappers::PreconditionILU preconditioner;
+TrilinosWrappers::PreconditionILU preconditioner;
   TrilinosWrappers::PreconditionILU::AdditionalData data;
   preconditioner.initialize(*matrix, data);
 
     SolverControl solver_control(src.size());//, 1e-7 * src.l2_norm());
-    TrilinosWrappers::SolverCG solver(solver_control);
+    TrilinosWrappers::SolverGMRES solver(solver_control);
     solver.solve(*matrix, dst,  src, preconditioner );
+    
+    //std::cout<<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" dst "<<std::endl;
+    //dst.print(std::cout);
     }
  
   private:
@@ -177,19 +184,44 @@ struct Parameters {
     public:
       SchurComplement(
         const TrilinosWrappers::BlockSparseMatrix &system_matrix,
-        const InverseMatrix &A_inverse)
+        const InverseMatrix &A_inverse, 
+        const TrilinosWrappers::MPI::BlockVector &block_vector)
          : system_matrix(&system_matrix)
-      , A_inverse(&A_inverse)
-      , tmp1(complete_index_set(system_matrix.block(0, 0).m()))
+        , A_inverse(&A_inverse)
+     /*, tmp1(complete_index_set(system_matrix.block(0, 0).m()))//TOD set size and rane corrcecly
       , tmp2(complete_index_set(system_matrix.block(0, 0).m()))
       , tmp3(complete_index_set(system_matrix.block(1, 1).m()))
-      , tmp4(complete_index_set(system_matrix.block(1, 1).m()))
+      , tmp4(complete_index_set(system_matrix.block(1, 1).m()))*/
+      , tmp1(block_vector.block(0))
+      , tmp2(block_vector.block(0))
+      , tmp3(block_vector.block(1))
+      , tmp4(block_vector.block(1))
 
-      {std::cout<<"system_matrix.block(0, 0).m() "<<system_matrix.block(0, 0).m()<<" system_matrix.block(1, 1).m() "<<system_matrix.block(1, 1).m()<<std::endl;}
+      {/*std::cout<<"system_matrix.block(0, 0).local_size() "<<system_matrix.block(0, 0).local_size()<<" system_matrix.block(1, 1).local_size() "<<system_matrix.block(1, 1).local_size()<<std::endl;
+      std::cout<<"system_matrix.block(0, 0).m()) "<<system_matrix.block(0, 0).m()<<" system_matrix.block(1, 1).m() "<<system_matrix.block(1, 1).m()<<std::endl;
+
+      std::cout<<"system_matrix.block(0, 1).local_size() "<<system_matrix.block(0, 1).local_size()<<" system_matrix.block(1, 0).local_size() "<<system_matrix.block(1, 0).local_size()<<std::endl;
+      std::cout<<"system_matrix.block(0, 1.m()) "<<system_matrix.block(0, 1).m()<<" system_matrix.block(1, 0).m() "<<system_matrix.block(1, 0).m()<<std::endl;
+
+      set1 = IndexSet(system_matrix.block(0, 0).m());
+      set1.add_range(system_matrix.block(0, 0).local_range().first, system_matrix.block(0, 0).local_range().second);
+
+      set2 = IndexSet(system_matrix.block(1, 1).m());
+      set2.add_range(system_matrix.block(1, 1).local_range().first, system_matrix.block(1,1).local_range().second);*/
+      }
 
       void vmult(TrilinosWrappers::MPI::Vector &dst, const TrilinosWrappers::MPI::Vector &src) const
       {
+     /* tmp1 = TrilinosWrappers::MPI::Vector(src);
+      tmp2 = TrilinosWrappers::MPI::Vector(src);
+
+      tmp3 = TrilinosWrappers::MPI::Vector(set2);
+      tmp4 = TrilinosWrappers::MPI::Vector(set2);*/
+      std::cout<<"---------1----------"<<src.size() <<" "<<src.local_size()<<" tmp1  "<<tmp1.size() <<" "<<tmp1.local_size() <<std::endl;
+
+
       system_matrix->block(0, 1).vmult(tmp1, src);
+      std::cout<<"---------2---------"<<std::endl;  
       A_inverse->vmult(tmp2, tmp1);
       system_matrix->block(1, 0).vmult(tmp3, tmp2);
       //dst = tmp3;
@@ -212,6 +244,7 @@ struct Parameters {
       const SmartPointer< const InverseMatrix> A_inverse;
   
       mutable TrilinosWrappers::MPI::Vector tmp1, tmp2, tmp3, tmp4;
+       IndexSet set1,set2;
     };
 
 
@@ -300,13 +333,13 @@ private:
 
   //parallel::shared::Triangulation<dim> triangulation_mpi;
 
-  parallel::shared::Triangulation<dim> triangulation;
+  parallel::distributed::Triangulation<dim> triangulation;
 
   TrilinosWrappers::BlockSparseMatrix system_matrix;
   TrilinosWrappers::MPI::BlockVector solution;
   TrilinosWrappers::MPI::BlockVector system_rhs;
 
-
+ TrilinosWrappers::MPI::Vector locally_relevant_solution_Omega;
 
  //TrilinosWrappers::BlockSparsityPattern  dsp_block;
   BlockSparsityPattern block_sparsity_pattern;
@@ -319,8 +352,8 @@ private:
   FESystem<dim> fe_Omega;
   DoFHandler<dim> dof_handler_Omega;
 
-  Triangulation<dim_omega> triangulation_omega;
-  //parallel::shared::Triangulation<dim_omega> triangulation_omega;
+  //Triangulation<dim_omega> triangulation_omega;
+  parallel::shared::Triangulation<dim_omega> triangulation_omega;
   FESystem<dim_omega> fe_omega;
   DoFHandler<dim_omega> dof_handler_omega;
   Vector<double> solution_omega;
@@ -331,8 +364,11 @@ private:
   IndexSet locally_owned_dofs_Omega;
   IndexSet locally_relevant_dofs_Omega;
 
-  IndexSet locally_owned_dofs_omega;
-  IndexSet locally_relevant_dofs_omega;
+  IndexSet locally_owned_dofs_omega_local;
+  IndexSet locally_relevant_dofs_omega_local;
+
+  IndexSet locally_owned_dofs_omega_global;
+  IndexSet locally_relevant_dofs_omega_global;
 
   IndexSet locally_owned_dofs_total;
   IndexSet locally_relevant_dofs_total;
@@ -383,7 +419,7 @@ LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
     Parameters parameters)
     : degree(degree), n_refine(n_refine),
       triangulation(MPI_COMM_WORLD),
-      //triangulation_omega(MPI_COMM_WORLD),
+      triangulation_omega(MPI_COMM_WORLD),
       fe_Omega(FESystem<dim>(FE_DGP<dim>(degree), dim), FE_DGP<dim>(degree)),
       dof_handler_Omega(triangulation),
       fe_omega(FESystem<dim_omega>(FE_DGP<dim_omega>(degree), dim_omega),
@@ -521,12 +557,12 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
   dof_handler_Omega.distribute_dofs(fe_Omega);
   const unsigned int dofs_per_cell = fe_Omega.dofs_per_cell;
   pcout << "dofs_per_cell " << dofs_per_cell << std::endl;
-  DoFRenumbering::component_wise(dof_handler_Omega);
+  //DoFRenumbering::component_wise(dof_handler_Omega);
 
   dof_handler_omega.distribute_dofs(fe_omega);
   const unsigned int dofs_per_cell_omega = fe_omega.dofs_per_cell;
   pcout << "dofs_per_cell_omega " << dofs_per_cell_omega << std::endl;
-  DoFRenumbering::component_wise(dof_handler_omega);
+ //DoFRenumbering::component_wise(dof_handler_omega);
 
 
   const std::vector<types::global_dof_index> dofs_per_component_Omega =
@@ -578,68 +614,86 @@ const std::vector<types::global_dof_index> dofs_per_component_omega =
   locally_relevant_dofs_Omega;
   DoFTools::extract_locally_relevant_dofs(dof_handler_Omega, locally_relevant_dofs_Omega);
 
-  locally_owned_dofs_omega = dof_handler_omega.locally_owned_dofs();
-  locally_relevant_dofs_omega;
-  DoFTools::extract_locally_relevant_dofs(dof_handler_omega, locally_relevant_dofs_omega);
+  locally_owned_dofs_omega_local = dof_handler_omega.locally_owned_dofs();
+  // if(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) != 0 )
+   //locally_owned_dofs_omega_local.clear();
+   
+  locally_owned_dofs_omega_global.set_size(locally_owned_dofs_omega_local.size());
+  locally_owned_dofs_omega_global.add_indices(locally_owned_dofs_omega_local,  dof_handler_Omega.n_dofs());
+  locally_relevant_dofs_omega_local;
+  DoFTools::extract_locally_relevant_dofs(dof_handler_omega, locally_relevant_dofs_omega_local);
+  locally_relevant_dofs_omega_global.set_size(locally_relevant_dofs_omega_local.size());
+  locally_relevant_dofs_omega_global.add_indices(locally_relevant_dofs_omega_local,  dof_handler_Omega.n_dofs());
 
- 
- // if(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
-  {
-    locally_owned_dofs_total.set_size(locally_owned_dofs_Omega.size() + locally_owned_dofs_omega.size());
-    locally_relevant_dofs_total.set_size(locally_relevant_dofs_Omega.size() + locally_relevant_dofs_omega.size());
-  }
- /* else
-  {
-    locally_owned_dofs_total.set_size(locally_owned_dofs_Omega.size());
-    locally_relevant_dofs_total.set_size(locally_relevant_dofs_Omega.size());
-  }*/
+
+
   locally_owned_dofs_block.push_back(locally_owned_dofs_Omega);
-  locally_owned_dofs_total.add_indices(locally_owned_dofs_Omega);
-  locally_relevant_dofs_block.push_back(locally_relevant_dofs_Omega);
-  locally_relevant_dofs_total.add_indices(locally_relevant_dofs_Omega);
+  locally_owned_dofs_block.push_back(locally_owned_dofs_omega_local);
 
+  locally_relevant_dofs_block.push_back(locally_relevant_dofs_Omega);
+  locally_relevant_dofs_block.push_back(locally_relevant_dofs_omega_local);
+
+
+
+  locally_owned_dofs_total.set_size(n_dofs_total);
+  locally_relevant_dofs_total.set_size(n_dofs_total);
+
+  locally_owned_dofs_total.add_indices(locally_owned_dofs_Omega);
+  locally_relevant_dofs_total.add_indices(locally_relevant_dofs_Omega);
   if(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
   {
-   locally_owned_dofs_block.push_back(locally_owned_dofs_omega);
-   locally_owned_dofs_total.add_indices(locally_owned_dofs_omega,  dof_handler_Omega.n_dofs());
 
-    locally_relevant_dofs_block.push_back(locally_relevant_dofs_omega);
-     locally_relevant_dofs_total.add_indices(locally_relevant_dofs_omega, dof_handler_Omega.n_dofs());
+   locally_owned_dofs_total.add_indices(locally_owned_dofs_omega_global);
+     locally_relevant_dofs_total.add_indices(locally_relevant_dofs_omega_global);
   }
 
   locally_owned_dofs_total.compress();
   locally_relevant_dofs_total.compress();
 
-  /*std::cout <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" locally_owned_dofs_Omega "<<  locally_owned_dofs_Omega.size()<<" elem "<<locally_owned_dofs_Omega.n_elements()<<std::endl;
+ /* 
+  std::cout <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" locally_owned_dofs_Omega "<<  locally_owned_dofs_Omega.size()<<" elem "<<locally_owned_dofs_Omega.n_elements()<<std::endl;
   for (auto index : locally_owned_dofs_Omega)
         std::cout << index << " ";
     std::cout << std::endl;
-  std::cout <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" locally_owned_dofs_omega "<<  locally_owned_dofs_omega.size()<<" elem "<<locally_owned_dofs_omega.n_elements()<< std::endl;
-  for (auto index : locally_owned_dofs_omega)
+  std::cout <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" locally_owned_dofs_omega_local "<<  locally_owned_dofs_omega_local.size()<<" elem "<<locally_owned_dofs_omega_local.n_elements()<< std::endl;
+  for (auto index : locally_owned_dofs_omega_local)
         std::cout << index << " ";
-    std::cout << std::endl;*/
+    std::cout << std::endl;
+    std::cout <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" locally_owned_dofs_omega_global "<<  locally_owned_dofs_omega_global.size()<<" elem "<<locally_owned_dofs_omega_global.n_elements()<< std::endl;
+  for (auto index : locally_owned_dofs_omega_global)
+        std::cout << index << " ";
+    std::cout << std::endl;
 
     std::cout <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" locally_owned_dofs_total "<<  locally_owned_dofs_total.size()<< " elem "<<locally_owned_dofs_total.n_elements()<<std::endl;
   for (auto index : locally_owned_dofs_total)
         std::cout << index << " ";
-    std::cout << std::endl;
+    std::cout << std::endl;*/
 
 std::cout <<"----------------------------------- "<<  std::endl;
- /* std::cout <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" locally_relevant_dofs_Omega "<<  locally_relevant_dofs_Omega.size()<<" elem "<<locally_relevant_dofs_Omega.n_elements()<< std::endl;
+ /*  std::cout <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" locally_relevant_dofs_Omega "<<  locally_relevant_dofs_Omega.size()<<" elem "<<locally_relevant_dofs_Omega.n_elements()<< std::endl;
   for (auto index : locally_relevant_dofs_Omega)
         std::cout << index << " ";
     std::cout << std::endl;
-  std::cout <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" locally_relevant_dofs_omega "<<  locally_relevant_dofs_omega.size()<<" elem "<<locally_relevant_dofs_omega.n_elements()<< std::endl;
-  for (auto index : locally_relevant_dofs_omega)
+ std::cout <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" locally_relevant_dofs_omega_local "<<  locally_relevant_dofs_omega_local.size()<<" elem "<<locally_relevant_dofs_omega_local.n_elements()<< std::endl;
+  for (auto index : locally_relevant_dofs_omega_local)
         std::cout << index << " ";
     std::cout << std::endl;*/
-
+/*
     std::cout <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" locally_relevant_dofs_total "<<  locally_relevant_dofs_total.size()<< " elem "<<locally_relevant_dofs_total.n_elements()<< std::endl;
   for (auto index : locally_relevant_dofs_total)
         std::cout << index << " ";
-    std::cout << std::endl;
+    std::cout << std::endl;*/
 #endif
-
+std::vector<unsigned int> dofs_per_block;
+#if BLOCKS
+dofs_per_block.push_back(dof_handler_Omega.n_dofs());
+dofs_per_block.push_back(dof_handler_omega.n_dofs());
+#else
+dofs_per_block.push_back(n_vector_field_Omega);
+dofs_per_block.push_back(n_potential_Omega);
+dofs_per_block.push_back(n_vector_field_omega);
+dofs_per_block.push_back(n_potential_omega);
+#endif
 #if BLOCKS
 BlockDynamicSparsityPattern dsp_block(2,2);
 //dsp_block =  TrilinosWrappers::BlockSparsityPattern(2,2);
@@ -652,7 +706,7 @@ BlockDynamicSparsityPattern dsp_block(2,2);
   dsp_block.block(1, 0).reinit(dof_handler_omega.n_dofs(), dof_handler_Omega.n_dofs());
 
 
-  DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, dsp_block.block(0,0) );
+  DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, dsp_block.block(0,0));//,  constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
   DoFTools::make_flux_sparsity_pattern(dof_handler_omega, dsp_block.block(1,1) );
 
  /* SparsityTools::distribute_sparsity_pattern(dsp_block.block(0,0),
@@ -660,13 +714,36 @@ BlockDynamicSparsityPattern dsp_block(2,2);
                                                  MPI_COMM_WORLD,
                                                  locally_relevant_dofs_Omega);*/
  /*SparsityTools::distribute_sparsity_pattern(dsp_block.block(1,1),
-                                                 locally_owned_dofs_omega,
+                                                 locally_owned_dofs_omega_local,
                                                  MPI_COMM_WORLD,
-                                                 locally_relevant_dofs_omega);*/
+                                                 locally_relevant_dofs_omega_local);*/
 /*SparsityTools::distribute_sparsity_pattern(dsp_block,
                                                  locally_owned_dofs_total,
                                                  MPI_COMM_WORLD,
                                                  locally_relevant_dofs_total);*/
+
+ /*TrilinosWrappers::BlockSparsityPattern sp_block(locally_owned_dofs_block,
+                                                locally_owned_dofs_block,
+                                                locally_relevant_dofs_block,
+                                                MPI_COMM_WORLD);*/
+//DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0), constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
+ // DoFTools::make_flux_sparsity_pattern(dof_handler_omega, sp_block.block(1,1),constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) );
+TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsityPattern(2,2);
+  sp_block.block(0, 0).reinit(locally_owned_dofs_Omega,locally_owned_dofs_Omega,locally_relevant_dofs_Omega,MPI_COMM_WORLD);
+
+    // Block 1,1: Sparsity for the extra DoFs (global DoFs)
+  sp_block.block(1, 1).reinit(locally_owned_dofs_omega_local,locally_owned_dofs_omega_local,locally_relevant_dofs_omega_local,MPI_COMM_WORLD);
+
+  // Block 0,1 and 1,0: Sparsity for connections between mesh-based and extra DoFs
+  sp_block.block(0, 1).reinit(locally_owned_dofs_Omega,locally_owned_dofs_omega_local,locally_relevant_dofs_Omega,MPI_COMM_WORLD);  // Block for coupling DoFs
+ 
+  sp_block.block(1, 0).reinit(locally_owned_dofs_omega_local,locally_owned_dofs_Omega,locally_relevant_dofs_omega_local,MPI_COMM_WORLD);
+ 
+
+  DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0),constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));//,  constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
+  DoFTools::make_flux_sparsity_pattern(dof_handler_omega, sp_block.block(1,1),constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) );
+  sp_block.collect_sizes();
+
 #else
     const std::vector<types::global_dof_index> block_sizes_Omega = {n_vector_field_Omega, n_potential_Omega};
     BlockDynamicSparsityPattern                dsp_Omega(block_sizes_Omega, block_sizes_Omega);
@@ -712,21 +789,7 @@ BlockDynamicSparsityPattern dsp_block(2,2);
 
 
 dsp_block.collect_sizes();
-
-std::vector<unsigned int> dofs_per_block;
-#if BLOCKS
-dofs_per_block.push_back(dof_handler_Omega.n_dofs());
-dofs_per_block.push_back(dof_handler_omega.n_dofs());
-#else
-dofs_per_block.push_back(n_vector_field_Omega);
-dofs_per_block.push_back(n_potential_Omega);
-dofs_per_block.push_back(n_vector_field_omega);
-dofs_per_block.push_back(n_potential_omega);
-#endif
-
-
-  pcout<<"Sparsity "  <<dsp_block.n_rows()<<" "<<dsp_block.n_cols()<<std::endl;
-nof_degrees = dsp_block.n_rows();
+ 
 
 
 #if COUPLED
@@ -988,16 +1051,27 @@ for (const auto &vertex : vertices)
         DoFTools::make_sparsity_pattern(
           dof_handler, coupling, dsp, constraints, false);*/
   
-  block_sparsity_pattern.copy_from(dsp_block);     
+  block_sparsity_pattern.copy_from(dsp_block);   
+
+    /*  sp_block.block(0, 0).compress();
+    sp_block.block(1, 1).compress();
+     sp_block.block(0, 1).compress();
+      sp_block.block(1, 0).compress();*/
+  sp_block.compress();
+
+   pcout<<"Sparsity "  <<sp_block.n_rows()<<" "<<sp_block.n_cols()<<std::endl;
+nof_degrees = dsp_block.n_rows();
   //std::cout<<"n_nonzero_elements "<<block_sparsity_pattern.n_nonzero_elements() <<std::endl;                                    
 
   //std::ofstream out("sparsity-pattern-2.svg");
-  // block_sparsity_pattern.print_svg(out);
-  //dsp_block.compress();
+  //sp_block.print_svg(out);
 
-  system_matrix.reinit(locally_owned_dofs_block, block_sparsity_pattern, MPI_COMM_WORLD);
-  solution.reinit(locally_owned_dofs_block,  MPI_COMM_WORLD);
-  system_rhs.reinit(locally_owned_dofs_block,  MPI_COMM_WORLD);
+  //system_matrix.reinit(locally_owned_dofs_block, block_sparsity_pattern, MPI_COMM_WORLD);
+  system_matrix.reinit(sp_block);
+  solution.reinit(locally_relevant_dofs_block,  MPI_COMM_WORLD);
+  system_rhs.reinit(locally_owned_dofs_block, locally_relevant_dofs_block,  MPI_COMM_WORLD, true);
+
+  locally_relevant_solution_Omega.reinit(locally_owned_dofs_Omega, locally_relevant_dofs_Omega,  MPI_COMM_WORLD);
   std::cout<<"Ende setup dof"<<std::endl;
 }
 
@@ -1199,6 +1273,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 #if 0// USE_MPI_ASSEMBLE
 // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 #endif
+  #if 0
   {
     TimerOutput::Scope t(computing_timer, "assembly - omega");
     pcout << "assemly - omega" << std::endl;
@@ -1207,6 +1282,9 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
       // unsigned int cell_id_omega = cell_omega->index();
       // std::cout<<cell_id_omega<<std::endl;
 
+    if (cell->is_locally_owned())
+
+    {
       local_matrix_omega = 0;
       local_vector_omega = 0;
 
@@ -1319,14 +1397,16 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
           local_vector_omega, local_dof_indices_omega, system_rhs);
       //#endif
     }
+    }
   }
+  #endif
 #if 0// USE_MPI_ASSEMBLE
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
 #endif
   // std::cout << "ende omega loop" << std::endl;
 #if 1
-#if 0// USE_MPI_ASSEMBLE
+#if 1// USE_MPI_ASSEMBLE
 // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 #endif
   if (dim == 2 && constructed_solution == 3) {
@@ -1536,7 +1616,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
           auto cell_test = cellpair.first;
 #endif
 
-#if 0// USE_MPI_ASSEMBLE
+#if 1// USE_MPI_ASSEMBLE
           if (cell_test != dof_handler_Omega.end())
             if (cell_test->is_locally_owned())
 #endif
@@ -1928,8 +2008,10 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
   // std::cout << "ende coupling loop" << std::endl;
 
   // std::cout << "set ii " << std::endl;
+  system_matrix.compress(VectorOperation::add);
+  system_rhs.compress(VectorOperation::add);
 
-  for (unsigned int i = 0; i < dof_handler_Omega.n_dofs(); i++) // dof_table.size()
+  for (unsigned int i = 0; i < dof_handler_Omega.n_dofs() + dof_handler_omega.n_dofs(); i++) // dof_table.size()
   {
     // if(dof_table[i].first.first == 1 || dof_table[i].first.first == 3)
     {
@@ -1939,10 +2021,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
       }
     }
   }
-/*#if USE_MPI_ASSEMBLE
-  system_matrix.compress(VectorOperation::add);
-  system_rhs.compress(VectorOperation::add);
-#endif*/
+
 }
 
 template <int dim, int dim_omega>
@@ -2091,6 +2170,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_flux_terms(
   const unsigned int n_face_points = fe_face_values.n_quadrature_points;
   const unsigned int dofs_this_cell = fe_face_values.dofs_per_cell;
   const unsigned int dofs_neighbor_cell = fe_neighbor_face_values.dofs_per_cell;
+ // std::cout<<"dofs_this_cell "<<dofs_this_cell <<" dofs_neighbor_cell "<<dofs_neighbor_cell<<std::endl;
   const unsigned int dofs_cell = dofs_this_cell;
   
   for (unsigned int q = 0; q < n_face_points; ++q) {
@@ -2225,7 +2305,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
     const QIterated<dim> quadrature(q_trapez, degree + 2);
 
     VectorTools::integrate_difference(
-        dof_handler_Omega, solution_Omega, true_solution, cellwise_errors_U, quadrature,
+        dof_handler_Omega, solution.block(0), true_solution, cellwise_errors_U, quadrature,
         VectorTools::L2_norm, &connected_function_potential); //
     /*  std::cout<<"cellwise_error.size() "<<cellwise_errors.size()<<std::endl;
      for (unsigned int i = 0; i < cellwise_errors.size(); i++)
@@ -2242,7 +2322,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
     // potential_l2_error "<<potential_l2_error<<std::endl;
     //  vectorfield Omega
     VectorTools::integrate_difference(
-        dof_handler_Omega, solution_Omega, true_solution, cellwise_errors_Q, quadrature,
+        dof_handler_Omega, solution.block(0), true_solution, cellwise_errors_Q, quadrature,
         VectorTools::L2_norm, &connected_function_vectorfield);
 
     /*
@@ -2268,14 +2348,16 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
 
     std::cout<<"omega"<<std::endl;
     //-------------omega----------------------------------
-    if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
+    //if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
       // if (locally_owned_dofs.is_element(dof_index)) TODO allgemeine MPI
       // sachen, auch wenn alle andere 0 sind
       const ComponentSelectFunction<dim_omega> potential_mask_omega(
           dim_omega, dim_omega + 1);
       const ComponentSelectFunction<dim_omega> vectorfield_mask_omega(
           std::make_pair(0, dim_omega), dim_omega + 1);
-      Vector<double> cellwise_errors_omega(
+      Vector<double> cellwise_errors_u(
+          triangulation_omega.n_active_cells());
+      Vector<double> cellwise_errors_q(
           triangulation_omega.n_active_cells());
       /*std::cout << "triangulation_omega.n_active_cells() " <<
          triangulation_omega.n_active_cells()
@@ -2293,12 +2375,12 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
       std::cout << std::endl;
 
       VectorTools::integrate_difference(
-          dof_handler_omega, solution_omega, true_solution_omega,
-          cellwise_errors_omega, quadrature_omega, VectorTools::L2_norm,
+          dof_handler_omega, solution.block(1), true_solution_omega,
+          cellwise_errors_u, quadrature_omega, VectorTools::L2_norm,
           &potential_mask_omega);
 
       potential_l2_error_omega = VectorTools::compute_global_error(
-          triangulation_omega, cellwise_errors_omega, VectorTools::L2_norm);
+          triangulation_omega, cellwise_errors_u, VectorTools::L2_norm);
 
       /*
        std::cout<<"cellwise_errors_omega_potential ";
@@ -2308,14 +2390,14 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
       */
 
       VectorTools::integrate_difference(
-          dof_handler_omega, solution_omega, true_solution_omega,
-          cellwise_errors_omega, quadrature_omega, VectorTools::L2_norm,
+          dof_handler_omega, solution.block(1), true_solution_omega,
+          cellwise_errors_q, quadrature_omega, VectorTools::L2_norm,
           &vectorfield_mask_omega);
 
       vectorfield_l2_error_omega = VectorTools::compute_global_error(
-          triangulation_omega, cellwise_errors_omega, VectorTools::L2_norm);
+          triangulation_omega, cellwise_errors_q, VectorTools::L2_norm);
 
-    } else {
+  /*  } else {
       potential_l2_error_omega = 0;
       vectorfield_l2_error_omega = 0;
     }
@@ -2326,11 +2408,16 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
         std::pow(potential_l2_error_omega, 2), MPI_COMM_WORLD);
     global_vectorfield_l2_error_omega = Utilities::MPI::sum(
         std::pow(vectorfield_l2_error_omega, 2), MPI_COMM_WORLD);
+        */
   }
 
-  return std::array<double, 4>{{potential_l2_error, vectorfield_l2_error,
+ /* return std::array<double, 4>{{potential_l2_error, vectorfield_l2_error,
                                 std::sqrt(global_potential_l2_error_omega),
-                                std::sqrt(global_vectorfield_l2_error_omega)}};
+                                std::sqrt(global_vectorfield_l2_error_omega)}};*/
+
+ return std::array<double, 4>{{potential_l2_error, vectorfield_l2_error,
+                                potential_l2_error_omega,
+                                vectorfield_l2_error_omega}};
 }
 
 template <int dim, int dim_omega>
@@ -2406,41 +2493,54 @@ const auto locally_owned = partitioner.locally_owned_range();
   //TrilinosWrappers::PreconditionBlockJacobi preconditioner;
   // preconditioner.initialize(system_matrix);
   // solver_direct.solve(system_matrix, solution, system_rhs);//PreconditionIdentity() , preconditioner
+        TrilinosWrappers::MPI::BlockVector completely_distributed_solution(
+        system_rhs);
+  completely_distributed_solution = solution;
+
+
   const InverseMatrix A_inverse(system_matrix.block(0,0));
-  TrilinosWrappers::MPI::Vector tmp(solution.block(0));
+
+  
+  TrilinosWrappers::MPI::Vector tmp(completely_distributed_solution.block(0));
 
  
-  TrilinosWrappers::MPI::Vector schur_rhs(solution.block(1));
+  TrilinosWrappers::MPI::Vector schur_rhs(system_rhs.block(1));
   A_inverse.vmult(tmp, system_rhs.block(0));
   system_matrix.block(1, 0).vmult(schur_rhs, tmp);
   schur_rhs -= system_rhs.block(1);
-  schur_rhs.print(std::cout);
+ // schur_rhs.print(std::cout);
 
- SchurComplement schur_complement(system_matrix, A_inverse);
+ SchurComplement schur_complement(system_matrix, A_inverse, system_rhs);
 
 
-  SolverControl solver_control1(solution.block(1).size());
+  SolverControl solver_control1(completely_distributed_solution.block(1).local_size());
   SolverGMRES<TrilinosWrappers::MPI::Vector > solver(solver_control1);
  
-  /*SparseILU<double> preconditioner;
-  preconditioner.initialize(preconditioner_matrix.block(1, 1),
-                            SparseILU<double>::AdditionalData());
+  // SparseILU<double> preconditioner;
+  // preconditioner.initialize(preconditioner_matrix.block(1, 1),
+  //                           SparseILU<double>::AdditionalData());
 
-  InverseMatrix<SparseMatrix<double>, SparseILU<double>> m_inverse(
-    preconditioner_matrix.block(1, 1), preconditioner);
-*/
+  // InverseMatrix<SparseMatrix<double>, SparseILU<double>> m_inverse(
+  //   preconditioner_matrix.block(1, 1), preconditioner);
+
 TrilinosWrappers::PreconditionILU preconditioner;
   TrilinosWrappers::PreconditionILU::AdditionalData data;
   preconditioner.initialize(system_matrix.block(1, 1), data);
 
-  solver.solve(schur_complement, solution.block(1),schur_rhs, preconditioner);
+  solver.solve(schur_complement, completely_distributed_solution.block(1),schur_rhs, preconditioner);
+  pcout<<"Schur complete "<<std::endl;
 
-
-  system_matrix.block(0, 1).vmult(tmp, solution.block(1));
+  system_matrix.block(0, 1).vmult(tmp, completely_distributed_solution.block(1));
   tmp *= -1;
   tmp += system_rhs.block(0);
  
-  A_inverse.vmult(solution.block(0), tmp);
+  A_inverse.vmult(completely_distributed_solution.block(0), tmp);
+
+ // A_inverse.vmult(completely_distributed_solution.block(0), system_rhs.block(0));//unkoppled
+
+    constraints.distribute(completely_distributed_solution);
+
+  solution = completely_distributed_solution;
 
 #if 0
 BlockVector<double> rhs =  BlockVector<double>(system_rhs);
@@ -2511,17 +2611,50 @@ solution.block(0) = K_inv * (system_rhs.block(0) - Ct * solution.block(1)); */
 #endif
   timer.stop();
   std::cout << "done (" << timer.cpu_time() << "s)" << std::endl;
+ 
+  int rank = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
+  std::cout<<"rank "<<rank<<std::endl;
+  /*if (rank == 0)
+    {
+        std::cout << "Full BlockVector (rank 0):" << std::endl;
 
+        for (unsigned int b = 0; b < 2; ++b)
+        {
+           const unsigned int global_size =  solution.block(b).size();
+            std::cout << "Block " << b << ":" << std::endl;
 
+            // Gather the full vector for this block
+            //std::vector<double> full_block(global_size);
+          // solution.block(b).gather(full_block);
+
+            // Print the full block
+            for (unsigned int i = 0; i < global_size; ++i)
+            {
+              //  std::cout << full_block[i] << " ";
+            }
+            std::cout << std::endl;
+        }
+    }*/
+
+/*
   solution_Omega.reinit(dof_handler_Omega.n_dofs());
   for (unsigned int i = 0; i < dof_handler_Omega.n_dofs(); i++) {
     types::global_dof_index dof_index =  i;
-#if 0// USE_MPI_ASSEMBLE
-    if (locally_owned_dofs.is_element(dof_index))
+#if 1// USE_MPI_ASSEMBLE
+    if (locally_owned_dofs_Omega.is_element(dof_index))
 #endif
+{
       solution_Omega[i] = solution[dof_index];
-  }
+      //std::cout<<solution[dof_index]<<" ";
+      }
+      else
+      {
+       // std::cout<< "**" <<" ";
+       }
+  }*/
 
+//  std::cout<<"------------------------" <<std::endl;
+/*
   solution_omega.reinit(dof_handler_omega.n_dofs());
   for (unsigned int i = 0; i < dof_handler_omega.n_dofs(); i++) {
     types::global_dof_index dof_index = start_VectorField_omega + i;
@@ -2530,7 +2663,7 @@ solution.block(0) = K_inv * (system_rhs.block(0) - Ct * solution.block(1)); */
 #endif
       solution_omega[i] = solution[dof_index];
   }
-
+*/
 #if 0// USE_MPI_ASSEMBLE
   // solution_omega.compress(VectorOperation::add);//TODO scauen was es noc fpr
 #endif
@@ -2566,16 +2699,107 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
 
   DataOut<dim> data_out;
   data_out.attach_dof_handler(dof_handler_Omega);
-  data_out.add_data_vector(solution_Omega,
-                           solution_names); //, DataOut<dim>::type_cell_data
-
+   /*    Postprocessor postprocessor(Utilities::MPI::this_mpi_process(
+                                    MPI_COMM_WORLD),
+                                  solution.min());*/
+  
+  data_out.add_data_vector(solution.block(0),
+                         solution_names); //, DataOut<dim>::type_cell_data  
+ 
+  Vector<float>   subdomain(triangulation.n_active_cells());
+  for (unsigned int i=0; i<subdomain.size(); ++i)
+      subdomain(i) = triangulation.locally_owned_subdomain();
+  
+  data_out.add_data_vector(subdomain,"subdomain");
   data_out.build_patches(degree);
-
-  std::ofstream output("solution.vtu");
+    const std::string filename = ("solution."   +
+                                  Utilities::int_to_string(
+                                    triangulation.locally_owned_subdomain(),4));
+  std::ofstream output((filename + ".vtu").c_str());
   data_out.write_vtu(output);
+    if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
+      {
+        std::vector<std::string>    filenames;
+        for (unsigned int i=0;
+             i < Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
+             i++)
+          {
+            filenames.push_back("solution." +
+                                Utilities::int_to_string(i,4) +
+                                ".vtu");
+          }
+        std::ofstream master_output("solution.pvtu");
+        data_out.write_pvtu_record(master_output, filenames);
+      }
 
-  // ------analytical solution--------
-  std::cout << "analytical solution" << std::endl;
+
+
+ 
+std::ofstream vtk_file;
+  const std::string filename1 = ("system_matrix."   +
+                                  Utilities::int_to_string(
+                                    triangulation.locally_owned_subdomain(),4));
+    vtk_file.open((filename1 + ".vtk").c_str());
+    
+    // VTK Header
+    vtk_file << "# vtk DataFile Version 3.0\n";
+    vtk_file << "Sparse Matrix visualization\n";
+    vtk_file << "ASCII\n";
+    vtk_file << "DATASET STRUCTURED_POINTS\n";
+    vtk_file << "DIMENSIONS " << system_matrix.block(0,0).m() << " " << system_matrix.block(0,0).n() << " 1\n";
+    vtk_file << "SPACING 1 1 1\n";
+    vtk_file << "ORIGIN 0 0 0\n";
+    vtk_file << "POINT_DATA " << system_matrix.block(0,0).m() * system_matrix.block(0,0).n() << "\n";
+    vtk_file << "SCALARS matrix_values float\n";
+    vtk_file << "LOOKUP_TABLE default\n";
+
+    // Write matrix entries
+    for (unsigned int i = 0; i < system_matrix.block(0,0).m(); ++i) {
+        for (unsigned int j = 0; j < system_matrix.block(0,0).n(); ++j) {
+            vtk_file << system_matrix.block(0,0).el(i, j) << "\n";
+        }
+    }
+
+    vtk_file.close();
+    
+    /*
+    std::cout<<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<< " solution "<<std::endl;
+    //solution.block(0).print(std::cout);
+for (unsigned int i = 0; i < dof_handler_Omega.n_dofs(); i++) {
+    types::global_dof_index dof_index =  i;
+    if (locally_owned_dofs_Omega.is_element(dof_index))
+      {
+      std::cout<<solution[dof_index]<<" ";
+      }
+      else
+      {
+        std::cout<< "**" <<" ";
+       }
+  }
+    std::cout<<std::endl;
+    std::cout<<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<< " system_rhs "<<std::endl;
+for (unsigned int i = 0; i < dof_handler_Omega.n_dofs(); i++) {
+    types::global_dof_index dof_index =  i;
+    if (locally_owned_dofs_Omega.is_element(dof_index))
+      {
+      std::cout<<system_rhs[dof_index]<<" ";
+      }
+      else
+      {
+        std::cout<< "**" <<" ";
+       }
+  }
+  std::cout<<std::endl;
+*/
+
+
+
+
+
+
+
+ // ------analytical solution--------
+ /* std::cout << "analytical solution" << std::endl;
   DoFHandler<dim> dof_handler_Lag(triangulation);
   FESystem<dim> fe_Lag(FESystem<dim>(FE_DGQ<dim>(degree), dim),
                        FE_DGQ<dim>(degree));
@@ -2592,9 +2816,9 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
   data_out_const.build_patches(degree);
 
   std::ofstream output_const("solution_const.vtu");
-  data_out_const.write_vtu(output_const);
+  data_out_const.write_vtu(output_const);*/
 
-  //-----omega-----------
+ /*  //-----omega-----------
   std::cout << "omega solution" << std::endl;
   std::vector<std::string> solution_names_omega;
   solution_names_omega.emplace_back("q");
@@ -2608,13 +2832,13 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
       DataComponentInterpretation::component_is_scalar);
 
   DataOut<dim_omega> data_out_omega;
-  data_out_omega.add_data_vector(dof_handler_omega, solution_omega,
+  data_out_omega.add_data_vector(dof_handler_omega, solution.block(1),
                                  solution_names_omega, interpretation_omega);
 
   data_out_omega.build_patches(degree);
 
   std::ofstream output_omega("solution_omega.vtu");
-  data_out_omega.write_vtu(output_omega);
+  data_out_omega.write_vtu(output_omega);*/
 }
 
 template <int dim, int dim_omega>
@@ -2626,7 +2850,7 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   make_dofs();
   assemble_system();
   solve();
-  output_results();
+ // output_results();
   std::array<double, 4> results_array= compute_errors();
   return results_array;
 }
@@ -2686,10 +2910,11 @@ int main(int argc, char *argv[]) {
       Parameters parameters;
       parameters.radius = radii[rad];
       parameters.lumpedAverage = lumpedAverages[LA];
-      const unsigned int p_degree[1] = {0};
+      const unsigned int p_degree[1] = {1};
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
-      const unsigned int refinement[1] = {2};
+    //  const unsigned int refinement[6] = {2,3,4,5,6,7};
+      const unsigned int refinement[3] = {3,4,5};
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
 
