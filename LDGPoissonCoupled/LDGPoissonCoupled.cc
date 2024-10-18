@@ -333,7 +333,7 @@ private:
 
   //parallel::shared::Triangulation<dim> triangulation_mpi;
 
-  parallel::distributed::Triangulation<dim> triangulation;
+  parallel::shared::Triangulation<dim> triangulation;
 
   TrilinosWrappers::BlockSparseMatrix system_matrix;
   TrilinosWrappers::MPI::BlockVector solution;
@@ -903,9 +903,8 @@ for (const auto &vertex : vertices)
         mapping, dof_handler_Omega, quadrature_point_test, 1e-10);
     auto end = std::chrono::high_resolution_clock::now();    // End time
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-  //  std::cout << "Time taken to execute find_all_active_cells_around_point: " << duration << " ms" << std::endl;
-       // std::cout << "cell_test_array " << cell_test_array.size() <<
-        // std::endl;
+std::cout << "Time taken to execute find_all_active_cells_around_point: " << duration << " ms" << std::endl;
+       std::cout << "cell_test_array " << cell_test_array.size() << std::endl;
    /* auto map = GridTools::vertex_to_cell_map(triangulation);
     auto start1 = std::chrono::high_resolution_clock::now();
     auto cell_test = GridTools::find_active_cell_around_point(
@@ -933,7 +932,7 @@ for (const auto &vertex : vertices)
             if (cell_test->is_locally_owned())
 #endif
             {
-              //	std::cout<<cell_test<<" ";
+              	std::cout<<cell_test<<" ";
               cell_test->get_dof_indices(local_dof_indices_test);
 
               Point<dim> quadrature_point_test_mapped_cell =
@@ -959,9 +958,8 @@ for (const auto &vertex : vertices)
         mapping, dof_handler_Omega, quadrature_point_trial, 1e-10, marked_vertices);
     auto end = std::chrono::high_resolution_clock::now();    // End time
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    //std::cout << "Time taken to execute find_all_active_cells_around_point_trial: " << duration << " ms" << std::endl;
-                //  std::cout << "cell_trial_array " << cell_trial_array.size()
-                //  << std::endl;
+    std::cout << "Time taken to execute find_all_active_cells_around_point_trial: " << duration << " ms" << std::endl;
+                  std::cout << "cell_trial_array " << cell_trial_array.size()  << std::endl;
 
                 for (auto cellpair_trial : cell_trial_array)
 #else
@@ -985,6 +983,8 @@ for (const auto &vertex : vertices)
                              j < local_dof_indices_trial.size(); j++) {
                           dsp_block.add(local_dof_indices_test[i],
                                   local_dof_indices_trial[j]);
+                          sp_block.add(local_dof_indices_test[i],
+                                  local_dof_indices_trial[j]);
                         }
                       }
 
@@ -993,6 +993,8 @@ for (const auto &vertex : vertices)
                         for (unsigned int j = 0;
                              j < local_dof_indices_trial.size(); j++) {
                           dsp_block.add(local_dof_indices_omega[i],
+                                  local_dof_indices_trial[j]);
+                        sp_block.add(local_dof_indices_omega[i],
                                   local_dof_indices_trial[j]);
                         }
                       }
@@ -1003,6 +1005,8 @@ for (const auto &vertex : vertices)
                              j < local_dof_indices_omega.size(); j++) {
                           dsp_block.add(local_dof_indices_test[i],
                                   local_dof_indices_omega[j]);
+                            sp_block.add(local_dof_indices_test[i],
+                                  local_dof_indices_omega[j]);
                         }
                       }
 
@@ -1011,18 +1015,19 @@ for (const auto &vertex : vertices)
                         for (unsigned int j = 0;
                              j < local_dof_indices_omega.size(); j++) {
                           dsp_block.add(local_dof_indices_omega[i],
-                                  local_dof_indices_omega[j]);
-                        }
+                                  local_dof_indices_omega[j]);                               
+                            sp_block.add(local_dof_indices_omega[i],
+                                  local_dof_indices_omega[j]);                        }
                       }
 
 
 
                    } 
-                   else
-                  std::cout<<"düdüm1"<<std::endl;
+                 /*  else
+                  std::cout<<"düdüm1"<<std::endl;*/
                   }
-                //else
-                 // std::cout<<"düdüm2"<<std::endl;
+                /*else
+                  std::cout<<"düdüm2"<<std::endl;*/
                 }
               }
             }
