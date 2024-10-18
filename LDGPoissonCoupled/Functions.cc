@@ -104,12 +104,12 @@ public:
 };
 template <int dim> class DistanceWeight : public Function<dim> {
 public:
-  DistanceWeight(double _alpha, double R = 0) : Function<dim>(dim + 1), alpha(_alpha), radius(R) {}
+  DistanceWeight(double _alpha, double R = 1, double h = 1) : Function<dim>(dim + 1), alpha(_alpha), radius(R), cell_size(h) {}
 
   virtual void vector_value(const Point<dim> &p,
                             Vector<double> &values) const override;
   private:
-    double alpha, radius;
+    double alpha, radius, cell_size;
 };
 template <int dim>
 double RightHandSide<dim>::value(const Point<dim> &p,
@@ -476,7 +476,7 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
 
   for(unsigned int i = 0; i < n_components; i++)
   {
-    if(r < radius)
+    if(r < cell_size)
     {
        values(i) = 0;
        //std::cout<<r<<std::endl;

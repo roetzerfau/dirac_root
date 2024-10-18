@@ -261,7 +261,7 @@ public:
   ~LDGPoissonProblem();
 
   std::array<double, 4> run();
-
+  double max_diameter;
 private:
   void make_grid();
 
@@ -328,7 +328,7 @@ private:
   double g;
   bool lumpedAverage;
 
-
+ 
   //parallel::distributed::Triangulation<dim> triangulation_mpi;
 
   //parallel::shared::Triangulation<dim> triangulation_mpi;
@@ -501,7 +501,7 @@ if (dim == 3) {
 
   triangulation.refine_global(n_refine);
 
-  double max_diameter = 0.0;
+ max_diameter = 0.0;
  typename DoFHandler<dim>::active_cell_iterator
         cell = dof_handler_Omega.begin_active(),
         endc = dof_handler_Omega.end();
@@ -794,7 +794,7 @@ dsp_block.collect_sizes();
 
 #if COUPLED
   {
-//marked_vertices.resize(triangulation.n_vertices());
+marked_vertices.resize(triangulation.n_vertices());
 Point<dim> corner1, corner2;
 if(dim == 3)
 {
@@ -812,20 +812,20 @@ BoundingBox<dim> bbox(corner_pair);
 
 const std::vector<Point<dim>> &vertices = triangulation.get_vertices();
 
-for (const auto &vertex : vertices)
+for (unsigned int i = 0; i < triangulation.n_vertices(); i++)
 {
 // marked_vertices.push_back(true);
-    if (bbox.point_inside(vertex))
+    if (bbox.point_inside(vertices[i]))
     {
        //std::cout<<vertex<<" ";
      // std::cout<<true<<" "<<std::endl;
-      marked_vertices.push_back(true);
+      marked_vertices[i] = true;
     }
     else
     {
        /*std::cout<<vertex<<" ";
        std::cout<<false<<" "<<std::endl;*/
-      marked_vertices.push_back(false);
+      marked_vertices[i] = false;
     }
    
 }
@@ -896,16 +896,16 @@ for (const auto &vertex : vertices)
         // test function
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
-
+//std::cout<<"concept "<<concepts::internal::is_triangulation_or_dof_handler<dof_handler_Omega> <<std::endl;
 #if TEST
       auto start = std::chrono::high_resolution_clock::now();  //Start time
     auto cell_test_array = GridTools::find_all_active_cells_around_point(
         mapping, dof_handler_Omega, quadrature_point_test, 1e-10);
     auto end = std::chrono::high_resolution_clock::now();    // End time
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-std::cout << "Time taken to execute find_all_active_cells_around_point: " << duration << " ms" << std::endl;
+/*std::cout << "Time taken to execute find_all_active_cells_around_point: " << duration << " ms" << std::endl;
        std::cout << "cell_test_array " << cell_test_array.size() << std::endl;
-   /* auto map = GridTools::vertex_to_cell_map(triangulation);
+   auto map = GridTools::vertex_to_cell_map(triangulation);
     auto start1 = std::chrono::high_resolution_clock::now();
     auto cell_test = GridTools::find_active_cell_around_point(
             mapping, dof_handler_Omega, quadrature_point_test, marked_vertices);
@@ -932,7 +932,7 @@ std::cout << "Time taken to execute find_all_active_cells_around_point: " << dur
             if (cell_test->is_locally_owned())
 #endif
             {
-              	std::cout<<cell_test<<" ";
+              //	std::cout<<cell_test<<" ";
               cell_test->get_dof_indices(local_dof_indices_test);
 
               Point<dim> quadrature_point_test_mapped_cell =
@@ -958,8 +958,8 @@ std::cout << "Time taken to execute find_all_active_cells_around_point: " << dur
         mapping, dof_handler_Omega, quadrature_point_trial, 1e-10, marked_vertices);
     auto end = std::chrono::high_resolution_clock::now();    // End time
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    std::cout << "Time taken to execute find_all_active_cells_around_point_trial: " << duration << " ms" << std::endl;
-                  std::cout << "cell_trial_array " << cell_trial_array.size()  << std::endl;
+ /*   std::cout << "Time taken to execute find_all_active_cells_around_point_trial: " << duration << " ms" << std::endl;
+                  std::cout << "cell_trial_array " << cell_trial_array.size()  << std::endl;*/
 
                 for (auto cellpair_trial : cell_trial_array)
 #else
@@ -2024,7 +2024,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
   // std::cout << "set ii " << std::endl;
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
-
+/*
   for (unsigned int i = 0; i < dof_handler_Omega.n_dofs() + dof_handler_omega.n_dofs(); i++) // dof_table.size()
   {
     // if(dof_table[i].first.first == 1 || dof_table[i].first.first == 3)
@@ -2035,7 +2035,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
       }
     }
   }
-
+*/
 }
 
 template <int dim, int dim_omega>
@@ -2304,7 +2304,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
     const ComponentSelectFunction<dim> vectorfield_mask(std::make_pair(0, dim),
                                                         dim + 1);
     double alpha = 0.5;
-    const DistanceWeight<dim> distance_weight(alpha, radius); //, radius
+    const DistanceWeight<dim> distance_weight(alpha, radius, max_diameter); //, radius
 
     const ProductFunction<dim> connected_function_potential(potential_mask,
                                                             distance_weight);
@@ -2926,10 +2926,10 @@ int main(int argc, char *argv[]) {
     return 0;
   */
   std::cout << "dimension_Omega " << dimension_Omega << std::endl;
-  const unsigned int n_r = 1;
-  const unsigned int n_LA = 1;
-  double radii[n_r] = {0.01};
-  bool lumpedAverages[n_LA] = { true};
+  const unsigned int n_r = 2;
+  const unsigned int n_LA = 2;
+  double radii[n_r] = { 0.01,0.1};
+  bool lumpedAverages[n_LA] = { false, true};
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
   for (unsigned int rad = 0; rad < n_r; rad++) {
@@ -2943,28 +2943,42 @@ int main(int argc, char *argv[]) {
       Parameters parameters;
       parameters.radius = radii[rad];
       parameters.lumpedAverage = lumpedAverages[LA];
-      const unsigned int p_degree[1] = {1};
+      const unsigned int p_degree[2] = {0,1};
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
     //  const unsigned int refinement[6] = {2,3,4,5,6,7};
-      const unsigned int refinement[3] = {3,4,5};
+      const unsigned int refinement[6] = {3,4, 5, 6,7,8};
 
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
 
       std::array<double, 4> results[p_degree_size][refinement_size];
+      double max_diameter[refinement_size];
 
       std::vector<std::string> solution_names = {"U_Omega", "Q_Omega",
                                                  "u_omega", "q_omega"};
+                                         
       for (unsigned int r = 0; r < refinement_size; r++) {
         for (unsigned int p = 0; p < p_degree_size; p++) {
           LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled =
               LDGPoissonProblem<dimension_Omega, 1>(p_degree[p], refinement[r],
                                                     parameters);
-          std::array<double, 4> arr = LDGPoissonCoupled.run();
+          std::array<double, 4> arr;
+          try
+          {
+            arr = LDGPoissonCoupled.run();
+          }
+          catch(const std::exception& e)
+          {
+           std::cout  << e.what() << std::endl;
+           arr = {42,42,42,42};
+          }
+          
+
           std::cout << rank << " Result_ende: U " << arr[0] << " Q " << arr[1]
                     << " u " << arr[2] << " q " << arr[3] << std::endl;
           results[p][r] = arr;
+          max_diameter[r] = LDGPoissonCoupled.max_diameter;
         }
       }
 
@@ -2984,12 +2998,15 @@ int main(int argc, char *argv[]) {
         for (unsigned int f = 0; f < solution_names.size(); f++) {
           myfile << solution_names[f] << "\n";
           myfile << "refinement/p_degree, ";
+          myfile << "diameter h;";
 
           csvfile << solution_names[f] << "\n";
           csvfile << "refinement/p_degree;";
+          csvfile << "diameter h;";
 
           std::cout << solution_names[f] << "\n";
           std::cout << "refinement/p_degree;";
+          std::cout << "diameter h;";
           for (unsigned int p = 0; p < p_degree_size; p++) {
             myfile << p_degree[p] << ",";
             csvfile << p_degree[p] << ";";
@@ -2999,9 +3016,9 @@ int main(int argc, char *argv[]) {
           csvfile << "\n";
           std::cout << "\n";
           for (unsigned int r = 0; r < refinement_size; r++) {
-            myfile << refinement[r] << ",";
-            csvfile << refinement[r] << ";";
-            std::cout << refinement[r] << ";";
+            myfile << refinement[r] << ";" << max_diameter[r] << ";";
+            csvfile << refinement[r] << ";" << max_diameter[r]  << ";";
+            std::cout << refinement[r] <<";" << max_diameter[r] << ";";
             for (unsigned int p = 0; p < p_degree_size; p++) {
               const double error = results[p][r][f];
 
