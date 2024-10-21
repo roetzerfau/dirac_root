@@ -18,6 +18,9 @@
 #include <deal.II/base/logstream.h>
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/base/timer.h>
+#include <deal.II/base/config.h>
+//#include <deal.II/distributed/cell_weights.h>
+#include <deal.II/distributed/tria.h>
 
 #include <deal.II/lac/full_matrix.h>
 #include <deal.II/lac/sparse_matrix.h>
@@ -109,6 +112,7 @@
 #include <iostream>
 #include <stdexcept>
 
+
 /*ic abe zwei mölickeiten:
 1. dofs auf stric zu den korrekten 3D cells zuorden in matrix und dann mit partition_custom_signal in trianulation, die kopplunsterme einem prozessor zuordnen (dann ist das Problem mit zu roßen radius verindert)
 2. add extra dof die nicts mit trianulation zu tun aben (klein omea dofs). die können dann von jedem prozessor zueriffen werden (falsch nur von dem ersten) */
@@ -123,6 +127,7 @@ using namespace dealii;
 #define USE_MPI_ASSEMBLE 1
 #define USE_LDG 0
 #define BLOCKS 1
+#define SOLVE_BLOCKWISE 0
 
 constexpr unsigned int dimension_Omega{3};
 const FEValuesExtractors::Vector VectorField_omega(0);
@@ -142,7 +147,29 @@ struct Parameters {
   bool lumpedAverage;
 };
 
+// To use the block preconditioners, you can define a preconditioner type that applies them
+class BlockPreconditioner : public dealii::Subscriptor {
+public:
+    BlockPreconditioner(TrilinosWrappers::PreconditionILU &precond0, TrilinosWrappers::PreconditionILU &precond1)
+        : preconditioner0(precond0), preconditioner1(precond1) {}
 
+    void vmult(TrilinosWrappers::MPI::BlockVector &dst, const TrilinosWrappers::MPI::BlockVector &src) const {
+        TrilinosWrappers::MPI::Vector temp0(dst.block(0));
+        TrilinosWrappers::MPI::Vector temp1(dst.block(1));
+
+        // Apply preconditioners to each block
+        preconditioner0.vmult(temp0, src.block(0));
+        preconditioner1.vmult(temp1, src.block(1));
+
+        // Combine the results
+        dst.block(0) = temp0;
+        dst.block(1) = temp1;
+    }
+
+private:
+    TrilinosWrappers::PreconditionILU &preconditioner0;
+    TrilinosWrappers::PreconditionILU &preconditioner1;
+};
   class InverseMatrix : public Subscriptor
   {
   public:
@@ -334,6 +361,11 @@ private:
   //parallel::shared::Triangulation<dim> triangulation_mpi;
 
   parallel::shared::Triangulation<dim> triangulation;
+  unsigned int cell_weight(
+      const typename  parallel::distributed::Triangulation<dim>::cell_iterator //parallel::distributed::
+                      &cell,
+      const typename  parallel::distributed::Triangulation<dim>::CellStatus status) const;
+  BoundingBox<dim> bbox;
 
   TrilinosWrappers::BlockSparseMatrix system_matrix;
   TrilinosWrappers::MPI::BlockVector solution;
@@ -406,7 +438,7 @@ private:
 
   const UpdateFlags update_flags = update_values | update_gradients |
                                    update_quadrature_points | update_JxW_values;
-  const UpdateFlags update_flags_coupling = update_values | update_JxW_values;
+  const UpdateFlags update_flags_coupling = update_values;
 
   const UpdateFlags face_update_flags = update_values | update_normal_vectors |
                                         update_quadrature_points |
@@ -452,7 +484,30 @@ LDGPoissonProblem<dim, dim_omega>::~LDGPoissonProblem() {
 template <int dim, int dim_omega>
 void LDGPoissonProblem<dim, dim_omega>::make_grid() {
   TimerOutput::Scope t(computing_timer, "make grid");
+  const std::vector<Point<dim>> &vertices = triangulation.get_vertices();
+  Point<dim> corner1, corner2;
+if(dim == 3)
+{
+corner1 =  Point<dim>(0, - 2*radius , - 2*radius);//2*radius
+corner2 =  Point<dim>(2 * half_length,  2*radius,  2*radius);//radius
+}
+if(dim == 2)
+{
+corner1 =  Point<dim>( - 2*radius , - 2*radius);
+corner2 =  Point<dim>( 2*radius,  2*radius);
+}
+std::pair<Point<dim>, Point<dim>> corner_pair(corner1, corner2);     
+    
+ bbox = BoundingBox<dim>(corner_pair);
+
   double offset = 0.0;
+
+ /* triangulation.signals.weight.connect(
+        [&](const typename parallel::distributed::Triangulation<
+              dim>::cell_iterator &cell,
+          const typename parallel::distributed::Triangulation<dim>::CellStatus status) -> unsigned int {
+          return this->cell_weight(cell, status);
+        });*/
 #if 0
   if (constructed_solution == 3) {
 
@@ -501,11 +556,43 @@ if (dim == 3) {
 
   triangulation.refine_global(n_refine);
 
+
+std::vector<unsigned int> cell_weights;
+SparsityPattern cell_connection_graph;
+DynamicSparsityPattern connectivity;
+std::vector<unsigned int> cells_inside_box;
+GridTools::get_face_connectivity_of_cells(triangulation,connectivity);
+
  max_diameter = 0.0;
  typename DoFHandler<dim>::active_cell_iterator
         cell = dof_handler_Omega.begin_active(),
         endc = dof_handler_Omega.end();
+  unsigned int cell_number = 0;
   for (; cell != endc; ++cell) {
+
+    bool cell_is_inside_box = false;
+    for (unsigned int v = 0; v < GeometryInfo<dim>::vertices_per_cell; ++v)
+    {
+    if (bbox.point_inside(vertices[cell->vertex_index(v)]))
+    {
+     cell_is_inside_box = true;
+    }
+    }
+    if(cell_is_inside_box)
+    {
+      cells_inside_box.push_back(cell_number);
+      //std::cout<<"cell_number "<<cell_number<<std::endl;
+       cell_weights.push_back(10);
+    }else
+    {
+        cell_weights.push_back(1);
+    }
+
+
+
+    if (cell->is_locally_owned())
+    {
+     //cell->set_subdomain_id(0);
     double cell_diameter = cell->diameter(); // Get the diameter of the cell^
     
     if (cell_diameter > max_diameter) {
@@ -521,10 +608,16 @@ if (dim == 3) {
         // 3) cell->face(face_no)->set_boundary_id(Neumann);
       }
     }
+    }
+    cell_number++;
   }
-  std::cout<<"max_diameter "<<max_diameter<<std::endl;
+  for(unsigned int row : cells_inside_box)
+    connectivity.add_entries(row, cells_inside_box.begin(), cells_inside_box.end());
+  cell_connection_graph.copy_from(connectivity);
+ GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_connection_graph,triangulation );
+  pcout<<"max_diameter "<<max_diameter<<" radius "<<radius<<std::endl;
   if (radius > max_diameter && !lumpedAverage) {
-    std::cout << "!!!!!!!!!!!!!! MAX DIAMETER > RADIUS !!!!!!!!!!!!!!!!"
+    pcout << "!!!!!!!!!!!!!! MAX DIAMETER > RADIUS !!!!!!!!!!!!!!!!"
               << max_diameter << radius << std::endl;
     //throw std::invalid_argument("MAX DIAMETER > RADIUS");
   }
@@ -542,12 +635,65 @@ if (dim == 3) {
         cell_omega = dof_handler_omega.begin_active(),
         endc_omega = dof_handler_omega.end();
   for (; cell_omega != endc_omega; ++cell_omega) {
+    if (cell_omega->is_locally_owned())
     for (unsigned int face_no = 0;
          face_no < GeometryInfo<dim_omega>::faces_per_cell; face_no++) {
       if (cell_omega->face(face_no)->at_boundary())
         cell_omega->face(face_no)->set_boundary_id(Dirichlet);
     }
   }
+
+//handle omega
+#if COUPLED
+marked_vertices.resize(triangulation.n_vertices());
+
+for (unsigned int i = 0; i < triangulation.n_vertices(); i++)
+{
+ 
+
+// marked_vertices.push_back(true);
+    if (bbox.point_inside(vertices[i]))
+    {
+       //std::cout<<vertex<<" ";
+     // std::cout<<true<<" "<<std::endl;
+      marked_vertices[i] = true;
+      //cell->set_subdomain_id(0);
+    }
+    else
+    {
+       /*std::cout<<vertex<<" ";
+       std::cout<<false<<" "<<std::endl;*/
+      marked_vertices[i] = false;
+    }
+    
+   
+}
+/*
+    cell = dof_handler_Omega.begin_active();
+     endc = dof_handler_Omega.end();
+    // unsigned int cell_number = 0;
+    for (; cell != endc; ++cell) 
+    {
+       if (cell->is_locally_owned())
+       {
+        // Check each vertex of the cell
+       for (unsigned int v = 0; v < GeometryInfo<dim>::vertices_per_cell; ++v)
+        {
+            // If the cell has the vertex with the given index
+            if (bbox.point_inside(vertices[cell->vertex_index(v)]))
+            {
+               cell->set_subdomain_id(0); // Processor 0
+            }
+        }
+        }
+    }
+*/
+// Enforce the new partitioning
+//triangulation.repartition();
+
+
+#endif
+
 }
 
 template <int dim, int dim_omega>
@@ -668,9 +814,9 @@ const std::vector<types::global_dof_index> dofs_per_component_omega =
   for (auto index : locally_owned_dofs_total)
         std::cout << index << " ";
     std::cout << std::endl;*/
-
+ /* 
 std::cout <<"----------------------------------- "<<  std::endl;
- /*  std::cout <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" locally_relevant_dofs_Omega "<<  locally_relevant_dofs_Omega.size()<<" elem "<<locally_relevant_dofs_Omega.n_elements()<< std::endl;
+ std::cout <<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" locally_relevant_dofs_Omega "<<  locally_relevant_dofs_Omega.size()<<" elem "<<locally_relevant_dofs_Omega.n_elements()<< std::endl;
   for (auto index : locally_relevant_dofs_Omega)
         std::cout << index << " ";
     std::cout << std::endl;
@@ -794,41 +940,6 @@ dsp_block.collect_sizes();
 
 #if COUPLED
   {
-marked_vertices.resize(triangulation.n_vertices());
-Point<dim> corner1, corner2;
-if(dim == 3)
-{
-corner1 =  Point<dim>(0, - radius , - radius);
-corner2 =  Point<dim>(2 * half_length,  radius,  radius);
-}
-if(dim == 2)
-{
-corner1 =  Point<dim>( - 2*radius , - 2*radius);
-corner2 =  Point<dim>( 2*radius,  2*radius);
-}
-std::pair<Point<dim>, Point<dim>> corner_pair(corner1, corner2);     
-    
-BoundingBox<dim> bbox(corner_pair);
-
-const std::vector<Point<dim>> &vertices = triangulation.get_vertices();
-
-for (unsigned int i = 0; i < triangulation.n_vertices(); i++)
-{
-// marked_vertices.push_back(true);
-    if (bbox.point_inside(vertices[i]))
-    {
-       //std::cout<<vertex<<" ";
-     // std::cout<<true<<" "<<std::endl;
-      marked_vertices[i] = true;
-    }
-    else
-    {
-       /*std::cout<<vertex<<" ";
-       std::cout<<false<<" "<<std::endl;*/
-      marked_vertices[i] = false;
-    }
-   
-}
     // coupling
 
     QGauss<dim> quadrature_formula(fe_Omega.degree + 1);
@@ -853,7 +964,7 @@ for (unsigned int i = 0; i < triangulation.n_vertices(); i++)
     } else {
       nof_quad_points = 1;
     }
-    std::cout<<"nof_quad_points "<<nof_quad_points<<std::endl;
+    pcout<<"nof_quad_points "<<nof_quad_points<<std::endl;
     typename DoFHandler<dim_omega>::active_cell_iterator
         cell_omega = dof_handler_omega.begin_active(),
         endc_omega = dof_handler_omega.end();
@@ -900,9 +1011,10 @@ for (unsigned int i = 0; i < triangulation.n_vertices(); i++)
 #if TEST
       auto start = std::chrono::high_resolution_clock::now();  //Start time
     auto cell_test_array = GridTools::find_all_active_cells_around_point(
-        mapping, dof_handler_Omega, quadrature_point_test, 1e-10);
+        mapping, dof_handler_Omega, quadrature_point_test, 1e-10, marked_vertices);
     auto end = std::chrono::high_resolution_clock::now();    // End time
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+
 /*std::cout << "Time taken to execute find_all_active_cells_around_point: " << duration << " ms" << std::endl;
        std::cout << "cell_test_array " << cell_test_array.size() << std::endl;
    auto map = GridTools::vertex_to_cell_map(triangulation);
@@ -917,6 +1029,7 @@ for (unsigned int i = 0; i < triangulation.n_vertices(); i++)
               << duration1 << " ms" << std::endl;*/
 
         for (auto cellpair : cell_test_array)
+
 #else
         auto cell_test = GridTools::find_active_cell_around_point(
             dof_handler_Omega, quadrature_point_test);
@@ -925,6 +1038,7 @@ for (unsigned int i = 0; i < triangulation.n_vertices(); i++)
         {
 #if TEST
           auto cell_test = cellpair.first;
+          
 #endif
 
 #if USE_MPI_ASSEMBLE
@@ -974,7 +1088,7 @@ for (unsigned int i = 0; i < triangulation.n_vertices(); i++)
                   if (cell_trial != dof_handler_Omega.end()) {
                     if (cell_trial->is_locally_owned() &&
                         cell_test->is_locally_owned()) {
-
+                      //std::cout<<cell_test<<" "<<cell_trial<<std::endl;
                       cell_trial->get_dof_indices(local_dof_indices_trial);
 
                       for (unsigned int i = 0;
@@ -1023,15 +1137,15 @@ for (unsigned int i = 0; i < triangulation.n_vertices(); i++)
 
 
                    } 
-                 /*  else
-                  std::cout<<"düdüm1"<<std::endl;*/
+                   else
+                  std::cout<<"düdüm1"<<std::endl;
                   }
-                /*else
-                  std::cout<<"düdüm2"<<std::endl;*/
+               // else
+                 // std::cout<<"düdüm2"<<std::endl;
                 }
               }
             }
-            // else
+         //  else
           // std::cout<<"düdüm3"<<std::endl;
         }
         // std::cout<<std::endl;
@@ -1077,7 +1191,7 @@ nof_degrees = dsp_block.n_rows();
   system_rhs.reinit(locally_owned_dofs_block, locally_relevant_dofs_block,  MPI_COMM_WORLD, true);
 
   locally_relevant_solution_Omega.reinit(locally_owned_dofs_Omega, locally_relevant_dofs_Omega,  MPI_COMM_WORLD);
-  std::cout<<"Ende setup dof"<<std::endl;
+  pcout<<"Ende setup dof"<<std::endl;
 }
 
 template <int dim, int dim_omega>
@@ -1418,7 +1532,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
 #endif
-  std::cout << "ende omega loop" << std::endl;
+  pcout << "ende omega loop" << std::endl;
 #if 1
 #if 1// USE_MPI_ASSEMBLE
 // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
@@ -2365,7 +2479,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
     data_out.write_vtk(output);
 */
 
-    std::cout<<"omega"<<std::endl;
+    //std::cout<<"omega"<<std::endl;
     //-------------omega----------------------------------
     //if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
       // if (locally_owned_dofs.is_element(dof_index)) TODO allgemeine MPI
@@ -2497,6 +2611,8 @@ const auto locally_owned = partitioner.locally_owned_range();
 
   Timer timer;
 
+
+
  SparseDirectUMFPACK A_direct;
   //A_direct.solve(system_matrix, solution);
 
@@ -2517,6 +2633,8 @@ const auto locally_owned = partitioner.locally_owned_range();
   completely_distributed_solution = solution;
 
 
+#if SOLVE_BLOCKWISE
+  pcout<<"solve blockwise"<<std::endl;
   const InverseMatrix A_inverse(system_matrix.block(0,0));
 
   
@@ -2556,7 +2674,27 @@ TrilinosWrappers::PreconditionILU preconditioner;
   A_inverse.vmult(completely_distributed_solution.block(0), tmp);
 
  // A_inverse.vmult(completely_distributed_solution.block(0), system_rhs.block(0));//unkoppled
+#else
+pcout<<"solve full"<<std::endl;
+// Preconditioners for each block
+TrilinosWrappers::PreconditionILU preconditioner_block_0;
+TrilinosWrappers::PreconditionILU preconditioner_block_1;
 
+// Initialize the preconditioners with the appropriate blocks of the matrix
+preconditioner_block_0.initialize(system_matrix.block(0, 0));  // ILU for block (0,0)
+preconditioner_block_1.initialize(system_matrix.block(1, 1));  // ILU for block (1,1)
+
+// Set up solver control
+SolverControl solver_control22(1000, 1e-12);
+SolverGMRES<TrilinosWrappers::MPI::BlockVector> solver(solver_control22);
+
+
+// Create the block preconditioner
+BlockPreconditioner block_preconditioner(preconditioner_block_0, preconditioner_block_1);
+
+// Solve the system using the block preconditioner
+solver.solve(system_matrix, completely_distributed_solution, system_rhs, block_preconditioner);
+#endif
     constraints.distribute(completely_distributed_solution);
 
   solution = completely_distributed_solution;
@@ -2629,10 +2767,10 @@ solution.block(0) = K_inv * (system_rhs.block(0) - Ct * solution.block(1)); */
 
 #endif
   timer.stop();
-  std::cout << "done (" << timer.cpu_time() << "s)" << std::endl;
+  pcout << "done (" << timer.cpu_time() << "s)" << std::endl;
  
   int rank = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
-  std::cout<<"rank "<<rank<<std::endl;
+  //std::cout<<"rank "<<rank<<std::endl;
   /*if (rank == 0)
     {
         std::cout << "Full BlockVector (rank 0):" << std::endl;
@@ -2831,7 +2969,7 @@ for (unsigned int i = 0; i < dof_handler_Omega.n_dofs(); i++) {
   data_out_const.write_vtu(output_const);*/
 
    //-----omega-----------
-  std::cout << "omega solution" << std::endl;
+ // std::cout << "omega solution" << std::endl;
   std::vector<std::string> solution_names_omega;
   solution_names_omega.emplace_back("q");
   solution_names_omega.emplace_back("u");
@@ -2872,6 +3010,23 @@ for (unsigned int i = 0; i < dof_handler_Omega.n_dofs(); i++) {
 
 
 
+}
+template <int dim, int dim_omega>
+  unsigned int LDGPoissonProblem<dim, dim_omega>::cell_weight(
+    const typename parallel::distributed::Triangulation<dim>::cell_iterator //parallel::distributed::
+                    &cell, const typename parallel::distributed::Triangulation<dim>::CellStatus status) const
+  {
+    const std::vector<Point<dim>> &vertices = triangulation.get_vertices();
+  for (unsigned int v = 0; v < GeometryInfo<dim>::vertices_per_cell; ++v)
+  {
+      // If the cell has the vertex with the given index
+      if (bbox.point_inside(vertices[cell->vertex_index(v)]))
+      {
+        std::cout<<"hall "<<vertices[cell->vertex_index(v)]<<std::endl;
+          return 10;
+      }
+  }
+  return 1;
 }
 
 template <int dim, int dim_omega>
@@ -2928,10 +3083,14 @@ int main(int argc, char *argv[]) {
   std::cout << "dimension_Omega " << dimension_Omega << std::endl;
   const unsigned int n_r = 2;
   const unsigned int n_LA = 2;
-  double radii[n_r] = { 0.01,0.1};
-  bool lumpedAverages[n_LA] = { false, true};
+  double radii[n_r] = { 0.01, 0.1};
+  bool lumpedAverages[n_LA] = {false, true};
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
+
+  std::ofstream csvfile_unsrtd;
+  std::string filename = "convergence_results_unsrtd";
+  csvfile_unsrtd.open(filename + ".csv");
   for (unsigned int rad = 0; rad < n_r; rad++) {
     for (unsigned int LA = 0; LA < n_LA; LA++) {
 
@@ -2943,11 +3102,12 @@ int main(int argc, char *argv[]) {
       Parameters parameters;
       parameters.radius = radii[rad];
       parameters.lumpedAverage = lumpedAverages[LA];
-      const unsigned int p_degree[2] = {0,1};
+     // const unsigned int p_degree[2] = {0,1};
+      const unsigned int p_degree[1] = {1};
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
-    //  const unsigned int refinement[6] = {2,3,4,5,6,7};
-      const unsigned int refinement[6] = {3,4, 5, 6,7,8};
+      //const unsigned int refinement[3] = {3,4,5};
+     const unsigned int refinement[6] = {3,4, 5, 6,7,8};
 
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
@@ -2977,12 +3137,18 @@ int main(int argc, char *argv[]) {
 
           std::cout << rank << " Result_ende: U " << arr[0] << " Q " << arr[1]
                     << " u " << arr[2] << " q " << arr[3] << std::endl;
+                
+          if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
+            csvfile_unsrtd<<name<<";r "<<refinement[r]<<";p "<<p_degree[p]<< ";U " << arr[0] << ";Q " << arr[1]
+                    << ";u " << arr[2] << ";q " << arr[3] << "; \n";
+          }
           results[p][r] = arr;
           max_diameter[r] = LDGPoissonCoupled.max_diameter;
         }
       }
 
       if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
+        
         // std::cout << "--------" << std::endl;
         std::ofstream myfile;
         std::ofstream csvfile;
@@ -3052,5 +3218,10 @@ int main(int argc, char *argv[]) {
       }
     }
   }
+  csvfile_unsrtd.close();
   return 0;
 }
+
+
+
+
