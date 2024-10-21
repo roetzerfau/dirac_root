@@ -2355,7 +2355,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
     // std::cout<<"mpi  "<<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<< "
     // vectorfield_l2_error "<<vectorfield_l2_error<<std::endl;
 
-
+/*
     DataOut<dim> data_out;
     data_out.attach_triangulation(triangulation);
     data_out.add_data_vector(cellwise_errors_Q, "Q");
@@ -2363,7 +2363,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
     data_out.build_patches();
     std::ofstream output("error.vtk");
     data_out.write_vtk(output);
-
+*/
 
     std::cout<<"omega"<<std::endl;
     //-------------omega----------------------------------
