@@ -3344,7 +3344,7 @@ int main(int argc, char *argv[]) {
       parameters.radius = radii[rad];
       parameters.lumpedAverage = lumpedAverages[LA];
      // const unsigned int p_degree[2] = {0,1};
-      const unsigned int p_degree[2] = {1};
+      const unsigned int p_degree[1] = {1};
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
  //   const unsigned int refinement[3] = {3,4,5};
