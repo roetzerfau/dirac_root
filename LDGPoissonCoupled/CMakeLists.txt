@@ -1,5 +1,5 @@
 ##
-#  CMake script for the step-42 tutorial program:
+#  CMake script for the LDGPoissonCoupled program:
 ##
 
 # Set the name of the project and target:
@@ -17,6 +17,8 @@ SET(CLEAN_UP_FILES *.vtu *.pvtu *.visit)
 # Usually, you will not need to modify anything beyond this point...
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.3.0)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 FIND_PACKAGE(deal.II 9.3.2
   HINTS ${deal.II_DIR} ${DEAL_II_DIR} ../ ../../ $ENV{DEAL_II_DIR}

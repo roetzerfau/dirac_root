@@ -108,6 +108,15 @@
 #include <deal.II/lac/linear_operator_tools.h>
 #include <deal.II/lac/precondition_block.h>
 #include <deal.II/lac/solver_bicgstab.h>
+
+
+#include <deal.II/grid/tria.h>           // For Triangulation
+#include <deal.II/grid/grid_tools.h>      // For GridTools
+#include <deal.II/grid/grid_tools_cache.h>
+#include <deal.II/grid/grid_generator.h>   // For GridGenerator
+#include <deal.II/base/timer.h>           // For Timer (if needed)
+#include <deal.II/base/logstream.h>       // For logging
+
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -127,7 +136,7 @@ using namespace dealii;
 #define USE_MPI_ASSEMBLE 1
 #define USE_LDG 0
 #define BLOCKS 1
-#define SOLVE_BLOCKWISE 0
+#define SOLVE_BLOCKWISE 1
 
 constexpr unsigned int dimension_Omega{3};
 const FEValuesExtractors::Vector VectorField_omega(0);
@@ -150,7 +159,7 @@ struct Parameters {
 // To use the block preconditioners, you can define a preconditioner type that applies them
 class BlockPreconditioner : public dealii::Subscriptor {
 public:
-    BlockPreconditioner(TrilinosWrappers::PreconditionILU &precond0, TrilinosWrappers::PreconditionILU &precond1)
+    BlockPreconditioner(TrilinosWrappers::PreconditionBlockJacobi &precond0, TrilinosWrappers::PreconditionBlockJacobi &precond1)
         : preconditioner0(precond0), preconditioner1(precond1) {}
 
     void vmult(TrilinosWrappers::MPI::BlockVector &dst, const TrilinosWrappers::MPI::BlockVector &src) const {
@@ -167,8 +176,8 @@ public:
     }
 
 private:
-    TrilinosWrappers::PreconditionILU &preconditioner0;
-    TrilinosWrappers::PreconditionILU &preconditioner1;
+    TrilinosWrappers::PreconditionBlockJacobi &preconditioner0;
+    TrilinosWrappers::PreconditionBlockJacobi &preconditioner1;
 };
   class InverseMatrix : public Subscriptor
   {
@@ -276,6 +285,73 @@ TrilinosWrappers::PreconditionILU preconditioner;
 
 
 
+class SchurComplement_A_22 : public Subscriptor
+    {
+    public:
+      SchurComplement_A_22(
+        const TrilinosWrappers::BlockSparseMatrix &system_matrix,
+        const InverseMatrix &A_inverse, 
+        const TrilinosWrappers::MPI::BlockVector &block_vector)
+         : system_matrix(&system_matrix)
+        , A_inverse(&A_inverse)
+     /*, tmp1(complete_index_set(system_matrix.block(0, 0).m()))//TOD set size and rane corrcecly
+      , tmp2(complete_index_set(system_matrix.block(0, 0).m()))
+      , tmp3(complete_index_set(system_matrix.block(1, 1).m()))
+      , tmp4(complete_index_set(system_matrix.block(1, 1).m()))*/
+      , tmp1(block_vector.block(1))
+      , tmp2(block_vector.block(1))
+      , tmp3(block_vector.block(0))
+      , tmp4(block_vector.block(0))
+
+      {/*std::cout<<"system_matrix.block(0, 0).local_size() "<<system_matrix.block(0, 0).local_size()<<" system_matrix.block(1, 1).local_size() "<<system_matrix.block(1, 1).local_size()<<std::endl;
+      std::cout<<"system_matrix.block(0, 0).m()) "<<system_matrix.block(0, 0).m()<<" system_matrix.block(1, 1).m() "<<system_matrix.block(1, 1).m()<<std::endl;
+
+      std::cout<<"system_matrix.block(0, 1).local_size() "<<system_matrix.block(0, 1).local_size()<<" system_matrix.block(1, 0).local_size() "<<system_matrix.block(1, 0).local_size()<<std::endl;
+      std::cout<<"system_matrix.block(0, 1.m()) "<<system_matrix.block(0, 1).m()<<" system_matrix.block(1, 0).m() "<<system_matrix.block(1, 0).m()<<std::endl;
+
+      set1 = IndexSet(system_matrix.block(0, 0).m());
+      set1.add_range(system_matrix.block(0, 0).local_range().first, system_matrix.block(0, 0).local_range().second);
+
+      set2 = IndexSet(system_matrix.block(1, 1).m());
+      set2.add_range(system_matrix.block(1, 1).local_range().first, system_matrix.block(1,1).local_range().second);*/
+      }
+
+      void vmult(TrilinosWrappers::MPI::Vector &dst, const TrilinosWrappers::MPI::Vector &src) const
+      {
+     /* tmp1 = TrilinosWrappers::MPI::Vector(src);
+      tmp2 = TrilinosWrappers::MPI::Vector(src);
+
+      tmp3 = TrilinosWrappers::MPI::Vector(set2);
+      tmp4 = TrilinosWrappers::MPI::Vector(set2);*/
+      //std::cout<<"---------1----------"<<src.size() <<" "<<src.local_size()<<" tmp1  "<<tmp1.size() <<" "<<tmp1.local_size() <<std::endl;
+
+
+      system_matrix->block(1,0).vmult(tmp1, src);
+     // std::cout<<"---------2---------"<<std::endl;  
+      A_inverse->vmult(tmp2, tmp1);
+      system_matrix->block(0,1).vmult(tmp3, tmp2);
+      //dst = tmp3;
+       system_matrix->block(0, 0).vmult(tmp4, src);
+       dst = tmp3- tmp4;
+   /*   std::cout<<"---------src----------"<<std::endl;
+      src.print(std::cout);      
+      std::cout<<"---------tmp1----------"<<std::endl;
+      tmp1.print(std::cout);
+      std::cout<<"---------tmp2----------"<<std::endl;
+      tmp2.print(std::cout);
+      std::cout<<"---------dst----------"<<std::endl;
+      dst.print(std::cout);
+      std::cout<<std::endl<<"***************************"<<std::endl<<std::endl;*/
+      }
+  
+  
+    private:
+      const SmartPointer<const TrilinosWrappers::BlockSparseMatrix> system_matrix;
+      const SmartPointer< const InverseMatrix> A_inverse;
+  
+      mutable TrilinosWrappers::MPI::Vector tmp1, tmp2, tmp3, tmp4;
+       IndexSet set1,set2;
+    };
 
 
 
@@ -361,6 +437,7 @@ private:
   //parallel::shared::Triangulation<dim> triangulation_mpi;
 
   parallel::shared::Triangulation<dim> triangulation;
+  GridTools::Cache<dim, dim> cache;
   unsigned int cell_weight(
       const typename  parallel::distributed::Triangulation<dim>::cell_iterator //parallel::distributed::
                       &cell,
@@ -451,6 +528,7 @@ LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
     Parameters parameters)
     : degree(degree), n_refine(n_refine),
       triangulation(MPI_COMM_WORLD),
+      cache(triangulation),
       triangulation_omega(MPI_COMM_WORLD),
       fe_Omega(FESystem<dim>(FE_DGP<dim>(degree), dim), FE_DGP<dim>(degree)),
       dof_handler_Omega(triangulation),
@@ -970,6 +1048,8 @@ dsp_block.collect_sizes();
         endc_omega = dof_handler_omega.end();
 
     for (; cell_omega != endc_omega; ++cell_omega) {
+     // if (cell_omega->is_locally_owned())
+      {
       fe_values_omega.reinit(cell_omega);
       cell_omega->get_dof_indices(local_dof_indices_omega);
       dof_omega_to_Omega(dof_handler_omega, local_dof_indices_omega);
@@ -1009,24 +1089,48 @@ dsp_block.collect_sizes();
         quadrature_point_test = quadrature_point_coupling;
 //std::cout<<"concept "<<concepts::internal::is_triangulation_or_dof_handler<dof_handler_Omega> <<std::endl;
 #if TEST
+std::vector<Point<dim>> pa;
+//dealii::Triangulation<2,2> triangulation_; // For a 2D triangulation
+
+//GridTools::Cache<2, 2> cache = GridTools::Cache<2, 2>(triangulation_);
+//GridTools::Cache<dim,dim> cace(triangulation_);
+/*pa.push_back(quadrature_point_test);
+  auto start_c = std::chrono::high_resolution_clock::now();  //Start time
+auto [a,b,c] = GridTools::compute_point_locations(cache,pa);
+ auto end_c = std::chrono::high_resolution_clock::now();    // End time
+    auto duration_c = std::chrono::duration_cast<std::chrono::milliseconds>(end_c - start_c).count();
+auto ret_cell = a;
+//std::cout << "ret_cell " << ret_cell.size() << std::endl;
+std::cout<<ret_cell[0]<<" "<<ret_cell[1]<<std::endl;
+std::cout << "Time taken to execute cache: " << duration_c << " ms" << std::endl;*/
+/*
+
       auto start = std::chrono::high_resolution_clock::now();  //Start time
     auto cell_test_array = GridTools::find_all_active_cells_around_point(
         mapping, dof_handler_Omega, quadrature_point_test, 1e-10, marked_vertices);
     auto end = std::chrono::high_resolution_clock::now();    // End time
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
-/*std::cout << "Time taken to execute find_all_active_cells_around_point: " << duration << " ms" << std::endl;
+std::cout << "Time taken to execute find_all_active_cells_around_point: " << duration << " ms" << std::endl;
        std::cout << "cell_test_array " << cell_test_array.size() << std::endl;
-   auto map = GridTools::vertex_to_cell_map(triangulation);
+      std::cout<<cell_test_array[0].first<<" "<<cell_test_array[1].first<<" "<<cell_test_array[2].first<<" "<<cell_test_array[3].first<<std::endl;
+  */
+   
     auto start1 = std::chrono::high_resolution_clock::now();
-    auto cell_test = GridTools::find_active_cell_around_point(
-            mapping, dof_handler_Omega, quadrature_point_test, marked_vertices);
-    auto all_cells  = GridTools::find_all_active_cells_around_point(
-                       mapping, dof_handler_Omega, quadrature_point_test,1e-10 ,cell_test);
+   // auto cell_test = GridTools::find_active_cell_around_point(
+     //       mapping, dof_handler_Omega, quadrature_point_test, marked_vertices);
+        // auto cell_test = GridTools::find_active_cell_around_point(
+          // mapping, dof_handler_Omega, quadrature_point_test, cache.get_vertex_to_cell_map(), cache.get_vertex_to_cell_centers_directions());
+    auto cell_test_first = GridTools::find_active_cell_around_point(
+          cache, quadrature_point_test);
+ //   std::cout<< "cell_test_first " <<cell_first.first<<std::endl;
+   auto cell_test_array = find_all_active_cells_around_point<dim, dim>(
+                       mapping, triangulation, quadrature_point_test,1e-10 ,cell_test_first, &cache.get_vertex_to_cell_map());//, cache.get_vertex_to_cell_map()
+   // std::cout<<"all_cells " <<all_cells[0].first<<" "<<all_cells[1].first<<" "<<all_cells[2].first<<" "<<all_cells[3].first<<std::endl;
       auto end1 = std::chrono::high_resolution_clock::now();    // End time
     auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
     std::cout << "Time taken to execute find_active_cell_around_secondvariant: " 
-              << duration1 << " ms" << std::endl;*/
+              << duration1 << " ms" << std::endl;
 
         for (auto cellpair : cell_test_array)
 
@@ -1046,6 +1150,7 @@ dsp_block.collect_sizes();
             if (cell_test->is_locally_owned())
 #endif
             {
+              //auto start_st = std::chrono::high_resolution_clock::now();  //Start time
               //	std::cout<<cell_test<<" ";
               cell_test->get_dof_indices(local_dof_indices_test);
 
@@ -1059,7 +1164,9 @@ dsp_block.collect_sizes();
               FEValues<dim> fe_values_coupling_test(
                   fe_Omega, my_quadrature_formula_test, update_flags_coupling);
               fe_values_coupling_test.reinit(cell_test);
-
+ /*auto end_st = std::chrono::high_resolution_clock::now();    // End time
+    auto duration_st = std::chrono::duration_cast<std::chrono::milliseconds>(end_st - start_st).count();
+    std::cout << "Time taken to execute st: " << duration_st << " ms" << std::endl;*/
               // std::cout << "coupled " << std::endl;
               for (unsigned int q_avag = 0; q_avag < nof_quad_points;
                    q_avag++) {
@@ -1072,8 +1179,21 @@ dsp_block.collect_sizes();
         mapping, dof_handler_Omega, quadrature_point_trial, 1e-10, marked_vertices);
     auto end = std::chrono::high_resolution_clock::now();    // End time
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
- /*   std::cout << "Time taken to execute find_all_active_cells_around_point_trial: " << duration << " ms" << std::endl;
-                  std::cout << "cell_trial_array " << cell_trial_array.size()  << std::endl;*/
+    std::cout << "Time taken to execute find_all_active_cells_around_point_trial: " << duration << " ms" << std::endl;
+             //     std::cout << "cell_trial_array " << cell_trial_array.size()  << std::endl;*/
+/*
+    auto start1 = std::chrono::high_resolution_clock::now();
+    auto cell_trial_first = GridTools::find_active_cell_around_point(
+          cache, quadrature_point_trial);
+ //   std::cout<< "cell_trial_first " <<cell_trial_first.first<<std::endl;
+   auto cell_trial_array = find_all_active_cells_around_point<dim,dim>(
+                       mapping, triangulation, quadrature_point_trial,1e-10 ,cell_trial_first , &cache.get_vertex_to_cell_map());//, cache.get_vertex_to_cell_map()
+   // std::cout<<"all_cells " <<all_cells[0].first<<" "<<all_cells[1].first<<" "<<all_cells[2].first<<" "<<all_cells[3].first<<std::endl;
+      auto end1 = std::chrono::high_resolution_clock::now();    // End time
+    auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
+    std::cout << "Time taken to execute find_active_cell_around_secondvariant: " 
+              << duration1 << " ms" << std::endl;
+*/
 
                 for (auto cellpair_trial : cell_trial_array)
 #else
@@ -1085,10 +1205,13 @@ dsp_block.collect_sizes();
 #if TEST
                   auto cell_trial = cellpair_trial.first;
 #endif
+
                   if (cell_trial != dof_handler_Omega.end()) {
                     if (cell_trial->is_locally_owned() &&
                         cell_test->is_locally_owned()) {
                       //std::cout<<cell_test<<" "<<cell_trial<<std::endl;
+
+                  
                       cell_trial->get_dof_indices(local_dof_indices_trial);
 
                       for (unsigned int i = 0;
@@ -1131,7 +1254,8 @@ dsp_block.collect_sizes();
                           dsp_block.add(local_dof_indices_omega[i],
                                   local_dof_indices_omega[j]);                               
                             sp_block.add(local_dof_indices_omega[i],
-                                  local_dof_indices_omega[j]);                        }
+                                  local_dof_indices_omega[j]);                        
+                        }
                       }
 
 
@@ -1150,6 +1274,7 @@ dsp_block.collect_sizes();
         }
         // std::cout<<std::endl;
       }
+    }
     }
   }
 #endif
@@ -1685,6 +1810,8 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
     endc_omega = dof_handler_omega.end();
 
     for (; cell_omega != endc_omega; ++cell_omega) {
+      //if (cell_omega->is_locally_owned())
+      {
       fe_values_omega.reinit(cell_omega);
       cell_omega->get_dof_indices(local_dof_indices_omega);
       dof_omega_to_Omega(dof_handler_omega, local_dof_indices_omega);
@@ -2118,6 +2245,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                       }
                     }
                 }
+                   }
               }
 
 #endif
@@ -2635,6 +2763,7 @@ const auto locally_owned = partitioner.locally_owned_range();
 
 #if SOLVE_BLOCKWISE
   pcout<<"solve blockwise"<<std::endl;
+#if 0
   const InverseMatrix A_inverse(system_matrix.block(0,0));
 
   
@@ -2675,10 +2804,53 @@ TrilinosWrappers::PreconditionILU preconditioner;
 
  // A_inverse.vmult(completely_distributed_solution.block(0), system_rhs.block(0));//unkoppled
 #else
+pcout<<"A22 Schur"<<std::endl;
+const InverseMatrix A_inverse(system_matrix.block(1,1));
+
+  
+  TrilinosWrappers::MPI::Vector tmp(completely_distributed_solution.block(1));
+
+ 
+  TrilinosWrappers::MPI::Vector schur_rhs(system_rhs.block(0));
+  A_inverse.vmult(tmp, system_rhs.block(1));
+  system_matrix.block(0, 1).vmult(schur_rhs, tmp);
+  schur_rhs -= system_rhs.block(0);
+ // schur_rhs.print(std::cout);
+
+ SchurComplement_A_22 schur_complement(system_matrix, A_inverse, system_rhs);
+
+
+  SolverControl solver_control1(1000);//completely_distributed_solution.block(1).local_size()
+  SolverGMRES<TrilinosWrappers::MPI::Vector > solver(solver_control1);
+ 
+  // SparseILU<double> preconditioner;
+  // preconditioner.initialize(preconditioner_matrix.block(1, 1),
+  //                           SparseILU<double>::AdditionalData());
+
+  // InverseMatrix<SparseMatrix<double>, SparseILU<double>> m_inverse(
+  //   preconditioner_matrix.block(1, 1), preconditioner);
+
+TrilinosWrappers::PreconditionILU preconditioner;
+  TrilinosWrappers::PreconditionILU::AdditionalData data;
+  preconditioner.initialize(system_matrix.block(0, 0), data);
+
+  solver.solve(schur_complement, completely_distributed_solution.block(0),schur_rhs, preconditioner);
+  pcout<<"Schur complete "<<std::endl;
+
+  system_matrix.block(1, 0).vmult(tmp, completely_distributed_solution.block(0));
+  tmp *= -1;
+  tmp += system_rhs.block(1);
+ 
+  A_inverse.vmult(completely_distributed_solution.block(1), tmp);
+
+ // A_inverse.vmult(completely_distributed_solution.block(0), system_rhs.block(0));//unkoppled
+
+#endif
+#else
 pcout<<"solve full"<<std::endl;
 // Preconditioners for each block
-TrilinosWrappers::PreconditionILU preconditioner_block_0;
-TrilinosWrappers::PreconditionILU preconditioner_block_1;
+TrilinosWrappers::PreconditionBlockJacobi preconditioner_block_0;
+TrilinosWrappers::PreconditionBlockJacobi preconditioner_block_1;//PreconditionILU
 
 // Initialize the preconditioners with the appropriate blocks of the matrix
 preconditioner_block_0.initialize(system_matrix.block(0, 0));  // ILU for block (0,0)
@@ -3084,7 +3256,7 @@ int main(int argc, char *argv[]) {
   const unsigned int n_r = 2;
   const unsigned int n_LA = 2;
   double radii[n_r] = { 0.01, 0.1};
-  bool lumpedAverages[n_LA] = {false, true};
+  bool lumpedAverages[n_LA] = { true,false};
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
 
@@ -3106,8 +3278,8 @@ int main(int argc, char *argv[]) {
       const unsigned int p_degree[1] = {1};
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
-      //const unsigned int refinement[3] = {3,4,5};
-     const unsigned int refinement[6] = {3,4, 5, 6,7,8};
+    const unsigned int refinement[1] = {4};
+  //   const unsigned int refinement[6] = {3,4, 5, 6,7,8};
 
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
