@@ -1103,7 +1103,7 @@ auto ret_cell = a;
 //std::cout << "ret_cell " << ret_cell.size() << std::endl;
 std::cout<<ret_cell[0]<<" "<<ret_cell[1]<<std::endl;
 std::cout << "Time taken to execute cache: " << duration_c << " ms" << std::endl;*/
-/*
+
 
       auto start = std::chrono::high_resolution_clock::now();  //Start time
     auto cell_test_array = GridTools::find_all_active_cells_around_point(
@@ -1114,8 +1114,8 @@ std::cout << "Time taken to execute cache: " << duration_c << " ms" << std::endl
 std::cout << "Time taken to execute find_all_active_cells_around_point: " << duration << " ms" << std::endl;
        std::cout << "cell_test_array " << cell_test_array.size() << std::endl;
       std::cout<<cell_test_array[0].first<<" "<<cell_test_array[1].first<<" "<<cell_test_array[2].first<<" "<<cell_test_array[3].first<<std::endl;
-  */
-   
+  
+   /*
     auto start1 = std::chrono::high_resolution_clock::now();
    // auto cell_test = GridTools::find_active_cell_around_point(
      //       mapping, dof_handler_Omega, quadrature_point_test, marked_vertices);
@@ -1131,7 +1131,7 @@ std::cout << "Time taken to execute find_all_active_cells_around_point: " << dur
     auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
     std::cout << "Time taken to execute find_active_cell_around_secondvariant: " 
               << duration1 << " ms" << std::endl;
-
+*/
         for (auto cellpair : cell_test_array)
 
 #else
