@@ -13,7 +13,7 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 0
+#define COUPLED 1
 #define TEST 1
 
 using namespace dealii;

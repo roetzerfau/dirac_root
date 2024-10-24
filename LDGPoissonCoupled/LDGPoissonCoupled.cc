@@ -2,7 +2,7 @@
 // kozlow point
 //  @sect3{LDGPoisson.cc}
 //  The code begins as per usual with a long list of the the included
-//  files from the deal.ii library.
+//  files from the deal.ii library
 
 
 // step_55 step_32 step_40 
@@ -116,6 +116,9 @@
 #include <deal.II/grid/grid_generator.h>   // For GridGenerator
 #include <deal.II/base/timer.h>           // For Timer (if needed)
 #include <deal.II/base/logstream.h>       // For logging
+
+//#include <boost/archive/text_oarchive.hpp>
+//#include <boost/archive/text_iarchive.hpp>
 
 #include <fstream>
 #include <iostream>
@@ -432,7 +435,7 @@ private:
   bool lumpedAverage;
 
  
-  //parallel::distributed::Triangulation<dim> triangulation_mpi;
+  //parallel::distributed::Triangulation<dim> triangulation_dist;
 
   //parallel::shared::Triangulation<dim> triangulation_mpi;
 
@@ -528,6 +531,7 @@ LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
     Parameters parameters)
     : degree(degree), n_refine(n_refine),
       triangulation(MPI_COMM_WORLD),
+      //triangulation_dist(MPI_COMM_WORLD),
       cache(triangulation),
       triangulation_omega(MPI_COMM_WORLD),
       fe_Omega(FESystem<dim>(FE_DGP<dim>(degree), dim), FE_DGP<dim>(degree)),
@@ -632,6 +636,7 @@ if (dim == 3) {
 #endif
 
 
+  
   triangulation.refine_global(n_refine);
 
 
@@ -709,9 +714,18 @@ GridTools::get_face_connectivity_of_cells(triangulation,connectivity);
               << max_diameter << radius << std::endl;
     //throw std::invalid_argument("MAX DIAMETER > RADIUS");
   }
-
-
-
+/*
+const std::string filename = "bla";
+//triangulation.save(file_basename);
+ std::ofstream ofs(filename);
+boost::archive::text_oarchive archive(ofs);
+triangulation.save(archive, 0);  // Save triangulation to file
+ //triangulation_dist.copy_triangulation(triangulation);
+//triangulation_dist.load(file_basename);
+std::ifstream ifs(filename);
+boost::archive::text_iarchive archive(ifs);
+triangulation_dist.load(archive, 0);  // Load triangulation from file
+*/
 //---------------omega-------------------------
   if (constructed_solution == 3)
     GridGenerator::hyper_cube(triangulation_omega, 0, 2 * half_length);
@@ -1345,17 +1359,21 @@ std::cout << "Time taken to execute find_all_active_cells_around_point: " << dur
       sp_block.block(1, 0).compress();*/
   sp_block.compress();
 
-   pcout<<"Sparsity "  <<sp_block.n_rows()<<" "<<sp_block.n_cols()<<std::endl;
-nof_degrees = dsp_block.n_rows();
+   pcout<<"Sparsity "  <<sp_block.n_rows()<<" "<<sp_block.n_cols()<<" n_nonzero_elements " <<sp_block.n_nonzero_elements()<<std::endl;
+   nof_degrees = dsp_block.n_rows();
   //std::cout<<"n_nonzero_elements "<<block_sparsity_pattern.n_nonzero_elements() <<std::endl;                                    
 
   //std::ofstream out("sparsity-pattern-2.svg");
   //sp_block.print_svg(out);
 
   //system_matrix.reinit(locally_owned_dofs_block, block_sparsity_pattern, MPI_COMM_WORLD);
+   pcout<<"start reinit"<<std::endl;
   system_matrix.reinit(sp_block);
+  pcout<<"system_matrix.reinit"<<std::endl;
   solution.reinit(locally_relevant_dofs_block,  MPI_COMM_WORLD);
+   pcout<<"solution.reinit"<<std::endl;
   system_rhs.reinit(locally_owned_dofs_block, locally_relevant_dofs_block,  MPI_COMM_WORLD, true);
+   pcout<<"system_rhs.reinit"<<std::endl;
 
   locally_relevant_solution_Omega.reinit(locally_owned_dofs_Omega, locally_relevant_dofs_Omega,  MPI_COMM_WORLD);
   pcout<<"Ende setup dof"<<std::endl;
@@ -3349,7 +3367,7 @@ int main(int argc, char *argv[]) {
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
  //   const unsigned int refinement[3] = {3,4,5};
-    const unsigned int refinement[6] = {3,4, 5, 6,7,8};
+    const unsigned int refinement[4] = {3,4, 5, 6};
 
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
