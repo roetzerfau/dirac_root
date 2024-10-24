@@ -1317,7 +1317,7 @@ std::cout << "Time taken to execute find_all_active_cells_around_point: " << dur
                    else
                    {
                   std::cout<<"düdüm1"<<std::endl;
-                  throw std::runtime_error("cell coupling error");
+                  //throw std::runtime_error("cell coupling error");
                   }
                   }
                // else
