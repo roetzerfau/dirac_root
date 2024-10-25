@@ -568,15 +568,16 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
   TimerOutput::Scope t(computing_timer, "make grid");
   const std::vector<Point<dim>> &vertices = triangulation.get_vertices();
   Point<dim> corner1, corner2;
+double margin = 1.5;
 if(dim == 3)
 {
-corner1 =  Point<dim>(0, - 2*radius , - 2*radius);//2*radius
-corner2 =  Point<dim>(2 * half_length,  2*radius,  2*radius);//radius
+corner1 =  Point<dim>(0, - margin*radius , - margin*radius);//2*radius
+corner2 =  Point<dim>(2 * half_length,  margin*radius,  margin*radius);//radius
 }
 if(dim == 2)
 {
-corner1 =  Point<dim>( - 2*radius , - 2*radius);
-corner2 =  Point<dim>( 2*radius,  2*radius);
+corner1 =  Point<dim>( - margin*radius , - margin*radius);
+corner2 =  Point<dim>( margin*radius,  margin*radius);
 }
 std::pair<Point<dim>, Point<dim>> corner_pair(corner1, corner2);     
     
@@ -3342,9 +3343,9 @@ int main(int argc, char *argv[]) {
   */
   std::cout << "dimension_Omega " << dimension_Omega << std::endl;
   const unsigned int n_r = 2;
-  const unsigned int n_LA = 2;
+  const unsigned int n_LA = 1;
   double radii[n_r] = { 0.01, 0.1};
-  bool lumpedAverages[n_LA] = {true, false};
+  bool lumpedAverages[n_LA] = {false};
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
 
