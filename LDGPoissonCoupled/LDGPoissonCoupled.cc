@@ -140,6 +140,7 @@ using namespace dealii;
 #define USE_LDG 0
 #define BLOCKS 1
 #define SOLVE_BLOCKWISE 1
+#define FASTER 1
 
 constexpr unsigned int dimension_Omega{3};
 const FEValuesExtractors::Vector VectorField_omega(0);
@@ -628,7 +629,7 @@ if (dim == 3) {
 }
  if (dim == 2) {
    p1 =
-      Point<dim>(-half_length + offset, -half_length + offset);
+      Point<dim>(-half_length + offset, -half_length + offset);	
    p2 =
       Point<dim>(half_length + offset, half_length + offset);
 
@@ -1058,7 +1059,7 @@ dsp_block.collect_sizes();
         dofs_per_cell_omega);
     unsigned int nof_quad_points;
     bool AVERAGE = radius != 0 && !lumpedAverage;
-    pcout << "AVERAGE (use circel) " << AVERAGE << std::endl;
+    pcout << "AVERAGE (use circel) " << AVERAGE << " radius "<<radius << " lumpedAverage "<<lumpedAverage<<std::endl;
     // weight
     if (AVERAGE) {
       nof_quad_points = N_quad_points;
@@ -1135,7 +1136,7 @@ std::cout << "Time taken to execute cache: " << duration_c << " ms" << std::endl
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
 std::cout << "Time taken to execute find_all_active_cells_around_point: " << duration << " ms" << std::endl;
-       std::cout << "cell_test_array " << cell_test_array.size() << std::endl;
+   
       std::cout<<cell_test_array[0].first<<" "<<cell_test_array[1].first<<" "<<cell_test_array[2].first<<" "<<cell_test_array[3].first<<std::endl;
   
    */
@@ -1147,14 +1148,20 @@ std::cout << "Time taken to execute find_all_active_cells_around_point: " << dur
     auto cell_test_first = GridTools::find_active_cell_around_point(
           cache, quadrature_point_test);
  //   std::cout<< "cell_test_first " <<cell_first.first<<std::endl;
+	#if FASTER
    auto cell_test_array = find_all_active_cells_around_point<dim, dim>(
                        mapping, triangulation, quadrature_point_test,1e-10 ,cell_test_first, &cache.get_vertex_to_cell_map());//, cache.get_vertex_to_cell_map()
+   #else
+      auto cell_test_array = GridTools::find_all_active_cells_around_point(
+                       mapping, triangulation, quadrature_point_test,1e-10 ,cell_test_first);//, cache.get_vertex_to_cell_map()
+   #endif
+   
    // std::cout<<"all_cells " <<all_cells[0].first<<" "<<all_cells[1].first<<" "<<all_cells[2].first<<" "<<all_cells[3].first<<std::endl;
       auto end1 = std::chrono::high_resolution_clock::now();    // End time
     auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
   //  std::cout << "Time taken to execute find_active_cell_around_secondvariant: " 
     //          << duration1 << " ms" << std::endl;
-
+    //std::cout << "cell_test_array " << cell_test_array.size() << std::endl;
         for (auto cellpair : cell_test_array)
 
 #else
@@ -1210,13 +1217,13 @@ std::cout << "Time taken to execute find_all_active_cells_around_point: " << dur
     auto end = std::chrono::high_resolution_clock::now();    // End time
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     std::cout << "Time taken to execute find_all_active_cells_around_point_trial: " << duration << " ms" << std::endl;
-             //     std::cout << "cell_trial_array " << cell_trial_array.size()  << std::endl;
+            
              */
 /*
     auto start1 = std::chrono::high_resolution_clock::now();
     auto cell_trial_first = GridTools::find_active_cell_around_point(
           cache, quadrature_point_trial);
- //   std::cout<< "cell_trial_first " <<cell_trial_first.first<<std::endl;
+ 
    auto cell_trial_array = find_all_active_cells_around_point<dim,dim>(
                        mapping, triangulation, quadrature_point_trial,1e-10 ,cell_trial_first , &cache.get_vertex_to_cell_map());//, cache.get_vertex_to_cell_map()
    // std::cout<<"all_cells " <<all_cells[0].first<<" "<<all_cells[1].first<<" "<<all_cells[2].first<<" "<<all_cells[3].first<<std::endl;
@@ -1234,14 +1241,20 @@ std::cout << "Time taken to execute find_all_active_cells_around_point: " << dur
     auto cell_trial_first = GridTools::find_active_cell_around_point(
           cache, quadrature_point_trial);
  //   std::cout<< "cell_test_first " <<cell_first.first<<std::endl;
+   #if FASTER
    auto cell_trial_array = find_all_active_cells_around_point<dim, dim>(
-                       mapping, triangulation, quadrature_point_trial,1e-10 ,cell_trial_first, &cache.get_vertex_to_cell_map());//, cache.get_vertex_to_cell_map()
+                       mapping, triangulation, quadrature_point_trial,1e-10 ,cell_trial_first, &cache.get_vertex_to_cell_map());//, cache.get_vertex_to_cell_map()*/ //correct
+   #else
+   auto cell_trial_array = GridTools::find_all_active_cells_around_point(
+                       mapping, triangulation, quadrature_point_trial,1e-10 ,cell_trial_first);//, cache.get_vertex_to_cell_map()
+   #endif
    // std::cout<<"all_cells " <<all_cells[0].first<<" "<<all_cells[1].first<<" "<<all_cells[2].first<<" "<<all_cells[3].first<<std::endl;
       auto end1 = std::chrono::high_resolution_clock::now();    // End time
     auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
    // std::cout << "Time taken to execute find_active_cell_around_secondvariant trial: " 
      //         << duration1 << " ms" << std::endl;
-
+   //pcout<< "cell_trial_first " <<cell_trial_first.first<<std::endl;
+   //std::cout << "cell_trial_array " << cell_trial_array.size()  << std::endl;
                 for (auto cellpair_trial : cell_trial_array)
 #else
               auto cell_trial = GridTools::find_active_cell_around_point(
@@ -1733,7 +1746,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
         mapping, dof_handler_Omega, quadrature_point_test, 1e-10, marked_vertices);
     n_te = cell_test_array.size();
     //   n_te = 1;
-    pcout << "cell_test_array " << cell_test_array.size() << std::endl;
+   // pcout << "cell_test_array " << cell_test_array.size() << std::endl;
 
     for (auto cellpair : cell_test_array)
 #else
@@ -1856,7 +1869,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
     bool insideCell_trial = true;
     unsigned int nof_quad_points;
     bool AVERAGE = radius != 0 && !lumpedAverage;
-    pcout << "AVERAGE " << AVERAGE << std::endl;
+    pcout << "AVERAGE " << AVERAGE << " radius "<<radius << " lumpedAverage "<<lumpedAverage<<std::endl;
 
     // weight
     if (AVERAGE) {
@@ -1920,15 +1933,20 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
  
     auto cell_test_first = GridTools::find_active_cell_around_point(
           cache, quadrature_point_test);
+   #if FASTER
    auto cell_test_array = find_all_active_cells_around_point<dim, dim>(
                        mapping, triangulation, quadrature_point_test,1e-10 ,cell_test_first, &cache.get_vertex_to_cell_map());
+   #else
+      auto cell_test_array = GridTools::find_all_active_cells_around_point(
+                       mapping, triangulation, quadrature_point_test,1e-10 ,cell_test_first);
+   #endif
 
 
 
 
         n_te = cell_test_array.size();    
         //   n_te = 1;
-        // pcout << "cell_test_array " << cell_test_array.size() << std::endl;
+       // pcout << "cell_test_array " << cell_test_array.size() << std::endl;
         for (auto cellpair : cell_test_array)
 #else
         auto cell_test = GridTools::find_active_cell_around_point(
@@ -2114,8 +2132,13 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
               auto cell_trial_first = GridTools::find_active_cell_around_point(
                  cache, quadrature_point_trial);
 
+			#if FASTER
              auto cell_trial_array = find_all_active_cells_around_point<dim, dim>(
                        mapping, triangulation, quadrature_point_trial,1e-10 ,cell_trial_first, &cache.get_vertex_to_cell_map());
+             #else
+                          auto cell_trial_array = GridTools::find_all_active_cells_around_point(
+                       mapping, triangulation, quadrature_point_trial,1e-10 ,cell_trial_first);
+             #endif
 
 
 
@@ -3297,7 +3320,7 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   make_dofs();
   assemble_system();
   solve();
-  output_results();
+  //output_results();
   std::array<double, 4> results_array= compute_errors();
   return results_array;
 }
@@ -3340,9 +3363,9 @@ int main(int argc, char *argv[]) {
     return 0;
   */
   std::cout << "dimension_Omega " << dimension_Omega << std::endl;
-  const unsigned int n_r = 2;
+  const unsigned int n_r = 1;
   const unsigned int n_LA = 1;
-  double radii[n_r] = { 0.01, 0.1};
+  double radii[n_r] = {  0.1};
   bool lumpedAverages[n_LA] = {false};
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;

@@ -741,8 +741,8 @@ equidistant_points_on_circle(const Point<dim> &center, double radius,
             {
               const Point<dim> p_unit =
                 mapping.transform_real_to_unit_cell(cell, p);
-              //if (cell->reference_cell().contains_point(p_unit, tolerance))
-              if (cell.point_inside(p))
+              if (cell->reference_cell().contains_point(p_unit, tolerance))
+              //if (cell->point_inside(p))
                 cells_and_points.emplace_back(cell, p_unit);
             }
           catch (typename Mapping<dim>::ExcTransformationFailed &)
