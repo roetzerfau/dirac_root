@@ -566,18 +566,18 @@ LDGPoissonProblem<dim, dim_omega>::~LDGPoissonProblem() {
 template <int dim, int dim_omega>
 void LDGPoissonProblem<dim, dim_omega>::make_grid() {
   TimerOutput::Scope t(computing_timer, "make grid");
-  const std::vector<Point<dim>> &vertices = triangulation.get_vertices();
   Point<dim> corner1, corner2;
-double margin = 1.5;
+double margin = 1.0;
+double h = 0;
 if(dim == 3)
 {
-corner1 =  Point<dim>(0, - margin*radius , - margin*radius);//2*radius
-corner2 =  Point<dim>(2 * half_length,  margin*radius,  margin*radius);//radius
+corner1 =  Point<dim>(0, - (margin*radius + h), - (margin*radius + h));//2*radius
+corner2 =  Point<dim>(2 * half_length,  (margin*radius + h),  (margin*radius + h));//radius
 }
 if(dim == 2)
 {
-corner1 =  Point<dim>( - margin*radius , - margin*radius);
-corner2 =  Point<dim>( margin*radius,  margin*radius);
+corner1 =  Point<dim>( - (margin*radius + h) , - (margin*radius + h));
+corner2 =  Point<dim>((margin*radius + h),  (margin*radius + h));
 }
 std::pair<Point<dim>, Point<dim>> corner_pair(corner1, corner2);     
     
@@ -636,11 +636,9 @@ if (dim == 3) {
  GridGenerator::hyper_rectangle(triangulation, p1, p2);
 #endif
 
+triangulation.refine_global(n_refine);
 
-  
-  triangulation.refine_global(n_refine);
-
-
+const std::vector<Point<dim>> &vertices = triangulation.get_vertices();
 std::vector<unsigned int> cell_weights;
 SparsityPattern cell_connection_graph;
 DynamicSparsityPattern connectivity;
@@ -3299,7 +3297,7 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   make_dofs();
   assemble_system();
   solve();
-  //output_results();
+  output_results();
   std::array<double, 4> results_array= compute_errors();
   return results_array;
 }
