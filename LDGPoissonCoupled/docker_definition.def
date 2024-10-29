@@ -1,0 +1,31 @@
+Bootstrap: docker
+From: ubuntu:latest
+
+%post
+  apt-get dist-upgrade
+  apt-get update
+  apt-get install -y libdeal.ii-dev
+
+  mkdir /build && cd build
+  cmake .. 
+  make 
+
+
+%files
+CMakeLists.txt
+LDGPoissonCoupled.cc
+Functions.cc
+
+%runscript
+#echo "Running my_program with arguments: $@"
+exec "/build/LDGPoissonCoupled"
+%test
+   Test if libdeal.ii-dev was installed successfully by checking for a key file
+    if [ -f /usr/include/deal.II/base/config.h ]; then
+        echo "deal.II installed successfully."
+    else
+        echo "Error: deal.II installation failed!"
+        exit 1
+    fi
+
+

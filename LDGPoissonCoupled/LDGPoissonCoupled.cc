@@ -3363,10 +3363,10 @@ int main(int argc, char *argv[]) {
     return 0;
   */
   std::cout << "dimension_Omega " << dimension_Omega << std::endl;
-  const unsigned int n_r = 1;
-  const unsigned int n_LA = 1;
-  double radii[n_r] = {  0.1};
-  bool lumpedAverages[n_LA] = {false};
+  const unsigned int n_r = 2;
+  const unsigned int n_LA = 2;
+  double radii[n_r] = {  0.1,0.01};
+  bool lumpedAverages[n_LA] = {false,true};
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
 
@@ -3382,6 +3382,7 @@ int main(int argc, char *argv[]) {
       scenario_names.push_back(name);
 
       Parameters parameters;
+
       parameters.radius = radii[rad];
       parameters.lumpedAverage = lumpedAverages[LA];
      // const unsigned int p_degree[2] = {0,1};
@@ -3389,7 +3390,7 @@ int main(int argc, char *argv[]) {
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
  //   const unsigned int refinement[3] = {3,4,5};
-    const unsigned int refinement[4] = {3,4, 5, 6};
+    const unsigned int refinement[6] = {3,4, 5, 6,7,8};
 
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
