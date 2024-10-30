@@ -120,6 +120,7 @@ using namespace dealii;
 #define CYLINDER 0
 #define A11SCHUR 0
 
+
 constexpr unsigned int dimension_Omega{3};
 const FEValuesExtractors::Vector VectorField_omega(0);
 const FEValuesExtractors::Scalar Potential_omega(1);
@@ -462,6 +463,7 @@ LDGPoissonProblem<dim, dim_omega>::~LDGPoissonProblem() {
 template <int dim, int dim_omega>
 void LDGPoissonProblem<dim, dim_omega>::make_grid() {
   TimerOutput::Scope t(computing_timer, "make grid");
+  pcout<<"make grid"<<std::endl;
   Point<dim> corner1, corner2;
 double margin = 1.0;
 double h = 0;
@@ -527,12 +529,18 @@ if (dim == 3) {
 #endif
 
 triangulation.refine_global(n_refine);
+pcout<<"refined"<<std::endl;
 
 const std::vector<Point<dim>> &vertices = triangulation.get_vertices();
 std::vector<unsigned int> cell_weights;
 SparsityPattern cell_connection_graph;
 DynamicSparsityPattern connectivity;
 std::vector<unsigned int> cells_inside_box;
+
+int num_processes = dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
+bool is_shared_triangulation = num_processes > 1 ? true : false;
+pcout<<"is_shared_triangulation "<<  is_shared_triangulation<<std::endl;
+if(is_shared_triangulation)
 GridTools::get_face_connectivity_of_cells(triangulation,connectivity);
 
  max_diameter = 0.0;
@@ -540,8 +548,11 @@ GridTools::get_face_connectivity_of_cells(triangulation,connectivity);
         cell = dof_handler_Omega.begin_active(),
         endc = dof_handler_Omega.end();
 
+
   unsigned int cell_number = 0;
   for (; cell != endc; ++cell) {
+if(is_shared_triangulation)
+   {
     bool cell_is_inside_box = false;
     for (unsigned int v = 0; v < GeometryInfo<dim>::vertices_per_cell; ++v)
     {
@@ -559,7 +570,7 @@ GridTools::get_face_connectivity_of_cells(triangulation,connectivity);
         cell_weights.push_back(1);
     }
 
-
+}
 
     if (cell->is_locally_owned())
     {
@@ -580,10 +591,14 @@ GridTools::get_face_connectivity_of_cells(triangulation,connectivity);
     }
     cell_number++;
   }
+if(is_shared_triangulation)
+{
   for(unsigned int row : cells_inside_box)
     connectivity.add_entries(row, cells_inside_box.begin(), cells_inside_box.end());
   cell_connection_graph.copy_from(connectivity);
  GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_connection_graph,triangulation );
+}  
+  
   pcout<<"max_diameter "<<max_diameter<<" radius "<<radius<<std::endl;
   if (radius > max_diameter && !lumpedAverage) {
     pcout << "!!!!!!!!!!!!!! MAX DIAMETER > RADIUS !!!!!!!!!!!!!!!!"

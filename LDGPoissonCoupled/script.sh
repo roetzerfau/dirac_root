@@ -5,5 +5,5 @@
 #SBATCH --job-name=testjob
 #SBATCH --export=NONE
 #SBATCH --output=output.txt
-
+#SBATCH --mem=32G
 ./my_container.sif 
