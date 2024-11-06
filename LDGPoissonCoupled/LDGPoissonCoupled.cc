@@ -117,7 +117,7 @@
 using namespace dealii;
 #define USE_MPI_ASSEMBLE 1
 #define BLOCKS 1
-#define SOLVE_BLOCKWISE 0
+#define SOLVE_BLOCKWISE 1
 #define FASTER 1
 #define CYLINDER 0
 #define A11SCHUR 0
@@ -135,8 +135,8 @@ const double extent = 1;
 const double half_length = std::sqrt(0.5);//0.5
 const double distance_tolerance = 10;
 const unsigned int N_quad_points = 3;
-const double reduction = 1e-10;
-const double tolerance = 1.e-10;
+const double reduction = 1e-8;
+const double tolerance = 1e-8;
 
 struct Parameters {
   double radius;
@@ -145,7 +145,7 @@ struct Parameters {
 
 class BlockPreconditioner : public dealii::Subscriptor {
 public:
-    BlockPreconditioner(TrilinosWrappers::PreconditionBlockJacobi &precond0, TrilinosWrappers::PreconditionBlockJacobi &precond1)
+    BlockPreconditioner(TrilinosWrappers::PreconditionILU &precond0, TrilinosWrappers::PreconditionILU &precond1)
         : preconditioner0(precond0), preconditioner1(precond1) {}
 
     void vmult(TrilinosWrappers::MPI::BlockVector &dst, const TrilinosWrappers::MPI::BlockVector &src) const {
@@ -160,8 +160,8 @@ public:
     }
 
 private:
-    TrilinosWrappers::PreconditionBlockJacobi &preconditioner0;
-    TrilinosWrappers::PreconditionBlockJacobi &preconditioner1;
+    TrilinosWrappers::PreconditionILU &preconditioner0;
+    TrilinosWrappers::PreconditionILU &preconditioner1;
 };
   class InverseMatrix : public Subscriptor
   {
@@ -613,9 +613,9 @@ if(is_shared_triangulation)
  pcout << " Memory consumption of triangulation: "
                << triangulation.memory_consumption() / (1024.0 * 1024.0 * 1024.0) // Convert to MB
 	              << " GB" << std::endl;
-		         unsigned int locally_owned_cells = triangulation.n_locally_owned_active_cells();
+		         
 			     unsigned int global_active_cells = triangulation.n_global_active_cells();
-			         std::cout << rank<<" Number of locally owned active cells: " << locally_owned_cells << std::endl;
+			       
 				     pcout << "Total number of active cells (global): " << global_active_cells << std::endl;
 
 				         pcout<<"Memory DofHandler "<< dof_handler_Omega.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
@@ -723,8 +723,8 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
         << triangulation.n_global_active_cells() << std::endl
         << "Number of degrees of freedom: " << dof_handler_Omega.n_dofs() << " ("
         << n_vector_field_Omega << " + " << n_potential_Omega << ")"<<std::endl;
-
-std::cout<<rank <<" Number of locally owned DoF " << dof_handler_Omega.n_locally_owned_dofs()<<std::endl;
+  unsigned int locally_owned_cells = triangulation.n_locally_owned_active_cells();
+  std::cout << rank<<" Number of locally owned active cells: " << locally_owned_cells <<" Number of locally owned DoF: " << dof_handler_Omega.n_locally_owned_dofs()<<std::endl;
 const std::vector<types::global_dof_index> dofs_per_component_omega =
       DoFTools::count_dofs_per_fe_component(dof_handler_omega);
 
@@ -1083,8 +1083,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
   system_rhs.reinit(locally_owned_dofs_block, locally_relevant_dofs_block,  MPI_COMM_WORLD, true);
    pcout<<"system_rhs.reinit"<<std::endl;
 
-   std::cout<<rank<<" memory system_matrix "<<system_matrix.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
-   std::cout<<rank<<" memory system_rhs "<<system_rhs.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
+   std::cout<<rank<<" memory system_matrix "<<system_matrix.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<" memory system_rhs "<<system_rhs.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
   pcout<<"Ende setup dof"<<std::endl;
 }
 
@@ -2276,12 +2275,12 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
 
     Vector<double> cellwise_errors_Q(triangulation.n_active_cells());
     Vector<double> cellwise_errors_U(triangulation.n_active_cells());
-    pcout << "triangulation.n_active_cells() " << triangulation.n_active_cells()
+    /*pcout << "triangulation.n_active_cells() " << triangulation.n_active_cells()
           << " dof_handler_Omega.n_dofs() " << dof_handler_Omega.n_dofs()
           << " dof_handler_Omega.n_locally_owned_dofs() "
           << dof_handler_Omega.n_locally_owned_dofs() << " solution size "
           << solution.size() << " mpi "
-          << Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) << std::endl;
+          << Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) << std::endl;*/
 
     const QTrapezoid<1> q_trapez;
     const QIterated<dim> quadrature(q_trapez, degree + 2);
@@ -2432,8 +2431,8 @@ TrilinosWrappers::PreconditionILU preconditioner;
 #else
 pcout<<"solve full"<<std::endl;
 // Preconditioners for each block
-TrilinosWrappers::PreconditionBlockJacobi preconditioner_block_0;
-TrilinosWrappers::PreconditionBlockJacobi preconditioner_block_1;//PreconditionILU
+TrilinosWrappers::PreconditionILU preconditioner_block_0;
+TrilinosWrappers::PreconditionILU preconditioner_block_1;//PreconditionILU  PreconditionBlockJacobi
 
 // Initialize the preconditioners with the appropriate blocks of the matrix
 preconditioner_block_0.initialize(system_matrix.block(0, 0));  // ILU for block (0,0)
