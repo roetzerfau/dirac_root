@@ -722,10 +722,9 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
         <<"Number of global active cells: "
         << triangulation.n_global_active_cells() << std::endl
         << "Number of degrees of freedom: " << dof_handler_Omega.n_dofs() << " ("
-        << n_vector_field_Omega << " + " << n_potential_Omega << ")"
-	<<" Number of locally owned DoF " << dof_handler_Omega.n_locally_owned_dofs()<<std::endl;
+        << n_vector_field_Omega << " + " << n_potential_Omega << ")"<<std::endl;
 
-
+std::cout<<rank <<" Number of locally owned DoF " << dof_handler_Omega.n_locally_owned_dofs()<<std::endl;
 const std::vector<types::global_dof_index> dofs_per_component_omega =
       DoFTools::count_dofs_per_fe_component(dof_handler_omega);
 
