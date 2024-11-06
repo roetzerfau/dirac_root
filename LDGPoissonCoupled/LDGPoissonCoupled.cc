@@ -135,6 +135,8 @@ const double extent = 1;
 const double half_length = std::sqrt(0.5);//0.5
 const double distance_tolerance = 10;
 const unsigned int N_quad_points = 3;
+const double reduction = 1e-10;
+const double tolerance = 1.e-10;
 
 struct Parameters {
   double radius;
@@ -175,7 +177,7 @@ private:
     dst = 0;
     //std::cout<<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" src "<<std::endl;
     //src.print(std::cout);
-  /*  SolverControl solver_control(src.size(), 1e-6 * src.l2_norm());
+  /*  ReductionControl solver_control(src.size(), tolerance * system_rhs.l2_norm(), reduction);
     TrilinosWrappers::SolverDirect solver(solver_control);
     solver.initialize(*matrix);
     solver.solve(dst,src);*/
@@ -183,7 +185,7 @@ TrilinosWrappers::PreconditionILU preconditioner;
   TrilinosWrappers::PreconditionILU::AdditionalData data;
   preconditioner.initialize(*matrix, data);
 
-    SolverControl solver_control(matrix->local_size());//, 1e-7 * src.l2_norm());
+    ReductionControl solver_control(matrix->local_size(), tolerance * src.l2_norm(), reduction);//, 1e-7 * src.l2_norm());
     TrilinosWrappers::SolverGMRES solver(solver_control);
     solver.solve(*matrix, dst,  src, preconditioner );
     
@@ -344,6 +346,7 @@ private:
   double penalty;
   double h_max;
   double h_min;
+  
   //unsigned int nof_degrees;
 int rank;
   enum { Dirichlet, Neumann };
@@ -846,7 +849,6 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
   DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0),constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));//,  constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
   DoFTools::make_flux_sparsity_pattern(dof_handler_omega, sp_block.block(1,1),constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) );
   sp_block.collect_sizes();
-
 #if COUPLED
   {
     // coupling
@@ -882,7 +884,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
         endc_omega = dof_handler_omega.end();
 
     for (; cell_omega != endc_omega; ++cell_omega) {
-     // if (cell_omega->is_locally_owned())
+      //if (cell_omega->is_locally_owned())
       {
       fe_values_omega.reinit(cell_omega);
       cell_omega->get_dof_indices(local_dof_indices_omega);
@@ -929,7 +931,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
     auto end = std::chrono::high_resolution_clock::now();    // End time
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
-pcout << "Time taken to execute find_all_active_cells_around_point: " << duration << " ms" << std::endl;      
+//pcout << "Time taken to execute find_all_active_cells_around_point: " << duration << " ms" << std::endl;      
           
 	#if FASTER
    auto cell_test_array = find_all_active_cells_around_point<dim, dim>(
@@ -1068,11 +1070,12 @@ pcout << "Time taken to execute find_all_active_cells_around_point: " << duratio
     }
   }
 #endif
-  
+  pcout<<"start to compress"<<std::endl;
   sp_block.compress();
+  
 
    pcout<<"Sparsity "  <<sp_block.n_rows()<<" "<<sp_block.n_cols()<<" n_nonzero_elements " <<sp_block.n_nonzero_elements()<<std::endl;
-
+  // pcout<<"sparsity memory "<<sp_block.memory_consumption()<<std::endl;
    pcout<<"start reinit"<<std::endl;
   system_matrix.reinit(sp_block);
   pcout<<"system_matrix.reinit"<<std::endl;
@@ -1999,7 +2002,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 #endif
 #endif
   // std::cout << "ende coupling loop" << std::endl;
-
+pcout<<"Start compress " <<std::endl;
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
 /*
@@ -2371,9 +2374,9 @@ pcout<<"A11 Schur"<<std::endl;
  // schur_rhs.print(std::cout);
 
  SchurComplement schur_complement(system_matrix, A_inverse, system_rhs);
-
-
-  SolverControl solver_control1(completely_distributed_solution.block(0).locally_owned_size());
+  
+  
+  ReductionControl solver_control1(completely_distributed_solution.block(0).locally_owned_size(), tolerance * system_rhs.l2_norm(), reduction);
   SolverGMRES<TrilinosWrappers::MPI::Vector > solver(solver_control1);
 
 TrilinosWrappers::PreconditionILU preconditioner;
@@ -2407,7 +2410,7 @@ const InverseMatrix A_inverse(system_matrix.block(1,1));
  SchurComplement_A_22 schur_complement(system_matrix, A_inverse, system_rhs);
 
 
-  SolverControl solver_control1(completely_distributed_solution.block(0).locally_owned_size());
+  ReductionControl solver_control1(completely_distributed_solution.block(0).locally_owned_size(), tolerance * system_rhs.l2_norm(), reduction);
   SolverGMRES<TrilinosWrappers::MPI::Vector > solver(solver_control1);
  
 
@@ -2438,7 +2441,7 @@ preconditioner_block_0.initialize(system_matrix.block(0, 0));  // ILU for block 
 preconditioner_block_1.initialize(system_matrix.block(1, 1));  // ILU for block (1,1)
 
 // Set up solver control
-SolverControl solver_control22(dof_handler_Omega.n_locally_owned_dofs());
+ReductionControl solver_control22(dof_handler_Omega.n_locally_owned_dofs(), tolerance * system_rhs.l2_norm(), reduction);
 SolverGMRES<TrilinosWrappers::MPI::BlockVector> solver(solver_control22);
 
 
@@ -2614,7 +2617,7 @@ rank = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 }
 
 int main(int argc, char *argv[]) {
-  std::cout << "USE_MPI_ASSEMBLE " << USE_MPI_ASSEMBLE << std::endl;
+  //std::cout << "USE_MPI_ASSEMBLE " << USE_MPI_ASSEMBLE << std::endl;
 #if 1
   deallog.depth_console(0);
 
@@ -2632,7 +2635,7 @@ int main(int argc, char *argv[]) {
     std::cout << "Number of MPI processes: " << num_processes << std::endl;
   }
 
-  std::cout << "This is MPI process " << rank << std::endl;
+  //std::cout << "This is MPI process " << rank << std::endl;
 
 #endif
 
@@ -2658,9 +2661,7 @@ int main(int argc, char *argv[]) {
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
 
-  std::ofstream csvfile_unsrtd;
-  std::string filename = "convergence_results_unsrtd";
-  csvfile_unsrtd.open(filename + ".csv");
+
   for (unsigned int rad = 0; rad < n_r; rad++) {
     for (unsigned int LA = 0; LA < n_LA; LA++) {
 
@@ -2678,7 +2679,7 @@ int main(int argc, char *argv[]) {
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
  //   const unsigned int refinement[3] = {3,4,5};
-    const unsigned int refinement[1] = {7};
+    const unsigned int refinement[5] = {5,6,7,8,9};
 
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
@@ -2710,8 +2711,14 @@ int main(int argc, char *argv[]) {
                     << " u " << arr[2] << " q " << arr[3] << std::endl;
                 
           if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
+            
+          std::ofstream csvfile_unsrtd;
+	  std::string filename = "cvg_res_unsrtd" + name + "_r_" + std::to_string(refinement[r]) + "_p_" + std::to_string(p_degree[p]);
+	  csvfile_unsrtd.open(filename + ".csv");
+            
             csvfile_unsrtd<<name<<";r "<<refinement[r]<<";p "<<p_degree[p]<< ";U " << arr[0] << ";Q " << arr[1]
                     << ";u " << arr[2] << ";q " << arr[3] << "; \n";
+            csvfile_unsrtd.close();
           }
           results[p][r] = arr;
           max_diameter[r] = LDGPoissonCoupled.max_diameter;
@@ -2790,7 +2797,7 @@ int main(int argc, char *argv[]) {
       }
     }
   }
-  csvfile_unsrtd.close();
+
   return 0;
 }
 
