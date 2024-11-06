@@ -52,6 +52,8 @@
 #include <deal.II/lac/trilinos_vector.h>
 #include <deal.II/lac/trilinos_block_sparse_matrix.h>
 //#include <deal.II/non_matching/fe_values.h>
+#include <deal.II/lac/dynamic_sparsity_pattern.h>
+
 
 #include <deal.II/base/function.h>
 #include <deal.II/base/quadrature_lib.h>
@@ -132,7 +134,7 @@ const unsigned int dimension_gap = 0;
 const double extent = 1;
 const double half_length = std::sqrt(0.5);//0.5
 const double distance_tolerance = 10;
-const unsigned int N_quad_points = 7;
+const unsigned int N_quad_points = 3;
 
 struct Parameters {
   double radius;
@@ -181,7 +183,7 @@ TrilinosWrappers::PreconditionILU preconditioner;
   TrilinosWrappers::PreconditionILU::AdditionalData data;
   preconditioner.initialize(*matrix, data);
 
-    SolverControl solver_control(1000);//, 1e-7 * src.l2_norm());
+    SolverControl solver_control(matrix->local_size());//, 1e-7 * src.l2_norm());
     TrilinosWrappers::SolverGMRES solver(solver_control);
     solver.solve(*matrix, dst,  src, preconditioner );
     
@@ -343,7 +345,7 @@ private:
   double h_max;
   double h_min;
   //unsigned int nof_degrees;
-
+int rank;
   enum { Dirichlet, Neumann };
 
   // parameters
@@ -427,7 +429,7 @@ LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
     const unsigned int degree, const unsigned int n_refine,
     Parameters parameters)
     : degree(degree), n_refine(n_refine),
-      triangulation(MPI_COMM_WORLD),
+      triangulation(MPI_COMM_WORLD, parallel::shared::Triangulation<dim>::none, false, parallel::shared::Triangulation<dim>::Settings::partition_zorder),
       //triangulation_dist(MPI_COMM_WORLD),
       cache(triangulation),
       triangulation_omega(MPI_COMM_WORLD),
@@ -527,7 +529,7 @@ if (dim == 3) {
  }
  GridGenerator::hyper_rectangle(triangulation, p1, p2);
 #endif
-
+pcout<<"refined++++++"<<std::endl;
 triangulation.refine_global(n_refine);
 pcout<<"refined"<<std::endl;
 
@@ -596,9 +598,30 @@ if(is_shared_triangulation)
   for(unsigned int row : cells_inside_box)
     connectivity.add_entries(row, cells_inside_box.begin(), cells_inside_box.end());
   cell_connection_graph.copy_from(connectivity);
- GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_connection_graph,triangulation );
+  pcout<<"los "<< dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)<<std::endl;
+ GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_connection_graph,triangulation, SparsityTools::Partitioner::zoltan );
 }  
   
+
+
+
+
+ pcout << " Memory consumption of triangulation: "
+               << triangulation.memory_consumption() / (1024.0 * 1024.0 * 1024.0) // Convert to MB
+	              << " GB" << std::endl;
+		         unsigned int locally_owned_cells = triangulation.n_locally_owned_active_cells();
+			     unsigned int global_active_cells = triangulation.n_global_active_cells();
+			         std::cout << rank<<" Number of locally owned active cells: " << locally_owned_cells << std::endl;
+				     pcout << "Total number of active cells (global): " << global_active_cells << std::endl;
+
+				         pcout<<"Memory DofHandler "<< dof_handler_Omega.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
+
+
+
+
+
+
+
   pcout<<"max_diameter "<<max_diameter<<" radius "<<radius<<std::endl;
   if (radius > max_diameter && !lumpedAverage) {
     pcout << "!!!!!!!!!!!!!! MAX DIAMETER > RADIUS !!!!!!!!!!!!!!!!"
@@ -695,7 +718,8 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
         <<"Number of global active cells: "
         << triangulation.n_global_active_cells() << std::endl
         << "Number of degrees of freedom: " << dof_handler_Omega.n_dofs() << " ("
-        << n_vector_field_Omega << " + " << n_potential_Omega << ")" << std::endl;
+        << n_vector_field_Omega << " + " << n_potential_Omega << ")"
+	<<" Number of locally owned DoF " << dof_handler_Omega.n_locally_owned_dofs()<<std::endl;
 
 
 const std::vector<types::global_dof_index> dofs_per_component_omega =
@@ -1048,7 +1072,8 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
   system_rhs.reinit(locally_owned_dofs_block, locally_relevant_dofs_block,  MPI_COMM_WORLD, true);
    pcout<<"system_rhs.reinit"<<std::endl;
 
-
+   std::cout<<rank<<" memory system_matrix "<<system_matrix.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
+   std::cout<<rank<<" memory system_rhs "<<system_rhs.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
   pcout<<"Ende setup dof"<<std::endl;
 }
 
@@ -2337,7 +2362,7 @@ pcout<<"A11 Schur"<<std::endl;
  SchurComplement schur_complement(system_matrix, A_inverse, system_rhs);
 
 
-  SolverControl solver_control1(1000);//completely_distributed_solution.block(1).local_size()
+  SolverControl solver_control1(completely_distributed_solution.block(0).locally_owned_size());
   SolverGMRES<TrilinosWrappers::MPI::Vector > solver(solver_control1);
 
 TrilinosWrappers::PreconditionILU preconditioner;
@@ -2371,7 +2396,7 @@ const InverseMatrix A_inverse(system_matrix.block(1,1));
  SchurComplement_A_22 schur_complement(system_matrix, A_inverse, system_rhs);
 
 
-  SolverControl solver_control1(1000);//completely_distributed_solution.block(1).local_size()
+  SolverControl solver_control1(completely_distributed_solution.block(0).locally_owned_size());
   SolverGMRES<TrilinosWrappers::MPI::Vector > solver(solver_control1);
  
 
@@ -2566,7 +2591,7 @@ template <int dim, int dim_omega>
 template <int dim, int dim_omega>
 std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   pcout << "n_refine " << n_refine << "  degree " << degree << std::endl;
-
+rank = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
   penalty = 5;
   make_grid();
   make_dofs();
@@ -2615,10 +2640,10 @@ int main(int argc, char *argv[]) {
     return 0;
   */
   std::cout << "dimension_Omega " << dimension_Omega << std::endl;
-  const unsigned int n_r = 2;
-  const unsigned int n_LA = 2;
-  double radii[n_r] = {  0.1,0.01};
-  bool lumpedAverages[n_LA] = {false,true};
+  const unsigned int n_r = 1;
+  const unsigned int n_LA = 1;
+  double radii[n_r] = {  0.01};
+  bool lumpedAverages[n_LA] = {false};
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
 
@@ -2642,7 +2667,7 @@ int main(int argc, char *argv[]) {
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
  //   const unsigned int refinement[3] = {3,4,5};
-    const unsigned int refinement[6] = {3,4, 5, 6,7,8};
+    const unsigned int refinement[1] = {7};
 
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
@@ -2688,7 +2713,7 @@ int main(int argc, char *argv[]) {
         std::ofstream myfile;
         std::ofstream csvfile;
 #if COUPLED
-        std::string filename = "convergence_results_coupled" + name;
+        std::string filename = "convergence_results_test_coupled" + name;
         myfile.open(filename + ".txt");
         csvfile.open(filename + ".csv");
 #else
@@ -2729,6 +2754,7 @@ int main(int argc, char *argv[]) {
               if (r != 0) {
                 const double rate =
                     std::log2(results[p][r - 1][f] / results[p][r][f]);
+                myfile << " (" << rate << ")";
                 myfile << " (" << rate << ")";
                 csvfile << " (" << rate << ")";
                 std::cout << " (" << rate << ")";
