@@ -117,7 +117,7 @@
 using namespace dealii;
 #define USE_MPI_ASSEMBLE 1
 #define BLOCKS 1
-#define SOLVE_BLOCKWISE 1
+#define SOLVE_BLOCKWISE 0
 #define FASTER 1
 #define CYLINDER 0
 #define A11SCHUR 0
@@ -2438,7 +2438,7 @@ preconditioner_block_0.initialize(system_matrix.block(0, 0));  // ILU for block 
 preconditioner_block_1.initialize(system_matrix.block(1, 1));  // ILU for block (1,1)
 
 // Set up solver control
-SolverControl solver_control22(1000, 1e-12);
+SolverControl solver_control22(dof_handler_Omega.n_locally_owned_dofs());
 SolverGMRES<TrilinosWrappers::MPI::BlockVector> solver(solver_control22);
 
 
@@ -2678,7 +2678,7 @@ int main(int argc, char *argv[]) {
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
  //   const unsigned int refinement[3] = {3,4,5};
-    const unsigned int refinement[1] = {4};
+    const unsigned int refinement[1] = {7};
 
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
