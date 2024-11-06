@@ -353,7 +353,7 @@ int rank;
   double g;
   bool lumpedAverage;
 
- 
+
   //parallel::distributed::Triangulation<dim> triangulation_dist;
 
   //parallel::shared::Triangulation<dim> triangulation_mpi;
@@ -561,6 +561,7 @@ if(is_shared_triangulation)
     if (bbox.point_inside(vertices[cell->vertex_index(v)]))
     {
      cell_is_inside_box = true;
+    // cell_start = cell;
     }
     }
     if(cell_is_inside_box)
@@ -850,6 +851,9 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
   {
     // coupling
 
+ typename DoFHandler<dim>::active_cell_iterator
+        cell_start = dof_handler_Omega.begin_active();
+
     QGauss<dim> quadrature_formula(fe_Omega.degree + 1);
     FEValues<dim> fe_values(fe_Omega, quadrature_formula, update_flags);
     const Mapping<dim> &mapping = fe_values.get_mapping();
@@ -918,9 +922,15 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
 #if TEST
-  
+   auto start = std::chrono::high_resolution_clock::now();  //Start time
     auto cell_test_first = GridTools::find_active_cell_around_point(
-          cache, quadrature_point_test);
+          cache, quadrature_point_test, cell_start, marked_vertices);
+          
+    auto end = std::chrono::high_resolution_clock::now();    // End time
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+
+pcout << "Time taken to execute find_all_active_cells_around_point: " << duration << " ms" << std::endl;      
+          
 	#if FASTER
    auto cell_test_array = find_all_active_cells_around_point<dim, dim>(
                        mapping, triangulation, quadrature_point_test,1e-10 ,cell_test_first, &cache.get_vertex_to_cell_map());//, cache.get_vertex_to_cell_map()
@@ -942,7 +952,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
          typename DoFHandler<dim>::active_cell_iterator
         cell_test = dof_handler_Omega.begin_active();
         std::advance(cell_test, cell_test_tri->index());
-          
+        cell_start =cell_test;  
 #endif
 
 #if USE_MPI_ASSEMBLE
@@ -972,7 +982,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
 #if TEST
 
     auto cell_trial_first = GridTools::find_active_cell_around_point(
-          cache, quadrature_point_trial);
+          cache, quadrature_point_trial, cell_start, marked_vertices);
    #if FASTER
    auto cell_trial_array = find_all_active_cells_around_point<dim, dim>(
                        mapping, triangulation, quadrature_point_trial,1e-10 ,cell_trial_first, &cache.get_vertex_to_cell_map());//, cache.get_vertex_to_cell_map()*/ //correct
@@ -993,7 +1003,6 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
               typename DoFHandler<dim>::active_cell_iterator
               cell_trial = dof_handler_Omega.begin_active();
               std::advance(cell_trial, cell_trial_tri->index());
-
 #endif
 
                   if (cell_trial != dof_handler_Omega.end()) {
@@ -1081,7 +1090,8 @@ template <int dim, int dim_omega>
 void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
   TimerOutput::Scope t(computing_timer, "assembly");
   pcout << "assemble_system" << std::endl;
-
+ typename DoFHandler<dim>::active_cell_iterator
+        cell_start = dof_handler_Omega.begin_active();
   QGauss<dim> quadrature_formula(fe_Omega.degree + 1);
   QGauss<dim - 1> face_quadrature_formula(fe_Omega.degree + 1);
 
@@ -1572,7 +1582,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
         unsigned int n_te;
 #if TEST
     auto cell_test_first = GridTools::find_active_cell_around_point(
-          cache, quadrature_point_test);
+          cache, quadrature_point_test, cell_start, marked_vertices);
    #if FASTER
    auto cell_test_array = find_all_active_cells_around_point<dim, dim>(
                        mapping, triangulation, quadrature_point_test,1e-10 ,cell_test_first, &cache.get_vertex_to_cell_map());
@@ -1599,6 +1609,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
               typename DoFHandler<dim>::active_cell_iterator
               cell_test = dof_handler_Omega.begin_active();
               std::advance(cell_test, cell_test_tri->index());
+              cell_start = cell_test;
 #endif
 
 #if 1// USE_MPI_ASSEMBLE
@@ -1750,7 +1761,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
               
 
             auto cell_trial_first = GridTools::find_active_cell_around_point(
-                 cache, quadrature_point_trial);
+                 cache, quadrature_point_trial, cell_start, marked_vertices);
 
 			#if FASTER
              auto cell_trial_array = find_all_active_cells_around_point<dim, dim>(
@@ -2667,7 +2678,7 @@ int main(int argc, char *argv[]) {
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
  //   const unsigned int refinement[3] = {3,4,5};
-    const unsigned int refinement[1] = {7};
+    const unsigned int refinement[1] = {4};
 
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
