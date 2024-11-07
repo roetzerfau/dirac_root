@@ -104,7 +104,7 @@
 #include <deal.II/grid/grid_generator.h>   // For GridGenerator
 #include <deal.II/base/timer.h>           // For Timer (if needed)
 #include <deal.II/base/logstream.h>       // For logging
-
+#include <deal.II/grid/grid_out.h>
 //#include <boost/archive/text_oarchive.hpp>
 //#include <boost/archive/text_iarchive.hpp>
 
@@ -117,13 +117,13 @@
 using namespace dealii;
 #define USE_MPI_ASSEMBLE 1
 #define BLOCKS 1
-#define SOLVE_BLOCKWISE 1
-#define FASTER 1
+#define SOLVE_BLOCKWISE 0
+#define FASTER 0 //nur verfügbar bei der aktuellsten dealii version
 #define CYLINDER 0
 #define A11SCHUR 0
 
 
-constexpr unsigned int dimension_Omega{3};
+constexpr unsigned int dimension_Omega{2};
 const FEValuesExtractors::Vector VectorField_omega(0);
 const FEValuesExtractors::Scalar Potential_omega(1);
 
@@ -332,7 +332,7 @@ private:
       const std::vector<types::global_dof_index> &local_neighbor_dof_indices);
 
   template <int _dim>
-  void dof_omega_to_Omega(
+  void dof_omega_local_2_global(
       const DoFHandler<_dim> &dof_handler_Omega,
       std::vector<types::global_dof_index> &local_dof_indices_omega);
 
@@ -479,8 +479,8 @@ corner2 =  Point<dim>(2 * half_length,  (margin*radius + h),  (margin*radius + h
 }
 if(dim == 2)
 {
-corner1 =  Point<dim>( - (margin*radius + h) , - (margin*radius + h));
-corner2 =  Point<dim>((margin*radius + h),  (margin*radius + h));
+corner1 =  Point<dim>( -half_length,- (margin*radius + h));
+corner2 =  Point<dim>(half_length,(margin*radius + h));
 }
 std::pair<Point<dim>, Point<dim>> corner_pair(corner1, corner2);     
     
@@ -536,8 +536,12 @@ pcout<<"refined++++++"<<std::endl;
 triangulation.refine_global(n_refine);
 pcout<<"refined"<<std::endl;
 
+GridOut grid_out;
+std::ofstream out("grid_Omega.vtk"); // Choose your preferred filename and format
+grid_out.write_vtk(triangulation, out);
+
 const std::vector<Point<dim>> &vertices = triangulation.get_vertices();
-std::vector<unsigned int> cell_weights;
+
 SparsityPattern cell_connection_graph;
 DynamicSparsityPattern connectivity;
 std::vector<unsigned int> cells_inside_box;
@@ -561,6 +565,7 @@ if(is_shared_triangulation)
     bool cell_is_inside_box = false;
     for (unsigned int v = 0; v < GeometryInfo<dim>::vertices_per_cell; ++v)
     {
+      std::cout<<"p "<<vertices[cell->vertex_index(v)]<<std::endl;
     if (bbox.point_inside(vertices[cell->vertex_index(v)]))
     {
      cell_is_inside_box = true;
@@ -568,13 +573,8 @@ if(is_shared_triangulation)
     }
     }
     if(cell_is_inside_box)
-    {
       cells_inside_box.push_back(cell_number);
-       cell_weights.push_back(10);
-    }else
-    {
-        cell_weights.push_back(1);
-    }
+   
 
 }
 
@@ -634,7 +634,10 @@ if(is_shared_triangulation)
   }
 //---------------omega-------------------------
   if (constructed_solution == 3)
-    GridGenerator::hyper_cube(triangulation_omega, 0, 2 * half_length);
+  {
+    GridGenerator::hyper_cube(triangulation_omega, -half_length ,  half_length);
+    //GridGenerator::hyper_cube(triangulation_omega,0 ,  2*half_length);
+  }
   else
     GridGenerator::hyper_cube(triangulation_omega, -extent / 2, extent / 2);
   triangulation_omega.refine_global(n_refine);
@@ -651,6 +654,11 @@ if(is_shared_triangulation)
     }
   }
 
+GridOut grid_out_omega;
+std::ofstream out_omega("grid_omega.vtk"); // Choose your preferred filename and format
+grid_out_omega.write_vtk(triangulation_omega, out_omega);
+
+
 //handle omega
 #if COUPLED
 marked_vertices.resize(triangulation.n_vertices());
@@ -660,6 +668,7 @@ for (unsigned int i = 0; i < triangulation.n_vertices(); i++)
     if (bbox.point_inside(vertices[i]))
     {
       marked_vertices[i] = true;
+      pcout<< "marked_vertices[i] "<< marked_vertices[i]<<std::endl;
     }
     else
     {
@@ -887,7 +896,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
       {
       fe_values_omega.reinit(cell_omega);
       cell_omega->get_dof_indices(local_dof_indices_omega);
-      dof_omega_to_Omega(dof_handler_omega, local_dof_indices_omega);
+      dof_omega_local_2_global(dof_handler_omega, local_dof_indices_omega);
 
       std::vector<Point<dim_omega>> quadrature_points_omega =
           fe_values_omega.get_quadrature_points();
@@ -922,7 +931,9 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
         // test function
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
+        pcout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
 #if TEST
+pcout <<"stat "<<std::endl;
    auto start = std::chrono::high_resolution_clock::now();  //Start time
     auto cell_test_first = GridTools::find_active_cell_around_point(
           cache, quadrature_point_test, cell_start, marked_vertices);
@@ -930,7 +941,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
     auto end = std::chrono::high_resolution_clock::now();    // End time
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
-//pcout << "Time taken to execute find_all_active_cells_around_point: " << duration << " ms" << std::endl;      
+pcout << "Time taken to execute find_all_active_cells_around_point: " << duration << " ms" << std::endl;      
           
 	#if FASTER
    auto cell_test_array = find_all_active_cells_around_point<dim, dim>(
@@ -939,7 +950,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
       auto cell_test_array = GridTools::find_all_active_cells_around_point(
                        mapping, triangulation, quadrature_point_test,1e-10 ,cell_test_first);//, cache.get_vertex_to_cell_map()
    #endif
- 
+ pcout<<"cell_test_array.size() "<<cell_test_array.size()<<std::endl;
         for (auto cellpair : cell_test_array)
 
 #else
@@ -981,9 +992,10 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
                 quadrature_point_trial = quadrature_points_circle[q_avag];
 
 #if TEST
-
+pcout<<"asdf " <<quadrature_point_trial<<std::endl;
     auto cell_trial_first = GridTools::find_active_cell_around_point(
           cache, quadrature_point_trial, cell_start, marked_vertices);
+             pcout<<"###### " <<cell_trial_first.first<<" "<<cell_trial_first.second<<std::endl;
    #if FASTER
    auto cell_trial_array = find_all_active_cells_around_point<dim, dim>(
                        mapping, triangulation, quadrature_point_trial,1e-10 ,cell_trial_first, &cache.get_vertex_to_cell_map());//, cache.get_vertex_to_cell_map()*/ //correct
@@ -991,6 +1003,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
    auto cell_trial_array = GridTools::find_all_active_cells_around_point(
                        mapping, triangulation, quadrature_point_trial,1e-10 ,cell_trial_first);//, cache.get_vertex_to_cell_map()
    #endif
+   pcout<<"----" <<std::endl;
     for (auto cellpair_trial : cell_trial_array)
 #else
               auto cell_trial = GridTools::find_active_cell_around_point(
@@ -1304,7 +1317,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 
       cell_omega->get_dof_indices(local_dof_indices_omega);
 
-      dof_omega_to_Omega(dof_handler_omega, local_dof_indices_omega);
+      dof_omega_local_2_global(dof_handler_omega, local_dof_indices_omega);
 
 
       for (unsigned int face_no_omega = 0;
@@ -1367,7 +1380,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                 ve_ue_matrix_omega, h, VectorField_omega, Potential_omega);
 
             neighbor_omega->get_dof_indices(local_neighbor_dof_indices_omega);
-           dof_omega_to_Omega(dof_handler_omega,
+           dof_omega_local_2_global(dof_handler_omega,
                               local_neighbor_dof_indices_omega);
 
             distribute_local_flux_to_global(
@@ -1400,7 +1413,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 #if 1// USE_MPI_ASSEMBLE
 // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 #endif
-  if (dim == 2 && constructed_solution == 3) {
+  if (dim == 4 && constructed_solution == 3) {
     std::cout << "dim == 2 && constructed_solution == 3" << std::endl;
     Point<dim> quadrature_point_test(y_l, z_l);
     std::vector<types::global_dof_index> local_dof_indices_test(dofs_per_cell);
@@ -1509,7 +1522,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
         }
     }
   }
-  if (dim == 3 && constructed_solution == 3) {
+  if ((dim == 3 ) && constructed_solution == 3) {
     TimerOutput::Scope t(computing_timer, "assembly - coupling");
     // coupling
     pcout << "assemble Coupling" << std::endl;
@@ -1543,7 +1556,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
       {
       fe_values_omega.reinit(cell_omega);
       cell_omega->get_dof_indices(local_dof_indices_omega);
-      dof_omega_to_Omega(dof_handler_omega, local_dof_indices_omega);
+      dof_omega_local_2_global(dof_handler_omega, local_dof_indices_omega);
 
       std::vector<Point<dim_omega>> quadrature_points_omega =
           fe_values_omega.get_quadrature_points();
@@ -2019,8 +2032,8 @@ pcout<<"Start compress " <<std::endl;
 
 template <int dim, int dim_omega>
 template <int _dim>
-void LDGPoissonProblem<dim, dim_omega>::dof_omega_to_Omega(
-    const DoFHandler<_dim> &dof_handler_omega,
+void LDGPoissonProblem<dim, dim_omega>::dof_omega_local_2_global(
+    const DoFHandler<_dim> &dof_handler_omega,//dof_handler wird in derzeitiger Implemtierung nicht mehr benötigt
     std::vector<types::global_dof_index> &local_dof_indices_omega) {
 
   for (unsigned int i = 0; i < local_dof_indices_omega.size(); ++i) {
@@ -2609,7 +2622,7 @@ rank = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
   make_dofs();
   assemble_system();
   solve();
-  //output_results();
+  output_results();
   std::array<double, 4> results_array= compute_errors();
   return results_array;
 }
@@ -2655,7 +2668,7 @@ int main(int argc, char *argv[]) {
   const unsigned int n_r = 1;
   const unsigned int n_LA = 1;
   double radii[n_r] = {  0.01};
-  bool lumpedAverages[n_LA] = {false};
+  bool lumpedAverages[n_LA] = {true};
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
 
@@ -2677,7 +2690,7 @@ int main(int argc, char *argv[]) {
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
  //   const unsigned int refinement[3] = {3,4,5};
-    const unsigned int refinement[5] = {5,6,7,8,9};
+    const unsigned int refinement[1] = {4};
 
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);

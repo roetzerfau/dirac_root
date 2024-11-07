@@ -279,7 +279,7 @@ void KInverse<dim>::value_list(const std::vector<Point<dim>> &points,
     value = unit_symmetric_tensor<dim>();
     //if(dim == 1)
     //std::cout <<"kinverse_omega " <<value<<std::endl;
-    if ((constructed_solution == 3||constructed_solution == 3) && dim == 1) {
+    if ((constructed_solution == 3||constructed_solution == 2) && dim == 1) {
       for (unsigned int i = 0; i < dim; i++) {
         Point<dim> p = points[i];
       // value[i][i]  = p[0] + 1;//
@@ -481,7 +481,6 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
     if(r < cell_size)
     {
        values(i) = 0;
-       //std::cout<<r<<std::endl;
     }
     else  
       values(i) = 1;
