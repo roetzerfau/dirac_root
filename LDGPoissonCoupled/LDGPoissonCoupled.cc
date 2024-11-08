@@ -130,7 +130,6 @@ using namespace dealii;
 
 
 
-constexpr bool no_gradient = false;
 
 const FEValuesExtractors::Vector VectorField_omega(0);
 const FEValuesExtractors::Scalar Potential_omega(1);
@@ -320,7 +319,9 @@ private:
   template <int _dim>
   void assemble_Neumann_boundary_terms(
       const FEFaceValues<_dim> &face_fe, FullMatrix<double> &local_matrix,
-      Vector<double> &local_vector, const Function<_dim> &Neumann_bc_function);
+      Vector<double> &local_vector, const Function<_dim> &Neumann_bc_function, 
+       const FEValuesExtractors::Vector VectorField,
+    const FEValuesExtractors::Scalar Potential);
 
   template <int _dim>
   void assemble_Dirichlet_boundary_terms(
@@ -426,6 +427,7 @@ Vector<double> solution_omega;
   const KInverse<dim> K_inverse_function;
   const DirichletBoundaryValues<dim> Dirichlet_bc_function;
   const NeumannBoundaryValues<dim> Neumann_bc_function;
+   const NeumannBoundaryValues_omega<dim_omega> Neumann_bc_function_omega;
   const TrueSolution<dim> true_solution;
   const TrueSolution_omega<dim_omega> true_solution_omega;
 
@@ -473,7 +475,7 @@ LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
       Dirichlet_bc_function_omega(), radius(parameters.radius),
       lumpedAverage(parameters.lumpedAverage) {
 
-  g = constructed_solution == 3
+  g = constructed_solution == 3 || constructed_solution == 2
           ? (2 * numbers::PI) / (2 * numbers::PI + std::log(radius))
           : 1;
 }
@@ -549,11 +551,11 @@ if (dim == 3) {
 pcout<<"refined++++++"<<std::endl;
 triangulation.refine_global(n_refine);
 pcout<<"refined"<<std::endl;
-
+/*
 GridOut grid_out;
 std::ofstream out("grid_Omega.vtk"); // Choose your preferred filename and format
 grid_out.write_vtk(triangulation, out);
-
+*/
 const std::vector<Point<dim>> &vertices = triangulation.get_vertices();
 
 SparsityPattern cell_connection_graph;
@@ -607,8 +609,8 @@ if( is_repartioned)
       Point<dim> p = cell->face(face_no)->center();
       if (cell->face(face_no)->at_boundary()) {
        
-        if(((p[0] == 0 || p[0] ==2 * half_length) && geo_conf == GeometryConfiguration::ThreeD_OneD && constructed_solution == 3) ){
-        //cell->face(face_no)->set_boundary_id(Neumann);
+        if(((p[0] == 0 || p[0] ==2 * half_length) && geo_conf == GeometryConfiguration::ThreeD_OneD && (constructed_solution == 3 || constructed_solution == 2)) ){
+        cell->face(face_no)->set_boundary_id(Neumann);
         // pcout<<"Neumann"<<std::endl;
         }
         else{
@@ -675,14 +677,19 @@ if(is_repartioned)
     for (unsigned int face_no = 0;
          face_no < GeometryInfo<dim_omega>::faces_per_cell; face_no++) {
       if (cell_omega->face(face_no)->at_boundary())
+      {
+        if(constructed_solution != 2)
         cell_omega->face(face_no)->set_boundary_id(Dirichlet);
+        //cell_omega->face(face_no)->set_boundary_id(Neumann);
+      }
+
     }
   }
-
+/*
 GridOut grid_out_omega;
-std::ofstream out_omega("grid_omega.vtk"); // Choose your preferred filename and format
+std::ofstream out_omega("grid_omega.vtk"); 
 grid_out_omega.write_vtk(triangulation_omega, out_omega);
-
+*/
 
 //handle omega
 #if 1// COUPLED
@@ -880,7 +887,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
     std::vector<types::global_dof_index> local_dof_indices_omega(
         dofs_per_cell_omega);
     unsigned int nof_quad_points;
-     AVERAGE = radius != 0 && !lumpedAverage && constructed_solution == 3 && geo_conf == GeometryConfiguration::ThreeD_OneD;
+     AVERAGE = radius != 0 && !lumpedAverage && (constructed_solution == 3 ||constructed_solution == 2) && geo_conf == GeometryConfiguration::ThreeD_OneD;
     pcout << "AVERAGE (use circel) " << AVERAGE << " radius "<<radius << " lumpedAverage "<<lumpedAverage<<std::endl;
     // weight
     if (AVERAGE) {
@@ -1173,7 +1180,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
         fe_values.reinit(cell);
         assemble_cell_terms(fe_values, local_matrix, local_vector,
                             K_inverse_function, rhs_function, VectorField,
-                            Potential, no_gradient);
+                            Potential, false);
 
         cell->get_dof_indices(local_dof_indices);
 
@@ -1193,7 +1200,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
             } else if (face->boundary_id() == Neumann) {
               assemble_Neumann_boundary_terms(fe_face_values, local_matrix,
                                             local_vector,
-                                             Neumann_bc_function);
+                                             Neumann_bc_function, VectorField, Potential);
             } else
               Assert(false, ExcNotImplemented());
           } else {
@@ -1309,10 +1316,21 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
     
       fe_values_omega.reinit(cell_omega);
 
-      assemble_cell_terms(fe_values_omega, local_matrix_omega,
+if(constructed_solution == 2)
+{
+ assemble_cell_terms(fe_values_omega, local_matrix_omega,
                           local_vector_omega, k_inverse_function,
                           rhs_function_omega, VectorField_omega,
-                          Potential_omega, no_gradient);
+                          Potential_omega,true );
+}
+else
+{
+   assemble_cell_terms(fe_values_omega, local_matrix_omega,
+                          local_vector_omega, k_inverse_function,
+                          rhs_function_omega, VectorField_omega,
+                          Potential_omega,false );
+}
+
 
       cell_omega->get_dof_indices(local_dof_indices_omega);
 
@@ -1339,14 +1357,16 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
           // std::cout<<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" cell_id "<<cell_id_omega<<" face_no_omega "<<face_no_omega<< " Dirichlet"<<std::endl;
             
           }
-          // else if (face_omega->boundary_id() == Neumann)
-          //   {
-          //     assemble_Neumann_boundary_terms(fe_face_values_omega,
-          //                                     local_matrix_omega,
-          //                                 local_vector_omega);
-          //   }
+          else if (face_omega->boundary_id() == Neumann)
+            {
+              assemble_Neumann_boundary_terms(fe_face_values_omega,
+                                              local_matrix_omega,
+                                          local_vector_omega, Neumann_bc_function_omega, VectorField_omega, Potential_omega);
+            }
           else
-            Assert(false, ExcNotImplemented());
+           {
+
+           } 
         } else {
 
          /* Assert(cell_omega->neighbor(face_no_omega).state() ==
@@ -1381,11 +1401,14 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
             neighbor_omega->get_dof_indices(local_neighbor_dof_indices_omega);
            dof_omega_local_2_global(dof_handler_omega,
                               local_neighbor_dof_indices_omega);
-
+            if(constructed_solution != 2)
+            {
             distribute_local_flux_to_global(
-                vi_ui_matrix_omega, vi_ue_matrix_omega, ve_ui_matrix_omega,
-                ve_ue_matrix_omega, local_dof_indices_omega,
-                local_neighbor_dof_indices_omega);
+                  vi_ui_matrix_omega, vi_ue_matrix_omega, ve_ui_matrix_omega,
+                  ve_ue_matrix_omega, local_dof_indices_omega,
+                  local_neighbor_dof_indices_omega);
+            }
+  
           }
         }
         
@@ -1394,7 +1417,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
       constraints.distribute_local_to_global(
           local_matrix_omega, local_dof_indices_omega, system_matrix);
 
-      constraints.distribute_local_to_global(
+     constraints.distribute_local_to_global(
           local_vector_omega, local_dof_indices_omega, system_rhs);
     
    }//end locally ownedS
@@ -2078,7 +2101,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_cell_terms(
         const double psi_j_potential = cell_fe[Potential].value(j, q);
         if(no_gradient)
         {
-          pcout<<"no gradient" <<std::endl;
+        //  pcout<<"no gradient" <<std::endl;
          cell_matrix(i, j) += (psi_i_field * K_inverse_values[q] * psi_j_field)  + (psi_j_potential* psi_i_potential ) * cell_fe.JxW(q);
          }
         else{
@@ -2137,7 +2160,9 @@ template <int dim, int dim_omega>
 template <int _dim>
 void LDGPoissonProblem<dim, dim_omega>::assemble_Neumann_boundary_terms(
     const FEFaceValues<_dim> &face_fe, FullMatrix<double> &local_matrix,
-    Vector<double> &local_vector, const Function<_dim> &Neumann_bc_function) {
+    Vector<double> &local_vector, const Function<_dim> &Neumann_bc_function,
+     const FEValuesExtractors::Vector VectorField,
+    const FEValuesExtractors::Scalar Potential) {
   const unsigned int dofs_per_cell = face_fe.dofs_per_cell;
   const unsigned int n_q_points = face_fe.n_quadrature_points;
 
@@ -2148,7 +2173,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_Neumann_boundary_terms(
 
   for (unsigned int q = 0; q < n_q_points; ++q) {
     for (unsigned int i = 0; i < dofs_per_cell; ++i) {
-      const Tensor<1, dim> psi_i_field = face_fe[VectorField].value(i, q);
+      const Tensor<1, _dim> psi_i_field = face_fe[VectorField].value(i, q);
       const double psi_i_potential = face_fe[Potential].value(i, q);
 
       for (unsigned int j = 0; j < dofs_per_cell; ++j) {

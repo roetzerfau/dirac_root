@@ -29,8 +29,8 @@ enum GeometryConfiguration
 };
 constexpr unsigned int geo_conf{2};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
-constexpr unsigned int constructed_solution{3};   // 1:sin cos, 3: dangelo thesis log
-
+constexpr unsigned int constructed_solution{2};   // 1:sin cos, 3: dangelo thesis log
+ //for constructed solution 2
 
 template <int dim> double distance(Point<dim> point1, Point<dim> point2) {
   double d = 0;
@@ -64,6 +64,13 @@ public:
 template <int dim> class NeumannBoundaryValues : public Function<dim> {
 public:
   NeumannBoundaryValues() : Function<dim>(1) {}
+
+  virtual double value(const Point<dim> &p,
+                       const unsigned int component = 0) const override;
+};
+template <int dim> class NeumannBoundaryValues_omega : public Function<dim> {
+public:
+  NeumannBoundaryValues_omega() : Function<dim>(1) {}
 
   virtual double value(const Point<dim> &p,
                        const unsigned int component = 0) const override;
@@ -158,6 +165,7 @@ double RightHandSide<dim>::value(const Point<dim> &p,
              std::cos(w * p[2]);
     break;
   }
+  case 2:
   case 3: {
     return 0;
     break;
@@ -180,11 +188,16 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
              std::cos(w * z_l);
     break;
   }
+  case 2:
+  {
+    return 2;
+    break;
+  }
   case 3: {
 if(COUPLED == 1 && geo_conf != GeometryConfiguration::TwoD_ZeroD)
     return 0;
 else
-  return -(1 + p[0]);
+return -(1 + p[0]);
 
 
     //return - std::sin(2 * numbers::PI * p[0]);//std::pow(2 * numbers::PI, 2) * std::sin(2 * numbers::PI * p[0]) ;
@@ -213,6 +226,7 @@ double DirichletBoundaryValues<dim>::value(const Point<dim> &p,
     }
     break;
   }
+  case 2:
   case 3: {
      Vector<double> values(dim + 1);
       TrueSolution<dim> solution;
@@ -236,13 +250,14 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
   double r = distance_to_singularity<dim>(p);
 
   switch (constructed_solution) {
+  case 2:
   case 3: {
-    if (p[0] == 1)
+    if (p[0] > 1)
     {
     //  std::cout<<"neum1 "<<p[0]<<std::endl;
       return -1 / (2 * numbers::PI) * std::log(r);///-
     }
-    if (p[0] == 0)
+    if (p[0] < 1)
     {
       //std::cout<<"neum0 "<<p[0]<<std::endl;
       return 1 / (2 * numbers::PI) * std::log(r);
@@ -258,7 +273,28 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
   }
   return 0;
 }
-
+template <int dim>
+double NeumannBoundaryValues_omega<dim>::value(
+    const Point<dim> &p, const unsigned int /*component*/) const {
+  switch (constructed_solution) {
+  case 1:
+  case 2:
+  case 3: {
+    Vector<double> values(dim + 1);
+      TrueSolution_omega<dim> solution;
+      solution.vector_value(p, values);
+      return values[0];
+    break;
+  }
+  default:
+  {
+    std::cout<<"default"<<std::endl;
+    break;
+  }
+    
+  }
+ return 0;
+}
 template <int dim>
 double DirichletBoundaryValues_omega<dim>::value(
     const Point<dim> &p, const unsigned int /*component*/) const {
@@ -277,9 +313,12 @@ double DirichletBoundaryValues_omega<dim>::value(
       return 1;
     if (p[0] == 1)
       return 2;*/
-    
+    Vector<double> values(dim + 1);
+      TrueSolution_omega<dim> solution;
+      solution.vector_value(p, values);
+      return values[dim];
 
-    return 1 + p[0];
+  //return 1 + p[0];
     break;
   }
   default:
@@ -349,6 +388,21 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     }
     break;
   }
+  case 2:
+  {
+    if(dim==3)
+    {
+    if (r != 0) {
+      values(0) =0; //Q 
+       values(1) = 1/(2*numbers::PI) * (y/std::pow(r,2)); // Q
+      values(2) = 1/(2*numbers::PI) * (z/std::pow(r,2)); //Q
+      values(3) = -1 / (2 * numbers::PI) * std::log(r); // U  
+    } else {
+      values(3) = 1  ; // U
+    }
+     }
+     break;
+  }
   case 3: {
     if(dim==3)//
     {
@@ -405,6 +459,12 @@ void TrueSolution_omega<dim>::vector_value(const Point<dim> &p,
       values(0) = w * std::sin(w * x) * std::cos(w * y_l) * std::cos(w * z_l);
       values(1) = std::cos(w * x) * std::cos(w * y_l) * std::cos(w * z_l);
     }
+    break;
+  }
+  case 2:
+  {
+    values(0) = 0; //q 
+    values(1) = 1;//u
     break;
   }
   case 3: {
