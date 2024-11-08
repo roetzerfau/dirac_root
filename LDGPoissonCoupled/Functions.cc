@@ -27,9 +27,8 @@ enum GeometryConfiguration
   ThreeD_OneD = 2
 
 };
-constexpr unsigned int geo_conf{2};
+constexpr unsigned int geo_conf{3};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
-//https://math.libretexts.org/Bookshelves/Differential_Equations/Introduction_to_Partial_Differential_Equations_(Herman)/07%3A_Green%27s_Functions/7.05%3A_Greens_Functions_for_the_2D_Poisson_Equation
 constexpr unsigned int constructed_solution{3};   // 1:sin cos, 3: dangelo thesis log
 
 
@@ -175,7 +174,7 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
   // std::cout<<"rhs omega dim "<<dim<<" "<<p[0]<<std::endl;
   switch (constructed_solution) {
   case 1: {
-   /*if (dim == 2)
+  /* if (dim == 2)
       return std::pow(w, 2) * std::cos(w * p[0]) * std::cos(w * y_l);
     if (dim == 3)*/
       return std::pow(w, 2) * std::cos(w * p[0]) * std::cos(w * y_l) *
@@ -201,15 +200,17 @@ else
 template <int dim>
 double DirichletBoundaryValues<dim>::value(const Point<dim> &p,
                                            const unsigned int) const {
-  double x = p[0];
-  double y = p[1];
-
+  double x, y,z;
+  x = p[0];
+  y = p[1];
+  if(dim == 3)
+  z= p[2];
   switch (constructed_solution) {
   case 1: {
     if (dim == 2)
       return std::cos(w * x) * std::cos(w * y);
     if (dim == 3) {
-      double z = p[2];
+      
       return std::cos(w * x) * std::cos(w * y) * std::cos(w * z);
     }
     break;
@@ -234,15 +235,8 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
   double x;//, y, z;
   x = p[0];
   //y = p[1];
-  Point<dim> closest_point_line;
- if (dim == 2)
-    closest_point_line = Point<dim>(x, y_l);
-  if (dim == 3)
-  {
-    //z = p[2];
-    closest_point_line = Point<dim>(x, y_l, z_l);
-  }
-  double r = distance(p, closest_point_line);
+ 
+  double r = distance_to_singularity<dim>(p);
 
   switch (constructed_solution) {
   case 2:
@@ -334,6 +328,9 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
   double x, y, z;
   x = p[0];
   y = p[1];
+  if(dim ==3)
+    z = p[2];
+
   values = 0;
   double r =  distance_to_singularity<dim>(p);
   if(r > (1 + 0.01))
@@ -348,6 +345,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     }
     if (dim == 3) 
     {
+      
       values(0) = w * std::sin(w * x) * std::cos(w * y) * std::cos(w * z); // Q
       values(1) = w * std::cos(w * x) * std::sin(w * y) * std::cos(w * z);
       values(2) = w * std::cos(w * x) * std::cos(w * y) * std::sin(w * z);
@@ -517,7 +515,7 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
     else  
       values(i) = 1;
   // values(i) = 1;
-  values(i) = values(i) * std::pow(r,2*alpha);
+  //values(i) = values(i) * std::pow(r,2*alpha);
   }
  
  //values = 1;

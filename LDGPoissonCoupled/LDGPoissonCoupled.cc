@@ -606,7 +606,7 @@ if( is_repartioned)
       Point<dim> p = cell->face(face_no)->center();
       if (cell->face(face_no)->at_boundary()) {
        
-        if(((p[0] == 0 || p[0] ==2 * half_length) && geo_conf == GeometryConfiguration::ThreeD_OneD) ){
+        if(((p[0] == 0 || p[0] ==2 * half_length) && geo_conf == GeometryConfiguration::ThreeD_OneD && constructed_solution == 3) ){
         cell->face(face_no)->set_boundary_id(Neumann);
          //pcout<<"Neumann"<<std::endl;
         }
@@ -1190,9 +1190,9 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                   fe_face_values, local_matrix, local_vector, h,
                   Dirichlet_bc_function, VectorField, Potential);
             } else if (face->boundary_id() == Neumann) {
-              assemble_Neumann_boundary_terms(fe_face_values, local_matrix,
-                                              local_vector,
-                                              Neumann_bc_function);
+              //assemble_Neumann_boundary_terms(fe_face_values, local_matrix,
+                //                              local_vector,
+                  //                            Neumann_bc_function);
             } else
               Assert(false, ExcNotImplemented());
           } else {
@@ -1526,7 +1526,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
     }
   }
   if (geo_conf == GeometryConfiguration::TwoD_OneD || geo_conf == GeometryConfiguration::ThreeD_OneD) {
-    std::cout<<"dim == 3) && constructed_solution == 3"<<std::endl;
+    std::cout<<"2D/1D  3D/1D"<<std::endl;
     std::vector<types::global_dof_index> local_dof_indices_test(dofs_per_cell);
     std::vector<types::global_dof_index> local_dof_indices_trial(dofs_per_cell);
 
@@ -2693,7 +2693,7 @@ int main(int argc, char *argv[]) {
   const unsigned int n_r = 1;
   const unsigned int n_LA = 1;
   double radii[n_r] = {  0.01};
-  bool lumpedAverages[n_LA] = {false};//TODO bei punkt wuelle noch berücksichtnge
+  bool lumpedAverages[n_LA] = {true} ;//TODO bei punkt wuelle noch berücksichtnge
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
 
@@ -2716,7 +2716,7 @@ int main(int argc, char *argv[]) {
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
  //   const unsigned int refinement[3] = {3,4,5};
-    const unsigned int refinement[3] = {3,4,5};
+    const unsigned int refinement[2] = {3,4};
 
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
