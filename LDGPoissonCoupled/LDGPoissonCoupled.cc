@@ -128,9 +128,9 @@ using namespace dealii;
 //case 2: 2D/1D 
 //case 3: 3D/1D
 
-constexpr unsigned int dimension_Omega{3};
 
 
+constexpr bool no_gradient = false;
 
 const FEValuesExtractors::Vector VectorField_omega(0);
 const FEValuesExtractors::Scalar Potential_omega(1);
@@ -140,7 +140,7 @@ const FEValuesExtractors::Scalar Potential(dimension_Omega);
 
 
 const double extent = 1;
-const double half_length = std::sqrt(0.49);//0.5
+const double half_length = std::sqrt(0.5);//0.5
 const double distance_tolerance = 10;
 const unsigned int N_quad_points = 3;
 const double reduction = 1e-8;
@@ -315,7 +315,8 @@ private:
                            const TensorFunction<2, _dim> &K_inverse_function,
                            const Function<_dim> &_rhs_function,
                            const FEValuesExtractors::Vector &VectorField,
-                           const FEValuesExtractors::Scalar &Potential);
+                           const FEValuesExtractors::Scalar &Potential,
+                           bool no_gradient);
   template <int _dim>
   void assemble_Neumann_boundary_terms(
       const FEFaceValues<_dim> &face_fe, FullMatrix<double> &local_matrix,
@@ -512,8 +513,6 @@ std::pair<Point<dim>, Point<dim>> corner_pair(corner1, corner2);
           return this->cell_weight(cell, status);
         });*/
 #if CYLINDER
-  if (constructed_solution == 3) {
-
     // Calculate the shift vector
     
     Point<dim> shift_vector;
@@ -529,9 +528,6 @@ std::pair<Point<dim>, Point<dim>> corner_pair(corner1, corner2);
       Point<dim> center(0, 0);
       GridGenerator::hyper_ball(triangulation, center, 1);
     }
-
-  } else
-    GridGenerator::hyper_cube(triangulation, -extent, extent);
 #else
   Point<dim> p1, p2;
 if (dim == 3) {
@@ -608,13 +604,21 @@ if( is_repartioned)
     for (unsigned int face_no = 0; face_no < GeometryInfo<dim>::faces_per_cell;
          face_no++) {
       Point<dim> p = cell->face(face_no)->center();
-      if (cell->face(face_no)->at_boundary() && (
-      ((p[0] != 0 || p[0] != 1) && geo_conf == GeometryConfiguration::ThreeD_OneD) 
-      || geo_conf == GeometryConfiguration::TwoD_OneD
-      ||geo_conf == GeometryConfiguration::TwoD_ZeroD
-      )) {
-        cell->face(face_no)->set_boundary_id(Dirichlet);
+      if (cell->face(face_no)->at_boundary()) {
+       
+        if(((p[0] == 0 || p[0] ==2 * half_length) && geo_conf == GeometryConfiguration::ThreeD_OneD) ){
+        cell->face(face_no)->set_boundary_id(Neumann);
+         //pcout<<"Neumann"<<std::endl;
+        }
+        else{
+           cell->face(face_no)->set_boundary_id(Dirichlet);
+       //pcout<<"Dirichlet"<<std::endl;
+        }
+       
       }
+       
+      
+
     }
     }
     cell_number++;
@@ -655,15 +659,11 @@ if(is_repartioned)
     //throw std::invalid_argument("MAX DIAMETER > RADIUS");
   }
 //---------------omega-------------------------
-  if (constructed_solution == 3)
-  {
     if(dim == 2)
     GridGenerator::hyper_cube(triangulation_omega, -half_length ,  half_length);
-    else
+    if(dim == 3)
     GridGenerator::hyper_cube(triangulation_omega,0 ,  2*half_length);
-  }
-  else
-    GridGenerator::hyper_cube(triangulation_omega, -extent / 2, extent / 2);
+
   triangulation_omega.refine_global(n_refine);
 
  typename DoFHandler<dim_omega>::active_cell_iterator
@@ -698,6 +698,7 @@ for (unsigned int i = 0; i < triangulation.n_vertices(); i++)
     {
       marked_vertices[i] = false;
     }
+     marked_vertices[i] = true;
 }
 #endif
 
@@ -931,13 +932,13 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
         // test function
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
-     //   pcout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
+       // pcout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
 #if TEST
 //pcout <<"stat "<<std::endl;
    auto start = std::chrono::high_resolution_clock::now();  //Start time
     auto cell_test_first = GridTools::find_active_cell_around_point(
-          cache, quadrature_point_test);//, cell_start, marked_vertices);
-      //     pcout<<"###+++# " <<cell_test_first.first<<" "<<cell_test_first.second<<std::endl;
+          cache, quadrature_point_test, cell_start, marked_vertices);
+       //    pcout<<"###+++# " <<cell_test_first.first<<" "<<cell_test_first.second<<std::endl;
     auto end = std::chrono::high_resolution_clock::now();    // End time
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
@@ -995,7 +996,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
 //pcout<<"asdf " <<quadrature_point_trial<<std::endl;
     auto cell_trial_first = GridTools::find_active_cell_around_point(
           cache, quadrature_point_trial, cell_start, marked_vertices);
-    //        pcout<<"###### " <<cell_trial_first.first<<" "<<cell_trial_first.second<<std::endl;
+  //         pcout<<"###### " <<cell_trial_first.first<<" "<<cell_trial_first.second<<std::endl;
    #if FASTER
    auto cell_trial_array = find_all_active_cells_around_point<dim, dim>(
                        mapping, triangulation, quadrature_point_trial,1e-10 ,cell_trial_first, &cache.get_vertex_to_cell_map());//, cache.get_vertex_to_cell_map()*/ //correct
@@ -1171,7 +1172,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
         fe_values.reinit(cell);
         assemble_cell_terms(fe_values, local_matrix, local_vector,
                             K_inverse_function, rhs_function, VectorField,
-                            Potential);
+                            Potential, no_gradient);
 
         cell->get_dof_indices(local_dof_indices);
 
@@ -1310,7 +1311,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
       assemble_cell_terms(fe_values_omega, local_matrix_omega,
                           local_vector_omega, k_inverse_function,
                           rhs_function_omega, VectorField_omega,
-                          Potential_omega);
+                          Potential_omega, no_gradient);
 
       cell_omega->get_dof_indices(local_dof_indices_omega);
 
@@ -1417,7 +1418,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
   pcout << "assemble Coupling" << std::endl;
   
   if (geo_conf == GeometryConfiguration::TwoD_ZeroD) {
-    std::cout << "dim == 2 && constructed_solution == 3   2D/0D" << std::endl;
+    std::cout << "2D/0D" << std::endl;
     Point<dim> quadrature_point_test(y_l, z_l);
     std::vector<types::global_dof_index> local_dof_indices_test(dofs_per_cell);
     // test function
@@ -2013,7 +2014,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
   // std::cout << "ende coupling loop" << std::endl;
 
 
-  for (unsigned int i = 0; i < dof_handler_Omega.n_dofs() + dof_handler_omega.n_dofs(); i++) // dof_table.size()
+  /*for (unsigned int i = 0; i < dof_handler_Omega.n_dofs() + dof_handler_omega.n_dofs(); i++) // dof_table.size()
   {
     // if(dof_table[i].first.first == 1 || dof_table[i].first.first == 3)
     {
@@ -2022,7 +2023,7 @@ std::cout<<"ja"<<std::endl;
         system_matrix.add(i, i, 1);
       }
     }
-  }
+  }*/
   
   pcout<<"Start compress " <<std::endl;
   system_matrix.compress(VectorOperation::add);
@@ -2052,7 +2053,8 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_cell_terms(
     const TensorFunction<2, _dim> &_K_inverse_function,
     const Function<_dim> &_rhs_function,
     const FEValuesExtractors::Vector &VectorField,
-    const FEValuesExtractors::Scalar &Potential) {
+    const FEValuesExtractors::Scalar &Potential,
+    bool no_gradient) {
   const unsigned int dofs_per_cell = cell_fe.dofs_per_cell;
   const unsigned int n_q_points = cell_fe.n_quadrature_points;
 
@@ -2074,12 +2076,18 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_cell_terms(
       for (unsigned int j = 0; j < dofs_per_cell; ++j) {
         const Tensor<1, _dim> psi_j_field = cell_fe[VectorField].value(j, q);
         const double psi_j_potential = cell_fe[Potential].value(j, q);
-
+        if(no_gradient)
+        {
+          pcout<<"no gradient" <<std::endl;
+         cell_matrix(i, j) += (psi_i_field * K_inverse_values[q] * psi_j_field)  + (psi_j_potential* psi_i_potential ) * cell_fe.JxW(q);
+         }
+        else{
         cell_matrix(i, j) +=
             ((psi_i_field * K_inverse_values[q] * psi_j_field) -
              (div_psi_i_field * psi_j_potential) -
              (grad_psi_i_potential * psi_j_field)) *
             cell_fe.JxW(q);
+        }
       }
 
       cell_vector(i) += psi_i_potential * rhs_values[q] * cell_fe.JxW(q);
@@ -2670,9 +2678,6 @@ int main(int argc, char *argv[]) {
 
 #endif
 
-  // std::cout << "dimension_Omega " << dimension_Omega << " solution "
-  //          << constructed_solution << std::endl;
-
   /*
   Parameters parameters;
       parameters.radius = 0.01;
@@ -2688,7 +2693,7 @@ int main(int argc, char *argv[]) {
   const unsigned int n_r = 1;
   const unsigned int n_LA = 1;
   double radii[n_r] = {  0.01};
-  bool lumpedAverages[n_LA] = {false};
+  bool lumpedAverages[n_LA] = {false};//TODO bei punkt wuelle noch berücksichtnge
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
 
@@ -2703,6 +2708,7 @@ int main(int argc, char *argv[]) {
 
       Parameters parameters;
 
+
       parameters.radius = radii[rad];
       parameters.lumpedAverage = lumpedAverages[LA];
      // const unsigned int p_degree[2] = {0,1};
@@ -2710,7 +2716,7 @@ int main(int argc, char *argv[]) {
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
  //   const unsigned int refinement[3] = {3,4,5};
-    const unsigned int refinement[2] = {3,4};
+    const unsigned int refinement[3] = {3,4,5};
 
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);

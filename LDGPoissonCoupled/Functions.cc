@@ -28,6 +28,7 @@ enum GeometryConfiguration
 
 };
 constexpr unsigned int geo_conf{2};
+constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
 //https://math.libretexts.org/Bookshelves/Differential_Equations/Introduction_to_Partial_Differential_Equations_(Herman)/07%3A_Green%27s_Functions/7.05%3A_Greens_Functions_for_the_2D_Poisson_Equation
 constexpr unsigned int constructed_solution{3};   // 1:sin cos, 3: dangelo thesis log
 
@@ -119,6 +120,33 @@ public:
   private:
     double alpha, radius, cell_size;
 };
+
+
+template <int dim>
+double distance_to_singularity(const Point<dim> &p)
+{
+  double x = p[0];
+  double r;
+
+
+  Point<dim> nearest_singularity_point;
+  if (GeometryConfiguration::TwoD_OneD == geo_conf )
+    nearest_singularity_point = Point<dim>(x, y_l); //nearest point on line
+  if (GeometryConfiguration::ThreeD_OneD == geo_conf) 
+  {
+   nearest_singularity_point = Point<dim>(x, y_l, z_l);
+  }
+  
+  
+  if(GeometryConfiguration::TwoD_ZeroD == geo_conf )
+  {
+     nearest_singularity_point = Point<dim>(0,0);//center
+  }
+  r = distance(p, nearest_singularity_point);
+  return r;
+}
+
+
 template <int dim>
 double RightHandSide<dim>::value(const Point<dim> &p,
                                  const unsigned int) const {
@@ -260,7 +288,7 @@ double DirichletBoundaryValues_omega<dim>::value(
     if (p[0] == 1)
       return 2;*/
     
-    
+
     return 1 + p[0];
     break;
   }
@@ -307,15 +335,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
   x = p[0];
   y = p[1];
   values = 0;
-  Point<dim> closest_point_line;
- if (dim == 2)
-    closest_point_line = Point<dim>(x, y_l);
-  if (dim == 3) 
-  {
-    z = p[2];
-    closest_point_line = Point<dim>(x, y_l, z_l);
-  }
-  double r = distance(p, closest_point_line);
+  double r =  distance_to_singularity<dim>(p);
   if(r > (1 + 0.01))
   std::cout<<"FALSCH!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!   "<<r<<std::endl;
   switch (constructed_solution) {
@@ -380,9 +400,6 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
      {
       if(GeometryConfiguration::TwoD_ZeroD == geo_conf)
       {
-      
-      Point<dim>center(0,0);
-      r = distance(p, center);
     if(r!= 0)
     {
     values(0) = 1/(2*numbers::PI) * (x/std::pow(r,2)); //Q 
@@ -482,30 +499,13 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
   Assert(values.size() == dim +1,
          ExcDimensionMismatch(values.size(), dim + 1));
   unsigned int n_components = values.size();
-  double x;//, y, z;
   double r;
-  x = p[0];
+
  // y = p[1];
   values = 0;
 
-  if(GeometryConfiguration::TwoD_OneD == geo_conf || GeometryConfiguration::ThreeD_OneD == geo_conf)
-  {
-  Point<dim> closest_point_line;
- if (dim == 2)
-    closest_point_line = Point<dim>(x, y_l);
-  if (dim == 3) 
-  {
-    //z = p[2];
-    closest_point_line = Point<dim>(x, y_l, z_l);
-  }
-    r = distance(p, closest_point_line);
-  }
-  if(GeometryConfiguration::TwoD_ZeroD == geo_conf )
-  {
-      Point<dim>center(0,0);
-      r = distance(p, center);
-  }
-
+  
+  r = distance_to_singularity<dim>(p);
 
 
   for(unsigned int i = 0; i < n_components; i++)
