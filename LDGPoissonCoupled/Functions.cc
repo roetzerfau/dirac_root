@@ -13,15 +13,21 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 1
+#define COUPLED 0
 #define TEST 1
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
 const double y_l = 0.0;
 const double z_l = 0.0;
+enum GeometryConfiguration
+{
+  TwoD_ZeroD = 0,
+  TwoD_OneD = 1,
+  ThreeD_OneD = 2
 
-
+};
+constexpr unsigned int geo_conf{0};
 //https://math.libretexts.org/Bookshelves/Differential_Equations/Introduction_to_Partial_Differential_Equations_(Herman)/07%3A_Green%27s_Functions/7.05%3A_Greens_Functions_for_the_2D_Poisson_Equation
 constexpr unsigned int constructed_solution{3};   // 1:sin cos, 3: dangelo thesis log
 
@@ -138,7 +144,7 @@ double RightHandSide<dim>::value(const Point<dim> &p,
 template <int dim>
 double RightHandSide_omega<dim>::value(const Point<dim> &p,
                                        const unsigned int /*component*/) const {
-   //std::cout<<"rhs omega dim "<<dim<<" "<<p[0]<<std::endl;
+  // std::cout<<"rhs omega dim "<<dim<<" "<<p[0]<<std::endl;
   switch (constructed_solution) {
   case 1: {
    /*if (dim == 2)
@@ -150,11 +156,11 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
   }
   case 2:
   case 3: {
-#if COUPLED
+if(COUPLED == 1 && geo_conf != GeometryConfiguration::TwoD_ZeroD)
     return 0;
-#else
+else
   return -(1 + p[0]);
-#endif
+
 
     //return - std::sin(2 * numbers::PI * p[0]);//std::pow(2 * numbers::PI, 2) * std::sin(2 * numbers::PI * p[0]) ;
     break;
@@ -358,7 +364,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     break;
   }
   case 3: {
-    if(dim == 3)
+    if(dim==3)//
     {
     if (r != 0) {
       values(0) = 1/(2*numbers::PI) * std::log(r); //Q 
@@ -369,25 +375,37 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
       values(3) = 1 + x ; // U
     }
      }
-     if(dim == 2)
+     if(dim == 2)//
      {
+      if(GeometryConfiguration::TwoD_ZeroD == geo_conf)
+      {
+      
       Point<dim>center(0,0);
       r = distance(p, center);
-      //std::cout<<r <<" "<<std::endl;
     if(r!= 0)
     {
-    values(0) =1/(2*numbers::PI) * (x/std::pow(r,2)); //Q 
-    values(1) = 1/(2*numbers::PI) * (y/std::pow(r,2)); // Q
-    values(2) = -1 / (2 * numbers::PI) * std::log(r); // U  
+    values(0) = 1/(2*numbers::PI) * (x/std::pow(r,2)); //Q 
+    values(1) =  1/(2*numbers::PI) * (y/std::pow(r,2)); // Q
+    values(2) = -  1/(2*numbers::PI) *std::log(r); // U  
     }
     else
       values(2) = 1 ;
 
      }
-         
+     if(GeometryConfiguration::TwoD_OneD == geo_conf)
+     {
+      if(r!= 0)
+          {
+          values(0) = 1/(2*numbers::PI) *(x/std::pow(r,2)); //Q 
+          values(1) = 1/(2*numbers::PI) *(y/std::pow(r,2)); // Q
+          values(2) = -1/(2*numbers::PI) * std::log(r); // U  
+          }
+          else
+            values(2) = 1 ;
+     }
+  }
     break;
   }
-
   default:
     break;
   }
@@ -420,8 +438,8 @@ void TrueSolution_omega<dim>::vector_value(const Point<dim> &p,
   case 2:
   case 3: {
     //values(1) = std::sin(numbers::PI * 2 *x);//u
-    values(1) = 1 + x;//u
     values(0) = -(1 + x + 0.5 * std::pow(x,2)); //q 
+    values(1) = 1 + x;//u
     // std::cout<<"w "<<values(0)<<" "<<values(1)<<std::endl;
     break;
   }
@@ -463,9 +481,13 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
          ExcDimensionMismatch(values.size(), dim + 1));
   unsigned int n_components = values.size();
   double x;//, y, z;
+  double r;
   x = p[0];
  // y = p[1];
   values = 0;
+
+  if(GeometryConfiguration::TwoD_OneD == geo_conf || GeometryConfiguration::ThreeD_OneD == geo_conf)
+  {
   Point<dim> closest_point_line;
  if (dim == 2)
     closest_point_line = Point<dim>(x, y_l);
@@ -474,7 +496,15 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
     //z = p[2];
     closest_point_line = Point<dim>(x, y_l, z_l);
   }
-  double r = distance(p, closest_point_line);
+    r = distance(p, closest_point_line);
+  }
+  if(GeometryConfiguration::TwoD_ZeroD == geo_conf )
+  {
+      Point<dim>center(0,0);
+      r = distance(p, center);
+  }
+
+
 
   for(unsigned int i = 0; i < n_components; i++)
   {
@@ -484,7 +514,6 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
     }
     else  
       values(i) = 1;
-  //values(i) = values(i) * std::pow(r,2*alpha);
   // values(i) = 1;
   values(i) = values(i) * std::pow(r,2*alpha);
   }
