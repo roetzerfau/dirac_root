@@ -13,7 +13,7 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 0
+#define COUPLED 1
 #define TEST 1
 
 using namespace dealii;
@@ -27,7 +27,7 @@ enum GeometryConfiguration
   ThreeD_OneD = 2
 
 };
-constexpr unsigned int geo_conf{0};
+constexpr unsigned int geo_conf{2};
 //https://math.libretexts.org/Bookshelves/Differential_Equations/Introduction_to_Partial_Differential_Equations_(Herman)/07%3A_Green%27s_Functions/7.05%3A_Greens_Functions_for_the_2D_Poisson_Equation
 constexpr unsigned int constructed_solution{3};   // 1:sin cos, 3: dangelo thesis log
 
@@ -259,8 +259,9 @@ double DirichletBoundaryValues_omega<dim>::value(
       return 1;
     if (p[0] == 1)
       return 2;*/
+    
+    
     return 1 + p[0];
-
     break;
   }
   default:
@@ -396,9 +397,9 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
      {
       if(r!= 0)
           {
-          values(0) = 1/(2*numbers::PI) *(x/std::pow(r,2)); //Q 
-          values(1) = 1/(2*numbers::PI) *(y/std::pow(r,2)); // Q
-          values(2) = -1/(2*numbers::PI) * std::log(r); // U  
+          values(0) = (x/std::pow(r,2)); //Q 
+          values(1) = (y/std::pow(r,2)); // Q
+          values(2) = - std::log(r); // U  
           }
           else
             values(2) = 1 ;
@@ -437,7 +438,8 @@ void TrueSolution_omega<dim>::vector_value(const Point<dim> &p,
   }
   case 2:
   case 3: {
-    //values(1) = std::sin(numbers::PI * 2 *x);//u
+     //values(0) = 0; //q 
+    //values(1) =  1 + x;//u
     values(0) = -(1 + x + 0.5 * std::pow(x,2)); //q 
     values(1) = 1 + x;//u
     // std::cout<<"w "<<values(0)<<" "<<values(1)<<std::endl;

@@ -128,7 +128,7 @@ using namespace dealii;
 //case 2: 2D/1D 
 //case 3: 3D/1D
 
-constexpr unsigned int dimension_Omega{2};
+constexpr unsigned int dimension_Omega{3};
 
 
 
@@ -657,8 +657,10 @@ if(is_repartioned)
 //---------------omega-------------------------
   if (constructed_solution == 3)
   {
+    if(dim == 2)
     GridGenerator::hyper_cube(triangulation_omega, -half_length ,  half_length);
-    //GridGenerator::hyper_cube(triangulation_omega,0 ,  2*half_length);
+    else
+    GridGenerator::hyper_cube(triangulation_omega,0 ,  2*half_length);
   }
   else
     GridGenerator::hyper_cube(triangulation_omega, -extent / 2, extent / 2);
@@ -682,7 +684,7 @@ grid_out_omega.write_vtk(triangulation_omega, out_omega);
 
 
 //handle omega
-#if COUPLED
+#if 1// COUPLED
 marked_vertices.resize(triangulation.n_vertices());
 
 for (unsigned int i = 0; i < triangulation.n_vertices(); i++)
@@ -690,37 +692,13 @@ for (unsigned int i = 0; i < triangulation.n_vertices(); i++)
     if (bbox.point_inside(vertices[i]))
     {
       marked_vertices[i] = true;
-      //pcout<< "marked_vertices[i] "<< marked_vertices[i]<<std::endl;
+     // pcout<< "marked_vertices[i] "<< marked_vertices[i]<<std::endl;
     }
     else
     {
       marked_vertices[i] = false;
     }
 }
-/*
-    cell = dof_handler_Omega.begin_active();
-     endc = dof_handler_Omega.end();
-    // unsigned int cell_number = 0;
-    for (; cell != endc; ++cell) 
-    {
-       if (cell->is_locally_owned())
-       {
-        // Check each vertex of the cell
-       for (unsigned int v = 0; v < GeometryInfo<dim>::vertices_per_cell; ++v)
-        {
-            // If the cell has the vertex with the given index
-            if (bbox.point_inside(vertices[cell->vertex_index(v)]))
-            {
-               cell->set_subdomain_id(0); // Processor 0
-            }
-        }
-        }
-    }
-*/
-// Enforce the new partitioning
-//triangulation.repartition();
-
-
 #endif
 
 }
@@ -953,13 +931,13 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
         // test function
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
-       // pcout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
+     //   pcout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
 #if TEST
 //pcout <<"stat "<<std::endl;
    auto start = std::chrono::high_resolution_clock::now();  //Start time
     auto cell_test_first = GridTools::find_active_cell_around_point(
-          cache, quadrature_point_test, cell_start, marked_vertices);
-          
+          cache, quadrature_point_test);//, cell_start, marked_vertices);
+      //     pcout<<"###+++# " <<cell_test_first.first<<" "<<cell_test_first.second<<std::endl;
     auto end = std::chrono::high_resolution_clock::now();    // End time
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
@@ -1017,7 +995,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
 //pcout<<"asdf " <<quadrature_point_trial<<std::endl;
     auto cell_trial_first = GridTools::find_active_cell_around_point(
           cache, quadrature_point_trial, cell_start, marked_vertices);
-    //         pcout<<"###### " <<cell_trial_first.first<<" "<<cell_trial_first.second<<std::endl;
+    //        pcout<<"###### " <<cell_trial_first.first<<" "<<cell_trial_first.second<<std::endl;
    #if FASTER
    auto cell_trial_array = find_all_active_cells_around_point<dim, dim>(
                        mapping, triangulation, quadrature_point_trial,1e-10 ,cell_trial_first, &cache.get_vertex_to_cell_map());//, cache.get_vertex_to_cell_map()*/ //correct
@@ -1025,7 +1003,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
    auto cell_trial_array = GridTools::find_all_active_cells_around_point(
                        mapping, triangulation, quadrature_point_trial,1e-10 ,cell_trial_first);//, cache.get_vertex_to_cell_map()
    #endif
- //  pcout<<"----" <<std::endl;
+ //pcout<<"----" <<std::endl;
     for (auto cellpair_trial : cell_trial_array)
 #else
               auto cell_trial = GridTools::find_active_cell_around_point(
@@ -1262,10 +1240,8 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
   }
 #endif
   // std::cout << "loop z uend" << std::endl;
-#if 1// USE_MPI_ASSEMBLE
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
-#endif
 
   // omega
   QGauss<dim_omega> quadrature_formula_omega(fe_Omega.degree + 1);
@@ -1311,9 +1287,9 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
       cell_omega = dof_handler_omega.begin_active(),
       endc_omega = dof_handler_omega.end();
 
-#if 0// USE_MPI_ASSEMBLE
+
 // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
-#endif
+
   #if 1
   {
     TimerOutput::Scope t(computing_timer, "assembly - omega");
@@ -1548,7 +1524,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
         }
     }
   }
-  if ((dim == 3) && constructed_solution == 3) {
+  if (geo_conf == GeometryConfiguration::TwoD_OneD || geo_conf == GeometryConfiguration::ThreeD_OneD) {
     std::cout<<"dim == 3) && constructed_solution == 3"<<std::endl;
     std::vector<types::global_dof_index> local_dof_indices_test(dofs_per_cell);
     std::vector<types::global_dof_index> local_dof_indices_trial(dofs_per_cell);
@@ -2035,21 +2011,23 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 }
 #endif
   // std::cout << "ende coupling loop" << std::endl;
-pcout<<"Start compress " <<std::endl;
-  system_matrix.compress(VectorOperation::add);
-  system_rhs.compress(VectorOperation::add);
-/*
+
+
   for (unsigned int i = 0; i < dof_handler_Omega.n_dofs() + dof_handler_omega.n_dofs(); i++) // dof_table.size()
   {
     // if(dof_table[i].first.first == 1 || dof_table[i].first.first == 3)
     {
       if (system_matrix.el(i, i) == 0) {
-
-        system_matrix.set(i, i, 1);
+std::cout<<"ja"<<std::endl;
+        system_matrix.add(i, i, 1);
       }
     }
   }
-*/
+  
+  pcout<<"Start compress " <<std::endl;
+  system_matrix.compress(VectorOperation::add);
+  system_rhs.compress(VectorOperation::add);
+
 }
 
 template <int dim, int dim_omega>
@@ -2664,7 +2642,7 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
   make_dofs();
   assemble_system();
   solve();
-  //output_results();
+  output_results();
   std::array<double, 4> results_array= compute_errors();
   return results_array;
 }
@@ -2710,7 +2688,7 @@ int main(int argc, char *argv[]) {
   const unsigned int n_r = 1;
   const unsigned int n_LA = 1;
   double radii[n_r] = {  0.01};
-  bool lumpedAverages[n_LA] = {true};
+  bool lumpedAverages[n_LA] = {false};
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
 
@@ -2732,7 +2710,7 @@ int main(int argc, char *argv[]) {
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
  //   const unsigned int refinement[3] = {3,4,5};
-    const unsigned int refinement[5] = {3,4,5,6,7};
+    const unsigned int refinement[2] = {3,4};
 
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
