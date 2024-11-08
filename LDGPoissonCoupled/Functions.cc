@@ -22,12 +22,12 @@ const double y_l = 0.0;
 const double z_l = 0.0;
 enum GeometryConfiguration
 {
-  TwoD_ZeroD = 0,
-  TwoD_OneD = 1,
-  ThreeD_OneD = 2
+  TwoD_ZeroD = 0, //constructed solution 3
+  TwoD_OneD = 1,//constructed solution 1
+  ThreeD_OneD = 2 ////constructed solution 1 & 3
 
 };
-constexpr unsigned int geo_conf{3};
+constexpr unsigned int geo_conf{2};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
 constexpr unsigned int constructed_solution{3};   // 1:sin cos, 3: dangelo thesis log
 
@@ -158,7 +158,6 @@ double RightHandSide<dim>::value(const Point<dim> &p,
              std::cos(w * p[2]);
     break;
   }
-  case 2:
   case 3: {
     return 0;
     break;
@@ -181,7 +180,6 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
              std::cos(w * z_l);
     break;
   }
-  case 2:
   case 3: {
 if(COUPLED == 1 && geo_conf != GeometryConfiguration::TwoD_ZeroD)
     return 0;
@@ -215,7 +213,6 @@ double DirichletBoundaryValues<dim>::value(const Point<dim> &p,
     }
     break;
   }
-  case 2:
   case 3: {
      Vector<double> values(dim + 1);
       TrueSolution<dim> solution;
@@ -239,7 +236,6 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
   double r = distance_to_singularity<dim>(p);
 
   switch (constructed_solution) {
-  case 2:
   case 3: {
     if (p[0] == 1)
     {
@@ -353,35 +349,6 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     }
     break;
   }
-  case 2: {
-    if(dim == 3)
-    {
-    if (r != 0) {
-      values(0) =  0; //Q 
-       values(1) =  (y/std::pow(r,2)); // Q
-      values(2) =  (z/std::pow(r,2)); //Q
-      values(3) =  -std::log(r); // U  
-    } else {
-      values(3) = 1; // U
-    }
-     }
-     if(dim == 2)
-     {
-      Point<dim>center(y_l,z_l);
-      r = distance(p, center);
-      //std::cout<<r <<" "<<std::endl;
-    if(r!= 0)
-    {
-    values(0) =  (x/std::pow(r,2)); //Q 
-    values(1) = (y/std::pow(r,2)); // Q
-    values(2) = -std::log(r); // U  
-    }
-    else
-      values(2) = 1; //U
-     }
-         
-    break;
-  }
   case 3: {
     if(dim==3)//
     {
@@ -407,17 +374,6 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     else
       values(2) = 1 ;
 
-     }
-     if(GeometryConfiguration::TwoD_OneD == geo_conf)
-     {
-      if(r!= 0)
-          {
-          values(0) = (x/std::pow(r,2)); //Q 
-          values(1) = (y/std::pow(r,2)); // Q
-          values(2) = - std::log(r); // U  
-          }
-          else
-            values(2) = 1 ;
      }
   }
     break;
@@ -451,7 +407,6 @@ void TrueSolution_omega<dim>::vector_value(const Point<dim> &p,
     }
     break;
   }
-  case 2:
   case 3: {
      //values(0) = 0; //q 
     //values(1) =  1 + x;//u

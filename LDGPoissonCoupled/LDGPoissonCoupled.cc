@@ -362,6 +362,7 @@ private:
   
   //unsigned int nof_degrees;
   unsigned int dimension_gap;
+  bool AVERAGE;
 
 
   int rank_mpi;
@@ -607,8 +608,8 @@ if( is_repartioned)
       if (cell->face(face_no)->at_boundary()) {
        
         if(((p[0] == 0 || p[0] ==2 * half_length) && geo_conf == GeometryConfiguration::ThreeD_OneD && constructed_solution == 3) ){
-        cell->face(face_no)->set_boundary_id(Neumann);
-         //pcout<<"Neumann"<<std::endl;
+        //cell->face(face_no)->set_boundary_id(Neumann);
+        // pcout<<"Neumann"<<std::endl;
         }
         else{
            cell->face(face_no)->set_boundary_id(Dirichlet);
@@ -879,7 +880,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
     std::vector<types::global_dof_index> local_dof_indices_omega(
         dofs_per_cell_omega);
     unsigned int nof_quad_points;
-    bool AVERAGE = radius != 0 && !lumpedAverage;
+     AVERAGE = radius != 0 && !lumpedAverage && constructed_solution == 3 && geo_conf == GeometryConfiguration::ThreeD_OneD;
     pcout << "AVERAGE (use circel) " << AVERAGE << " radius "<<radius << " lumpedAverage "<<lumpedAverage<<std::endl;
     // weight
     if (AVERAGE) {
@@ -1190,9 +1191,9 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                   fe_face_values, local_matrix, local_vector, h,
                   Dirichlet_bc_function, VectorField, Potential);
             } else if (face->boundary_id() == Neumann) {
-              //assemble_Neumann_boundary_terms(fe_face_values, local_matrix,
-                //                              local_vector,
-                  //                            Neumann_bc_function);
+              assemble_Neumann_boundary_terms(fe_face_values, local_matrix,
+                                            local_vector,
+                                             Neumann_bc_function);
             } else
               Assert(false, ExcNotImplemented());
           } else {
@@ -1539,8 +1540,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
     bool insideCell_test = true;
     bool insideCell_trial = true;
     unsigned int nof_quad_points;
-    bool AVERAGE = radius != 0 && !lumpedAverage;
-    pcout << "AVERAGE " << AVERAGE << " radius "<<radius << " lumpedAverage "<<lumpedAverage<<std::endl;
+
 
     // weight
     if (AVERAGE) {
@@ -2693,7 +2693,7 @@ int main(int argc, char *argv[]) {
   const unsigned int n_r = 1;
   const unsigned int n_LA = 1;
   double radii[n_r] = {  0.01};
-  bool lumpedAverages[n_LA] = {true} ;//TODO bei punkt wuelle noch berücksichtnge
+  bool lumpedAverages[n_LA] = {false};//TODO bei punkt wuelle noch berücksichtnge
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
 
@@ -2716,7 +2716,7 @@ int main(int argc, char *argv[]) {
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
  //   const unsigned int refinement[3] = {3,4,5};
-    const unsigned int refinement[2] = {3,4};
+    const unsigned int refinement[3] = {3,4,5};
 
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
