@@ -1780,11 +1780,16 @@ else
                     local_vector = 0;
                     for (unsigned int q = 0; q < n_face_points; ++q) {
                       for (unsigned int i = 0; i < dofs_this_cell; ++i) {
+                        double z;
+                        if(constructed_solution == 2)
+                          z = 1;
+                        else
+                          z = (1 + quadrature_point_omega[0]);
                         local_vector(i) +=
                             fe_values_coupling_test_face[Potential].value(i,
                                                                           q) *
                             1 / (n_te * n_ftest) *
-                        //    (1 + quadrature_point_omega[0]) *
+                            z *
                             fe_values_omega.JxW(p);
                       }
                     }
@@ -1802,9 +1807,15 @@ else
                 const unsigned int n_q_points = fe_values.n_quadrature_points;
                  for (unsigned int q = 0; q < n_q_points; ++q) {
                 for (unsigned int i = 0; i < dofs_per_cell; i++) {
+                  
+                  double z;
+                  if(constructed_solution == 2)
+                    z = 1;
+                  else
+                    z = (1 + quadrature_point_omega[0]);
                   local_vector(i) +=
-                      fe_values_coupling_test[Potential].value(i, 0) *
-                    //  (1 + quadrature_point_omega[0])  *
+                      fe_values_coupling_test[Potential].value(i, 0) * z
+                        *
                       fe_values_omega.JxW(p);
                 }
                 constraints.distribute_local_to_global(

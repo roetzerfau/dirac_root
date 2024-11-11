@@ -13,7 +13,7 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 1
+#define COUPLED 0
 #define TEST 1
 
 using namespace dealii;
@@ -23,14 +23,13 @@ const double z_l = 0.0;
 enum GeometryConfiguration
 {
   TwoD_ZeroD = 0, //constructed solution 3 (omega wird unabhängig davon auch noch ausgerechnet)
-  TwoD_OneD = 1,//constructed solution 1
+  TwoD_OneD = 1,//constructed solution 1(Coupled)
   ThreeD_OneD = 2 ////constructed solution 1, 2, 3
 
 };
 constexpr unsigned int geo_conf{2};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
-constexpr unsigned int constructed_solution{2};   // 1:sin cos (Kopplung hebt sich auf), 2: omega ohne fluss, 3: dangelo thesis log
- //for constructed solution 2
+constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
 
 template <int dim> double distance(Point<dim> point1, Point<dim> point2) {
   double d = 0;
@@ -197,11 +196,15 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
     break;
   }
   case 3: {
-if(COUPLED == 1 && geo_conf != GeometryConfiguration::TwoD_ZeroD)
-    return 0;
-else
-return -(1 + p[0]);
-
+    if(geo_conf == GeometryConfiguration::TwoD_ZeroD)
+      return -(1 + p[0]);
+    else
+    {
+    if(COUPLED == 1)
+      return 0;
+    else
+      return -(1 + p[0]);
+    }
 
     //return - std::sin(2 * numbers::PI * p[0]);//std::pow(2 * numbers::PI, 2) * std::sin(2 * numbers::PI * p[0]) ;
     break;
@@ -264,7 +267,7 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
     if (p[0] < 1)
     {
       //std::cout<<"neum0 "<<p[0]<<std::endl;
-      return 1 / (2 * numbers::PI) * std::log(r);
+      return -1 / (2 * numbers::PI) * std::log(r);
     }
     break;
   }
