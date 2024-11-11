@@ -22,14 +22,14 @@ const double y_l = 0.0;
 const double z_l = 0.0;
 enum GeometryConfiguration
 {
-  TwoD_ZeroD = 0, //constructed solution 3
+  TwoD_ZeroD = 0, //constructed solution 3 (omega wird unabhängig davon auch noch ausgerechnet)
   TwoD_OneD = 1,//constructed solution 1
-  ThreeD_OneD = 2 ////constructed solution 1 & 3
+  ThreeD_OneD = 2 ////constructed solution 1, 2, 3
 
 };
 constexpr unsigned int geo_conf{2};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
-constexpr unsigned int constructed_solution{2};   // 1:sin cos, 3: dangelo thesis log
+constexpr unsigned int constructed_solution{2};   // 1:sin cos (Kopplung hebt sich auf), 2: omega ohne fluss, 3: dangelo thesis log
  //for constructed solution 2
 
 template <int dim> double distance(Point<dim> point1, Point<dim> point2) {
@@ -190,7 +190,10 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
   }
   case 2:
   {
+    if(COUPLED == 1)
     return 2;
+    else 
+    return 1;
     break;
   }
   case 3: {
@@ -251,11 +254,12 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
 
   switch (constructed_solution) {
   case 2:
+      return 0;
   case 3: {
     if (p[0] > 1)
     {
     //  std::cout<<"neum1 "<<p[0]<<std::endl;
-      return -1 / (2 * numbers::PI) * std::log(r);///-
+      return 1 / (2 * numbers::PI) * std::log(r);///-
     }
     if (p[0] < 1)
     {
@@ -422,8 +426,8 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     if(r!= 0)
     {
     values(0) = 1/(2*numbers::PI) * (x/std::pow(r,2)); //Q 
-    values(1) =  1/(2*numbers::PI) * (y/std::pow(r,2)); // Q
-    values(2) = -  1/(2*numbers::PI) *std::log(r); // U  
+    values(1) =  1/(2*numbers::PI) *(y/std::pow(r,2)); // Q   
+    values(2) = - 1/(2*numbers::PI) *  std::log(r); // U   
     }
     else
       values(2) = 1 ;
@@ -530,7 +534,7 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
     else  
       values(i) = 1;
   // values(i) = 1;
-  //values(i) = values(i) * std::pow(r,2*alpha);
+ values(i) = values(i) * std::pow(r,2*alpha);
   }
  
  //values = 1;

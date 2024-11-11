@@ -107,6 +107,8 @@
 #include <deal.II/grid/grid_out.h>
 //#include <boost/archive/text_oarchive.hpp>
 //#include <boost/archive/text_iarchive.hpp>
+#include <deal.II/numerics/data_out_faces.h>
+#include <deal.II/numerics/data_postprocessor.h>
 
 #include <fstream>
 #include <iostream>
@@ -116,8 +118,7 @@
 
 using namespace dealii;
 #define USE_MPI_ASSEMBLE 1
-#define BLOCKS 1
-#define SOLVE_BLOCKWISE 1
+#define SOLVE_BLOCKWISE 0
 #define FASTER 1 //nur verfügbar bei der aktuellsten dealii version
 #define CYLINDER 0
 #define A11SCHUR 0
@@ -367,7 +368,7 @@ private:
 
 
   int rank_mpi;
-  enum { Dirichlet, Neumann };
+  enum { NotDefined, Dirichlet, Neumann };
 
   // parameters
   double radius;
@@ -595,7 +596,7 @@ if( is_repartioned)
 
 }
 
-    if (cell->is_locally_owned())
+   // if (cell->is_locally_owned()) //weil mpi danach nochmal sortiert wird das hier auskommentieren
     {
   
     double cell_diameter = cell->diameter(); 
@@ -609,7 +610,7 @@ if( is_repartioned)
       Point<dim> p = cell->face(face_no)->center();
       if (cell->face(face_no)->at_boundary()) {
        
-        if(((p[0] == 0 || p[0] ==2 * half_length) && geo_conf == GeometryConfiguration::ThreeD_OneD && (constructed_solution == 3 || constructed_solution == 2)) ){
+        if((p[0] == 0 || p[0] ==2 * half_length) && geo_conf == GeometryConfiguration::ThreeD_OneD && (constructed_solution == 3 || constructed_solution == 2)) {//
         cell->face(face_no)->set_boundary_id(Neumann);
         // pcout<<"Neumann"<<std::endl;
         }
@@ -635,6 +636,46 @@ if(is_repartioned)
  GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_connection_graph,triangulation, SparsityTools::Partitioner::zoltan );
 }  
   
+
+//Boundary
+DataPostprocessors::BoundaryIds<dim> boundary_ids;
+DataOutFaces<dim> data_out_faces;
+FE_Q<dim>         dummy_fe(1);
+ 
+DoFHandler<dim>   dummy_dof_handler(triangulation);
+dummy_dof_handler.distribute_dofs(dummy_fe);
+ 
+Vector<double> dummy_solution (dummy_dof_handler.n_dofs());
+ 
+data_out_faces.attach_dof_handler(dummy_dof_handler);
+data_out_faces.add_data_vector(dummy_solution, boundary_ids);
+data_out_faces.build_patches();
+ 
+ const std::string filename = ("boundary_ids."   +
+                                  Utilities::int_to_string(
+                                    triangulation.locally_owned_subdomain(),4));
+std::ofstream out((filename + ".vtu").c_str());
+data_out_faces.write_vtu(out);
+
+
+
+
+    if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
+      {
+        std::vector<std::string>    filenames;
+        for (unsigned int i=0;
+             i < Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
+             i++)
+          {
+            filenames.push_back("boundary_ids." +
+                                Utilities::int_to_string(i,4) +
+                                ".vtu");
+          }
+        std::ofstream master_output("boundary_ids.pvtu");
+       data_out_faces.write_pvtu_record(master_output, filenames);
+      }
+
+
 
 
 
@@ -680,6 +721,8 @@ if(is_repartioned)
       {
         if(constructed_solution != 2)
         cell_omega->face(face_no)->set_boundary_id(Dirichlet);
+        else
+        cell_omega->face(face_no)->set_boundary_id(NotDefined);
         //cell_omega->face(face_no)->set_boundary_id(Neumann);
       }
 
@@ -887,7 +930,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
     std::vector<types::global_dof_index> local_dof_indices_omega(
         dofs_per_cell_omega);
     unsigned int nof_quad_points;
-     AVERAGE = radius != 0 && !lumpedAverage && (constructed_solution == 3 ||constructed_solution == 2) && geo_conf == GeometryConfiguration::ThreeD_OneD;
+     AVERAGE = radius != 0 && !lumpedAverage && (constructed_solution == 3 || constructed_solution == 2) && geo_conf == GeometryConfiguration::ThreeD_OneD;//||constructed_solution == 2
     pcout << "AVERAGE (use circel) " << AVERAGE << " radius "<<radius << " lumpedAverage "<<lumpedAverage<<std::endl;
     // weight
     if (AVERAGE) {
@@ -1198,11 +1241,16 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                   fe_face_values, local_matrix, local_vector, h,
                   Dirichlet_bc_function, VectorField, Potential);
             } else if (face->boundary_id() == Neumann) {
+            
               assemble_Neumann_boundary_terms(fe_face_values, local_matrix,
                                             local_vector,
                                              Neumann_bc_function, VectorField, Potential);
             } else
-              Assert(false, ExcNotImplemented());
+            {
+                 std::cout<<rank_mpi<< " c " <<cell->index()<<" f "<<face->index()<<" Omega, boundary condition not implemented "<<std::endl;
+                //Assert(false, ExcNotImplemented());
+            }
+              
           } else {
 
             Assert(cell->neighbor(face_no).state() == IteratorState::valid,
@@ -1350,6 +1398,7 @@ else
 
           if (face_omega->boundary_id() == Dirichlet) {
             double h = cell_omega->diameter();
+            std::cout<<rank_mpi << " c " <<cell_omega->index()<<" f "<<face_omega->index()<<" omega Dirichlet "<<std::endl;
             assemble_Dirichlet_boundary_terms(
                 fe_face_values_omega, local_matrix_omega, local_vector_omega, h,
                 Dirichlet_bc_function_omega, VectorField_omega,
@@ -1359,13 +1408,16 @@ else
           }
           else if (face_omega->boundary_id() == Neumann)
             {
+              std::cout<<rank_mpi << " c " <<cell_omega->index()<<" f "<<face_omega->index()<<" omega Neumann "<<std::endl;
               assemble_Neumann_boundary_terms(fe_face_values_omega,
                                               local_matrix_omega,
                                           local_vector_omega, Neumann_bc_function_omega, VectorField_omega, Potential_omega);
             }
           else
            {
-
+                std::cout<<rank_mpi << " c " <<cell_omega->index()<<" f "<<face_omega->index()<<" omega, boundary condition not implemented "<<std::endl;
+                if(constructed_solution != 2)
+                Assert(false, ExcNotImplemented());
            } 
         } else {
 
@@ -1697,7 +1749,7 @@ else
               //-------------face -----------------
            
               if (!insideCell_test) {
-               // pcout << "Omega rhs face " << std::endl;
+               //pcout << "Omega rhs face " << std::endl;
                 for (unsigned int face_no = 0;
                      face_no < GeometryInfo<dim>::faces_per_cell; face_no++) {
                   typename DoFHandler<dim>::face_iterator face_test =
@@ -1732,7 +1784,7 @@ else
                             fe_values_coupling_test_face[Potential].value(i,
                                                                           q) *
                             1 / (n_te * n_ftest) *
-                            (1 + quadrature_point_omega[0]) *
+                        //    (1 + quadrature_point_omega[0]) *
                             fe_values_omega.JxW(p);
                       }
                     }
@@ -1752,7 +1804,8 @@ else
                 for (unsigned int i = 0; i < dofs_per_cell; i++) {
                   local_vector(i) +=
                       fe_values_coupling_test[Potential].value(i, 0) *
-                      (1 + quadrature_point_omega[0]) * fe_values_omega.JxW(p);
+                    //  (1 + quadrature_point_omega[0])  *
+                      fe_values_omega.JxW(p);
                 }
                 constraints.distribute_local_to_global(
                     local_vector, local_dof_indices_test, system_rhs);
@@ -2037,7 +2090,7 @@ else
   // std::cout << "ende coupling loop" << std::endl;
 
 
-  /*for (unsigned int i = 0; i < dof_handler_Omega.n_dofs() + dof_handler_omega.n_dofs(); i++) // dof_table.size()
+ /* for (unsigned int i = 0; i < dof_handler_Omega.n_dofs() + dof_handler_omega.n_dofs(); i++) // dof_table.size()
   {
     // if(dof_table[i].first.first == 1 || dof_table[i].first.first == 3)
     {
@@ -2584,7 +2637,7 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
       }
 
  // ------analytical solution--------
- /* std::cout << "analytical solution" << std::endl;
+/*pcout << "analytical solution" << std::endl;
   DoFHandler<dim> dof_handler_Lag(triangulation);
   FESystem<dim> fe_Lag(FESystem<dim>(FE_DGQ<dim>(degree), dim),
                        FE_DGQ<dim>(degree));
@@ -2599,10 +2652,29 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
   data_out_const.add_data_vector(solution_const, solution_names); //
 
   data_out_const.build_patches(degree);
+  const std::string filename_const = ("solution_const."   +
+                                  Utilities::int_to_string(
+                                    triangulation.locally_owned_subdomain(),4));
+  std::ofstream output_const((filename_const + ".vtu").c_str());
+  data_out_const.write_vtu(output_const);
 
-  std::ofstream output_const("solution_const.vtu");
-  data_out_const.write_vtu(output_const);*/
 
+if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
+      {
+        std::vector<std::string>    filenames;
+        for (unsigned int i=0;
+             i < Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
+             i++)
+          {
+            filenames.push_back("solution_const." +
+                                Utilities::int_to_string(i,4) +
+                                ".vtu");
+          }
+        std::ofstream master_output("solution_const.pvtu");
+        data_out_const.write_pvtu_record(master_output, filenames);
+      }
+
+*/
    //-----omega-----------
  // std::cout << "omega solution" << std::endl;
   std::vector<std::string> solution_names_omega;
