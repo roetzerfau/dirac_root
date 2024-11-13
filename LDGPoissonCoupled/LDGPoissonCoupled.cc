@@ -1558,6 +1558,7 @@ else
               unsigned int dofs_this_cell =
                   fe_values_coupling_test_face.dofs_per_cell;
               local_vector = 0;
+         
               for (unsigned int q = 0; q < n_face_points; ++q) {
                 for (unsigned int i = 0; i < dofs_this_cell; ++i) {
                   local_vector(i) +=
@@ -1588,15 +1589,11 @@ else
                                         // einer Cell integriert wird, stimmt es
                                         // nicht
             fe_values_coupling_test.reinit(cell_test);
-              double sum = 0;
-            for (unsigned int i = 0; i < dofs_per_cell; i++) {
             
-             
-                 sum+= std::abs(fe_values_coupling_test[Potential].value(i, 0)) ; //
-            }
+              local_vector = 0;
              for (unsigned int i = 0; i < dofs_per_cell; i++) {
             
-              std::cout<<"fe_values_coupling_test[Potential].value(i, 0) "<<fe_values_coupling_test[Potential].value(i, 0)<<std::endl;
+              //std::cout<<"fe_values_coupling_test[Potential].value(i, 0) "<<fe_values_coupling_test[Potential].value(i, 0)<<std::endl;
               local_vector(i) +=
                   fe_values_coupling_test[Potential].value(i, 0) ; //
             }
@@ -2419,7 +2416,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
         triangulation, cellwise_errors_Q, VectorTools::L2_norm);
 
 
-
+/*
     DataOut<dim> data_out_error;
     data_out_error.attach_triangulation(triangulation);
     data_out_error.add_data_vector(cellwise_errors_Q, "Q");
@@ -2447,7 +2444,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
         data_out_error.write_pvtu_record(master_output, filenames);
       }
 
-
+*/
 
 
       const ComponentSelectFunction<dim_omega> potential_mask_omega(
@@ -2591,7 +2588,7 @@ if(geo_conf == GeometryConfiguration::TwoD_ZeroD)
 
   SolverGMRES<TrilinosWrappers::MPI::Vector> solver(solver_control22);
   solver.solve(system_matrix.block(0,0), completely_distributed_solution.block(0), system_rhs.block(0),preconditioner_block_0);
-//  solver.solve(system_matrix.block(1,1), completely_distributed_solution.block(1), system_rhs.block(1),preconditioner_block_1);
+  solver.solve(system_matrix.block(1,1), completely_distributed_solution.block(1), system_rhs.block(1),preconditioner_block_1);
 }
 else
 {
@@ -2655,7 +2652,7 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
   default:
     Assert(false, ExcNotImplemented());
   }
-
+ // std::string name = "_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) +  "_LA_" + LA_string + "_rad_" + radius_string;
   DataOut<dim> data_out;
   data_out.attach_dof_handler(dof_handler_Omega);
   
@@ -2804,7 +2801,7 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
   make_dofs();
   assemble_system();
   solve();
-  output_results();
+ // output_results();
   std::array<double, 4> results_array= compute_errors();
   return results_array;
 }
@@ -2857,7 +2854,7 @@ int main(int argc, char *argv[]) {
 
       std::string LA_string = lumpedAverages[LA] ? "true" : "false";
       std::string radius_string = std::to_string(radii[rad]);
-      std::string name = "_LA_" + LA_string + "_rad_" + radius_string;
+      std::string name = "_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) +  "_LA_" + LA_string + "_rad_" + radius_string;
       scenario_names.push_back(name);
 
       Parameters parameters;
@@ -2870,7 +2867,7 @@ int main(int argc, char *argv[]) {
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
  //   const unsigned int refinement[3] = {3,4,5};
-    const unsigned int refinement[4] = {4,5,6,7};
+    const unsigned int refinement[5] = {4,5,6,7,8};
 
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
