@@ -153,7 +153,7 @@ struct Parameters {
 
 class BlockPreconditioner : public dealii::Subscriptor {
 public:
-    BlockPreconditioner(TrilinosWrappers::PreconditionILUT &precond0, TrilinosWrappers::PreconditionILUT &precond1)
+    BlockPreconditioner(TrilinosWrappers::PreconditionAMG &precond0, TrilinosWrappers::PreconditionAMG &precond1)
         : preconditioner0(precond0), preconditioner1(precond1) {}
 
     void vmult(TrilinosWrappers::MPI::BlockVector &dst, const TrilinosWrappers::MPI::BlockVector &src) const {
@@ -168,8 +168,8 @@ public:
     }
 
 private:
-    TrilinosWrappers::PreconditionILUT &preconditioner0;
-    TrilinosWrappers::PreconditionILUT &preconditioner1;
+    TrilinosWrappers::PreconditionAMG &preconditioner0;
+    TrilinosWrappers::PreconditionAMG &preconditioner1;
 };
   class InverseMatrix : public Subscriptor
   {
@@ -194,8 +194,8 @@ private:
     solver.solve(dst,src);
     }
     else{
-TrilinosWrappers::PreconditionILU preconditioner;
-  TrilinosWrappers::PreconditionILU::AdditionalData data;
+TrilinosWrappers::PreconditionILUT preconditioner;
+  TrilinosWrappers::PreconditionILUT::AdditionalData data;
   preconditioner.initialize(*matrix, data);
 
     //ReductionControl solver_control(matrix->local_size(), tolerance * src.l2_norm(), reduction);//, 1e-7 * src.l2_norm());
@@ -2551,8 +2551,8 @@ const InverseMatrix A_inverse(system_matrix.block(1,1));
   SolverGMRES<TrilinosWrappers::MPI::Vector > solver(solver_control1);
  
 
-TrilinosWrappers::PreconditionILUT preconditioner;
-  TrilinosWrappers::PreconditionILUT::AdditionalData data;
+TrilinosWrappers::PreconditionAMG preconditioner;
+  TrilinosWrappers::PreconditionAMG::AdditionalData data;
   preconditioner.initialize(system_matrix.block(0, 0), data);
 
   solver.solve(schur_complement, completely_distributed_solution.block(0),schur_rhs, preconditioner);
@@ -2592,8 +2592,8 @@ else
 {
   // Solve the system using the block preconditioner
   // Preconditioners for each block
-TrilinosWrappers::PreconditionILUT preconditioner_block_0;
-TrilinosWrappers::PreconditionILUT preconditioner_block_1;//PreconditionILU  PreconditionBlockJacobi
+TrilinosWrappers::PreconditionAMG preconditioner_block_0;
+TrilinosWrappers::PreconditionAMG preconditioner_block_1;//PreconditionILU  PreconditionBlockJacobi
 // Initialize the preconditioners with the appropriate blocks of the matrix
 preconditioner_block_0.initialize(system_matrix.block(0, 0));  // ILU for block (0,0)
 preconditioner_block_1.initialize(system_matrix.block(1, 1));  // ILU for block (1,1)
