@@ -140,7 +140,7 @@ const FEValuesExtractors::Scalar Potential(dimension_Omega);
 
 
 const double extent = 1;
-const double half_length = std::sqrt(0.5-0.1);//0.5
+const double half_length =  is_omega_on_face ? std::sqrt(0.5) : std::sqrt(0.5-0.1);//0.5
 const double distance_tolerance = 10;
 const unsigned int N_quad_points = 3;
 const double reduction = 1e-8;
@@ -153,7 +153,7 @@ struct Parameters {
 
 class BlockPreconditioner : public dealii::Subscriptor {
 public:
-    BlockPreconditioner(TrilinosWrappers::PreconditionILU &precond0, TrilinosWrappers::PreconditionILU &precond1)
+    BlockPreconditioner(TrilinosWrappers::PreconditionILUT &precond0, TrilinosWrappers::PreconditionILUT &precond1)
         : preconditioner0(precond0), preconditioner1(precond1) {}
 
     void vmult(TrilinosWrappers::MPI::BlockVector &dst, const TrilinosWrappers::MPI::BlockVector &src) const {
@@ -168,8 +168,8 @@ public:
     }
 
 private:
-    TrilinosWrappers::PreconditionILU &preconditioner0;
-    TrilinosWrappers::PreconditionILU &preconditioner1;
+    TrilinosWrappers::PreconditionILUT &preconditioner0;
+    TrilinosWrappers::PreconditionILUT &preconditioner1;
 };
   class InverseMatrix : public Subscriptor
   {
@@ -2569,32 +2569,37 @@ TrilinosWrappers::PreconditionILU preconditioner;
 #endif
 #else 
 pcout<<"solve full"<<std::endl;
-// Preconditioners for each block
-TrilinosWrappers::PreconditionILUT preconditioner_block_0;
-TrilinosWrappers::PreconditionILU preconditioner_block_1;//PreconditionILU  PreconditionBlockJacobi
 
-// Initialize the preconditioners with the appropriate blocks of the matrix
-preconditioner_block_0.initialize(system_matrix.block(0, 0));  // ILU for block (0,0)
-preconditioner_block_1.initialize(system_matrix.block(1, 1));  // ILU for block (1,1)
 
 // Set up solver control
 //ReductionControl solver_control22(dof_handler_Omega.n_locally_owned_dofs(), tolerance * system_rhs.l2_norm(), reduction);
 SolverControl solver_control22(dof_handler_Omega.n_locally_owned_dofs(), tolerance );
 
 
-// Solve the system using the block preconditioner
+
 if(geo_conf == GeometryConfiguration::TwoD_ZeroD)
 {
-
+TrilinosWrappers::PreconditionILUT preconditioner_block_0;
+TrilinosWrappers::PreconditionILUT preconditioner_block_1;//PreconditionILU  PreconditionBlockJacobi
+// Initialize the preconditioners with the appropriate blocks of the matrix
+preconditioner_block_0.initialize(system_matrix.block(0, 0));  // ILU for block (0,0)
+preconditioner_block_1.initialize(system_matrix.block(1, 1));  // ILU for block (1,1)
   SolverGMRES<TrilinosWrappers::MPI::Vector> solver(solver_control22);
   solver.solve(system_matrix.block(0,0), completely_distributed_solution.block(0), system_rhs.block(0),preconditioner_block_0);
   solver.solve(system_matrix.block(1,1), completely_distributed_solution.block(1), system_rhs.block(1),preconditioner_block_1);
 }
 else
 {
-//  SolverGMRES<TrilinosWrappers::MPI::BlockVector> solver(solver_control22);
- // BlockPreconditioner block_preconditioner(preconditioner_block_0, preconditioner_block_1);
- // solver.solve(system_matrix, completely_distributed_solution, system_rhs,block_preconditioner);
+  // Solve the system using the block preconditioner
+  // Preconditioners for each block
+TrilinosWrappers::PreconditionILUT preconditioner_block_0;
+TrilinosWrappers::PreconditionILUT preconditioner_block_1;//PreconditionILU  PreconditionBlockJacobi
+// Initialize the preconditioners with the appropriate blocks of the matrix
+preconditioner_block_0.initialize(system_matrix.block(0, 0));  // ILU for block (0,0)
+preconditioner_block_1.initialize(system_matrix.block(1, 1));  // ILU for block (1,1)
+ SolverGMRES<TrilinosWrappers::MPI::BlockVector> solver(solver_control22);
+ BlockPreconditioner block_preconditioner(preconditioner_block_0, preconditioner_block_1);
+ solver.solve(system_matrix, completely_distributed_solution, system_rhs,block_preconditioner);
 }
 
 
@@ -2841,10 +2846,7 @@ int main(int argc, char *argv[]) {
     return 0;
   */
   std::cout << "dimension_Omega " << dimension_Omega << std::endl;
-  const unsigned int n_r = 1;
-  const unsigned int n_LA = 1;
-  double radii[n_r] = {  0.01};
-  bool lumpedAverages[n_LA] = {false};//TODO bei punkt wuelle noch berücksichtnge
+
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
 
@@ -2854,7 +2856,8 @@ int main(int argc, char *argv[]) {
 
       std::string LA_string = lumpedAverages[LA] ? "true" : "false";
       std::string radius_string = std::to_string(radii[rad]);
-      std::string name = "_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) +  "_LA_" + LA_string + "_rad_" + radius_string;
+      std::string omega_on_face_string = is_omega_on_face ? "true" : "false";
+      std::string name = "_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string;
       scenario_names.push_back(name);
 
       Parameters parameters;
@@ -2863,12 +2866,11 @@ int main(int argc, char *argv[]) {
       parameters.radius = radii[rad];
       parameters.lumpedAverage = lumpedAverages[LA];
      // const unsigned int p_degree[2] = {0,1};
-      const unsigned int p_degree[1] = {1};
+      
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
  //   const unsigned int refinement[3] = {3,4,5};
-    const unsigned int refinement[5] = {4,5,6,7,8};
-
+    
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
 

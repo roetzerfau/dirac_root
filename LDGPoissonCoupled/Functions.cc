@@ -18,8 +18,7 @@
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
-constexpr double y_l = 0.01;
-constexpr double z_l = 0.01;
+
 enum GeometryConfiguration
 {
   TwoD_ZeroD = 0, //constructed solution 3 (omega wird unabhängig davon auch noch ausgerechnet)
@@ -27,9 +26,22 @@ enum GeometryConfiguration
   ThreeD_OneD = 2 ////constructed solution 1, 2, 3
 
 };
+const bool is_omega_on_face = true;
+constexpr double y_l = is_omega_on_face ? 0.0 : 0.01;
+constexpr double z_l =  is_omega_on_face ? 0.0 : 0.01;
 constexpr unsigned int geo_conf{0};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
 constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
+
+
+
+const unsigned int refinement[5] = {4,5,6,7,8};
+const unsigned int p_degree[1] = {1};
+
+const unsigned int n_r = 1;
+const unsigned int n_LA = 1;
+const double radii[n_r] = {  0.01};
+const bool lumpedAverages[n_LA] = {false};//TODO bei punkt wuelle noch berücksichtnge
 
 template <int dim> double distance(Point<dim> point1, Point<dim> point2) {
   double d = 0;
