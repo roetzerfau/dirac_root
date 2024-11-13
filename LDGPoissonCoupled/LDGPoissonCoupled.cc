@@ -118,7 +118,7 @@
 
 using namespace dealii;
 #define USE_MPI_ASSEMBLE 1
-#define SOLVE_BLOCKWISE 1
+#define SOLVE_BLOCKWISE 0
 #define FASTER 1 //nur verfügbar bei der aktuellsten dealii version
 #define CYLINDER 0
 #define A11SCHUR 0
@@ -2583,14 +2583,24 @@ preconditioner_block_1.initialize(system_matrix.block(1, 1));  // ILU for block 
 // Set up solver control
 //ReductionControl solver_control22(dof_handler_Omega.n_locally_owned_dofs(), tolerance * system_rhs.l2_norm(), reduction);
 SolverControl solver_control22(dof_handler_Omega.n_locally_owned_dofs(), tolerance );
-SolverGMRES<TrilinosWrappers::MPI::BlockVector> solver(solver_control22);
 
-
-// Create the block preconditioner
-BlockPreconditioner block_preconditioner(preconditioner_block_0, preconditioner_block_1);
 
 // Solve the system using the block preconditioner
-solver.solve(system_matrix, completely_distributed_solution, system_rhs,block_preconditioner);
+if(geo_conf == GeometryConfiguration::TwoD_ZeroD)
+{
+
+  SolverGMRES<TrilinosWrappers::MPI::Vector> solver(solver_control22);
+  solver.solve(system_matrix.block(0,0), completely_distributed_solution.block(0), system_rhs.block(0),preconditioner_block_0);
+  solver.solve(system_matrix.block(1,1), completely_distributed_solution.block(1), system_rhs.block(1),preconditioner_block_1);
+}
+else
+{
+  SolverGMRES<TrilinosWrappers::MPI::BlockVector> solver(solver_control22);
+  BlockPreconditioner block_preconditioner(preconditioner_block_0, preconditioner_block_1);
+  solver.solve(system_matrix, completely_distributed_solution, system_rhs,block_preconditioner);
+}
+
+
 #endif
 constraints.distribute(completely_distributed_solution);
 solution = completely_distributed_solution;
