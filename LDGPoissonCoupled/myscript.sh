@@ -1,4 +1,4 @@
 #!/bin/bash –l
 make
-nohup mpirun -np 8 LDGPoissonCoupled > output.log 2>&1
-#nohup make run > output.log 2>&1
+nohup mpirun -np 2 LDGPoissonCoupled > output.log 2>&1
+#nohup make run > output_2D.log 2>&1

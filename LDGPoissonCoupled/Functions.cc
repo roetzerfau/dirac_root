@@ -18,8 +18,8 @@
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
-constexpr double y_l = 0.0;
-constexpr double z_l = 0.0;
+constexpr double y_l = 0.01;
+constexpr double z_l = 0.01;
 enum GeometryConfiguration
 {
   TwoD_ZeroD = 0, //constructed solution 3 (omega wird unabhängig davon auch noch ausgerechnet)

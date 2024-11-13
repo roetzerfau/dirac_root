@@ -140,7 +140,7 @@ const FEValuesExtractors::Scalar Potential(dimension_Omega);
 
 
 const double extent = 1;
-const double half_length = std::sqrt(0.5);//0.5
+const double half_length = std::sqrt(0.5-0.1);//0.5
 const double distance_tolerance = 10;
 const unsigned int N_quad_points = 3;
 const double reduction = 1e-8;
@@ -2466,7 +2466,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
           dof_handler_omega, solution_omega, true_solution_omega,
           cellwise_errors_u, quadrature_omega, VectorTools::L2_norm,
           &potential_mask_omega);
-cellwise_errors_u.print(std::cout);
+//cellwise_errors_u.print(std::cout);
       potential_l2_error_omega = VectorTools::compute_global_error(
           triangulation_omega, cellwise_errors_u, VectorTools::L2_norm);
 
@@ -2573,7 +2573,7 @@ TrilinosWrappers::PreconditionILU preconditioner;
 #else 
 pcout<<"solve full"<<std::endl;
 // Preconditioners for each block
-TrilinosWrappers::PreconditionILU preconditioner_block_0;
+TrilinosWrappers::PreconditionILUT preconditioner_block_0;
 TrilinosWrappers::PreconditionILU preconditioner_block_1;//PreconditionILU  PreconditionBlockJacobi
 
 // Initialize the preconditioners with the appropriate blocks of the matrix
@@ -2591,13 +2591,13 @@ if(geo_conf == GeometryConfiguration::TwoD_ZeroD)
 
   SolverGMRES<TrilinosWrappers::MPI::Vector> solver(solver_control22);
   solver.solve(system_matrix.block(0,0), completely_distributed_solution.block(0), system_rhs.block(0),preconditioner_block_0);
-  solver.solve(system_matrix.block(1,1), completely_distributed_solution.block(1), system_rhs.block(1),preconditioner_block_1);
+//  solver.solve(system_matrix.block(1,1), completely_distributed_solution.block(1), system_rhs.block(1),preconditioner_block_1);
 }
 else
 {
-  SolverGMRES<TrilinosWrappers::MPI::BlockVector> solver(solver_control22);
-  BlockPreconditioner block_preconditioner(preconditioner_block_0, preconditioner_block_1);
-  solver.solve(system_matrix, completely_distributed_solution, system_rhs,block_preconditioner);
+//  SolverGMRES<TrilinosWrappers::MPI::BlockVector> solver(solver_control22);
+ // BlockPreconditioner block_preconditioner(preconditioner_block_0, preconditioner_block_1);
+ // solver.solve(system_matrix, completely_distributed_solution, system_rhs,block_preconditioner);
 }
 
 
@@ -2870,7 +2870,7 @@ int main(int argc, char *argv[]) {
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
  //   const unsigned int refinement[3] = {3,4,5};
-    const unsigned int refinement[5] = {4,5,6,7,8};
+    const unsigned int refinement[4] = {4,5,6,7};
 
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
