@@ -2551,8 +2551,8 @@ const InverseMatrix A_inverse(system_matrix.block(1,1));
   SolverGMRES<TrilinosWrappers::MPI::Vector > solver(solver_control1);
  
 
-TrilinosWrappers::PreconditionILU preconditioner;
-  TrilinosWrappers::PreconditionILU::AdditionalData data;
+TrilinosWrappers::PreconditionILUT preconditioner;
+  TrilinosWrappers::PreconditionILUT::AdditionalData data;
   preconditioner.initialize(system_matrix.block(0, 0), data);
 
   solver.solve(schur_complement, completely_distributed_solution.block(0),schur_rhs, preconditioner);
