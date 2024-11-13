@@ -118,7 +118,7 @@
 
 using namespace dealii;
 #define USE_MPI_ASSEMBLE 1
-#define SOLVE_BLOCKWISE 0
+#define SOLVE_BLOCKWISE 1
 #define FASTER 1 //nur verfügbar bei der aktuellsten dealii version
 #define CYLINDER 0
 #define A11SCHUR 0
@@ -2416,7 +2416,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
         triangulation, cellwise_errors_Q, VectorTools::L2_norm);
 
 
-/*
+
     DataOut<dim> data_out_error;
     data_out_error.attach_triangulation(triangulation);
     data_out_error.add_data_vector(cellwise_errors_Q, "Q");
@@ -2444,7 +2444,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
         data_out_error.write_pvtu_record(master_output, filenames);
       }
 
-*/
+
 
 
       const ComponentSelectFunction<dim_omega> potential_mask_omega(
@@ -2806,7 +2806,7 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
   make_dofs();
   assemble_system();
   solve();
- // output_results();
+  output_results();
   std::array<double, 4> results_array= compute_errors();
   return results_array;
 }
