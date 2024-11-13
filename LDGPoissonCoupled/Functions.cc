@@ -18,8 +18,8 @@
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
-const double y_l = 0.0;
-const double z_l = 0.0;
+constexpr double y_l = 0.0;
+constexpr double z_l = 0.0;
 enum GeometryConfiguration
 {
   TwoD_ZeroD = 0, //constructed solution 3 (omega wird unabhängig davon auch noch ausgerechnet)
@@ -27,7 +27,7 @@ enum GeometryConfiguration
   ThreeD_OneD = 2 ////constructed solution 1, 2, 3
 
 };
-constexpr unsigned int geo_conf{2};
+constexpr unsigned int geo_conf{0};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
 constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
 
@@ -145,7 +145,7 @@ double distance_to_singularity(const Point<dim> &p)
   
   if(GeometryConfiguration::TwoD_ZeroD == geo_conf )
   {
-     nearest_singularity_point = Point<dim>(0,0);//center
+     nearest_singularity_point = Point<dim>( y_l,z_l);//center
   }
   r = distance(p, nearest_singularity_point);
   return r;
@@ -530,7 +530,7 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
 
   for(unsigned int i = 0; i < n_components; i++)
   {
-    if(r < cell_size)
+    if(r < radius)//cell_size
     {
        values(i) = 0;
     }

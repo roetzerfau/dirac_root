@@ -118,7 +118,7 @@
 
 using namespace dealii;
 #define USE_MPI_ASSEMBLE 1
-#define SOLVE_BLOCKWISE 0
+#define SOLVE_BLOCKWISE 1
 #define FASTER 1 //nur verfügbar bei der aktuellsten dealii version
 #define CYLINDER 0
 #define A11SCHUR 0
@@ -187,7 +187,8 @@ private:
     //src.print(std::cout);
     if(dimension_Omega == 2)
     {
-    ReductionControl solver_control(src.size(), tolerance * src.l2_norm(), reduction);
+    //ReductionControl solver_control(src.size(), tolerance * src.l2_norm(), reduction);
+    SolverControl solver_control(src.size(), tolerance );
     TrilinosWrappers::SolverDirect solver(solver_control);
     solver.initialize(*matrix);
     solver.solve(dst,src);
@@ -197,7 +198,8 @@ TrilinosWrappers::PreconditionILU preconditioner;
   TrilinosWrappers::PreconditionILU::AdditionalData data;
   preconditioner.initialize(*matrix, data);
 
-    ReductionControl solver_control(matrix->local_size(), tolerance * src.l2_norm(), reduction);//, 1e-7 * src.l2_norm());
+    //ReductionControl solver_control(matrix->local_size(), tolerance * src.l2_norm(), reduction);//, 1e-7 * src.l2_norm());
+    SolverControl solver_control(matrix->local_size(), tolerance );//, 1e-7 * src.l2_norm());
     TrilinosWrappers::SolverGMRES solver(solver_control);
     solver.solve(*matrix, dst,  src, preconditioner );
     }
@@ -400,7 +402,8 @@ private:
   DoFHandler<dim_omega> dof_handler_omega;
 
 
-Vector<double> solution_omega;
+  Vector<double> solution_omega;
+
 
   IndexSet locally_owned_dofs_Omega;
   IndexSet locally_relevant_dofs_Omega;
@@ -442,7 +445,7 @@ Vector<double> solution_omega;
 
   const UpdateFlags update_flags = update_values | update_gradients |
                                    update_quadrature_points | update_JxW_values;
-  const UpdateFlags update_flags_coupling = update_values;
+  const UpdateFlags update_flags_coupling = update_values | update_JxW_values;
 
   const UpdateFlags face_update_flags = update_values | update_normal_vectors |
                                         update_quadrature_points |
@@ -458,10 +461,10 @@ LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
       //triangulation_dist(MPI_COMM_WORLD),
       cache(triangulation),
       triangulation_omega(MPI_COMM_WORLD),
-      fe_Omega(FESystem<dim>(FE_DGP<dim>(degree), dim), FE_DGP<dim>(degree)),
+      fe_Omega(FESystem<dim>(FE_DGQ<dim>(degree), dim), FE_DGQ<dim>(degree)),
       dof_handler_Omega(triangulation),
-      fe_omega(FESystem<dim_omega>(FE_DGP<dim_omega>(degree), dim_omega),
-               FE_DGP<dim_omega>(degree)),
+      fe_omega(FESystem<dim_omega>(FE_DGQ<dim_omega>(degree), dim_omega),
+               FE_DGQ<dim_omega>(degree)),
       dof_handler_omega(triangulation_omega),
 #if USE_MPI_ASSEMBLE
       pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0),
@@ -565,7 +568,7 @@ std::vector<unsigned int> cells_inside_box;
 
 int num_processes = dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
 bool is_shared_triangulation = num_processes > 1 ? true : false;
-bool is_repartioned =  is_shared_triangulation && (geo_conf == GeometryConfiguration::TwoD_OneD ||geo_conf == GeometryConfiguration::ThreeD_OneD);
+bool is_repartioned =  is_shared_triangulation && (geo_conf != GeometryConfiguration::TwoD_ZeroD);
 pcout<<"is_shared_triangulation "<<  is_shared_triangulation<<" is_repartioned "<<is_repartioned<<std::endl;
 if(is_repartioned)
 GridTools::get_face_connectivity_of_cells(triangulation,connectivity);
@@ -910,7 +913,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
   DoFTools::make_flux_sparsity_pattern(dof_handler_omega, sp_block.block(1,1),constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) );
   sp_block.collect_sizes();
 #if COUPLED
-  {
+if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
     // coupling
 
  typename DoFHandler<dim>::active_cell_iterator
@@ -984,7 +987,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
        // pcout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
-#if TEST
+
 //pcout <<"stat "<<std::endl;
    auto start = std::chrono::high_resolution_clock::now();  //Start time
     auto cell_test_first = GridTools::find_active_cell_around_point(
@@ -1004,20 +1007,14 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
    #endif
  //pcout<<"cell_test_array.size() "<<cell_test_array.size()<<std::endl;
         for (auto cellpair : cell_test_array)
-
-#else
-        auto cell_test = GridTools::find_active_cell_around_point(
-            dof_handler_Omega, quadrature_point_test);
-#endif
-
         {
-#if TEST
+
           auto cell_test_tri = cellpair.first;
          typename DoFHandler<dim>::active_cell_iterator
         cell_test = dof_handler_Omega.begin_active();
         std::advance(cell_test, cell_test_tri->index());
         cell_start =cell_test;  
-#endif
+
 
 #if USE_MPI_ASSEMBLE
          if (cell_test != dof_handler_Omega.end())
@@ -1504,7 +1501,7 @@ else
     auto cell_test_array = GridTools::find_all_active_cells_around_point(
         mapping, dof_handler_Omega, quadrature_point_test, 1e-10, marked_vertices);
     n_te = cell_test_array.size();
-   // pcout << "cell_test_array " << cell_test_array.size() << std::endl;
+    std::cout << "cell_test_array " << cell_test_array.size() << std::endl;
 
     for (auto cellpair : cell_test_array)
 #else
@@ -1534,12 +1531,14 @@ else
             auto bounding_box = face_test->bounding_box();
             n_ftest += bounding_box.point_inside(quadrature_point_test) == true;
           }
-
+          if(n_ftest != 0)
+          {
+            
           for (unsigned int face_no = 0;
                face_no < GeometryInfo<dim>::faces_per_cell; face_no++) {
             typename DoFHandler<dim>::face_iterator face_test =
                 cell_test->face(face_no);
-
+            std::cout<<"c "<<cell_test<< " f "<<face_no<<std::endl;
             Point<dim - 1> quadrature_point_test_mapped_face =
                 mapping.project_real_point_to_unit_point_on_face(
                     cell_test, face_no, quadrature_point_test);
@@ -1570,13 +1569,15 @@ else
                   local_vector, local_dof_indices_test, system_rhs);
             }
           }
+          }
           //-------------face ----------------- ende
           if (n_ftest == 0) {
+            std::cout<<"cell"<<std::endl;
             Point<dim> quadrature_point_test_mapped_cell =
                 mapping.transform_real_to_unit_cell(cell_test,
                                                     quadrature_point_test);
-            std::cout << "quadrature_point_test_mapped_cell "
-                      << quadrature_point_test_mapped_cell << std::endl;
+           // std::cout << "quadrature_point_test_mapped_cell "
+             //         << quadrature_point_test_mapped_cell << std::endl;
             std::vector<Point<dim>> my_quadrature_points_test = {
                 quadrature_point_test_mapped_cell};
             const Quadrature<dim> my_quadrature_formula_test(
@@ -1587,12 +1588,17 @@ else
                                         // einer Cell integriert wird, stimmt es
                                         // nicht
             fe_values_coupling_test.reinit(cell_test);
-
+              double sum = 0;
             for (unsigned int i = 0; i < dofs_per_cell; i++) {
             
-
+             
+                 sum+= std::abs(fe_values_coupling_test[Potential].value(i, 0)) ; //
+            }
+             for (unsigned int i = 0; i < dofs_per_cell; i++) {
+            
+              std::cout<<"fe_values_coupling_test[Potential].value(i, 0) "<<fe_values_coupling_test[Potential].value(i, 0)<<std::endl;
               local_vector(i) +=
-                  fe_values_coupling_test[Potential].value(i, 0); //
+                  fe_values_coupling_test[Potential].value(i, 0) ; //
             }
            
             constraints.distribute_local_to_global(
@@ -2384,9 +2390,10 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
                                                             distance_weight);
     const ProductFunction<dim> connected_function_vectorfield(vectorfield_mask,
                                                               distance_weight);
-
-    Vector<double> cellwise_errors_Q(triangulation.n_active_cells());
-    Vector<double> cellwise_errors_U(triangulation.n_active_cells());
+  Vector<double> cellwise_errors_Q;
+  Vector<double> cellwise_errors_U;
+    cellwise_errors_Q.grow_or_shrink (triangulation.n_active_cells());
+    cellwise_errors_U.grow_or_shrink (triangulation.n_active_cells());
     /*pcout << "triangulation.n_active_cells() " << triangulation.n_active_cells()
           << " dof_handler_Omega.n_dofs() " << dof_handler_Omega.n_dofs()
           << " dof_handler_Omega.n_locally_owned_dofs() "
@@ -2411,15 +2418,36 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
     vectorfield_l2_error = VectorTools::compute_global_error(
         triangulation, cellwise_errors_Q, VectorTools::L2_norm);
 
-/*
-    DataOut<dim> data_out;
-    data_out.attach_triangulation(triangulation);
-    data_out.add_data_vector(cellwise_errors_Q, "Q");
-    data_out.add_data_vector(cellwise_errors_U, "U");
-    data_out.build_patches();
-    std::ofstream output("error.vtk");
-    data_out.write_vtk(output);
-*/
+
+
+    DataOut<dim> data_out_error;
+    data_out_error.attach_triangulation(triangulation);
+    data_out_error.add_data_vector(cellwise_errors_Q, "Q");
+    data_out_error.add_data_vector(cellwise_errors_U, "U");
+    data_out_error.build_patches();
+
+
+  const std::string filename_error = ("error" + Utilities::int_to_string(n_refine,2) + "."  +
+                                  Utilities::int_to_string(
+                                    triangulation.locally_owned_subdomain(),4));
+  std::ofstream output_error((filename_error + ".vtu").c_str());
+  data_out_error.write_vtu(output_error);
+    if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
+      {
+        std::vector<std::string>    filenames;
+        for (unsigned int i=0;
+             i < Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
+             i++)
+          {
+            filenames.push_back("error" +Utilities::int_to_string(n_refine,2) + "."  +
+                                Utilities::int_to_string(i,4) +
+                                ".vtu");
+          }
+        std::ofstream master_output("error"  +Utilities::int_to_string(n_refine,2) + "."  +"pvtu");
+        data_out_error.write_pvtu_record(master_output, filenames);
+      }
+
+
 
 
       const ComponentSelectFunction<dim_omega> potential_mask_omega(
@@ -2486,7 +2514,8 @@ pcout<<"A11 Schur"<<std::endl;
  SchurComplement schur_complement(system_matrix, A_inverse, system_rhs);
   
   
-  ReductionControl solver_control1(completely_distributed_solution.block(0).locally_owned_size(), tolerance * system_rhs.l2_norm(), reduction);
+ // ReductionControl solver_control1(completely_distributed_solution.block(0).locally_owned_size(), tolerance * system_rhs.l2_norm(), reduction);
+  SolverControl solver_control1(completely_distributed_solution.block(0).locally_owned_size(), tolerance);
   SolverGMRES<TrilinosWrappers::MPI::Vector > solver(solver_control1);
 
 TrilinosWrappers::PreconditionILU preconditioner;
@@ -2520,7 +2549,8 @@ const InverseMatrix A_inverse(system_matrix.block(1,1));
  SchurComplement_A_22 schur_complement(system_matrix, A_inverse, system_rhs);
 
 
-  ReductionControl solver_control1(completely_distributed_solution.block(0).locally_owned_size(), tolerance * system_rhs.l2_norm(), reduction);
+  //ReductionControl solver_control1(completely_distributed_solution.block(0).locally_owned_size(), tolerance * system_rhs.l2_norm(), reduction);
+  SolverControl solver_control1(completely_distributed_solution.block(0).locally_owned_size(), tolerance);
   SolverGMRES<TrilinosWrappers::MPI::Vector > solver(solver_control1);
  
 
@@ -2551,7 +2581,8 @@ preconditioner_block_0.initialize(system_matrix.block(0, 0));  // ILU for block 
 preconditioner_block_1.initialize(system_matrix.block(1, 1));  // ILU for block (1,1)
 
 // Set up solver control
-ReductionControl solver_control22(dof_handler_Omega.n_locally_owned_dofs(), tolerance * system_rhs.l2_norm(), reduction);
+//ReductionControl solver_control22(dof_handler_Omega.n_locally_owned_dofs(), tolerance * system_rhs.l2_norm(), reduction);
+SolverControl solver_control22(dof_handler_Omega.n_locally_owned_dofs(), tolerance );
 SolverGMRES<TrilinosWrappers::MPI::BlockVector> solver(solver_control22);
 
 
@@ -2648,7 +2679,7 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
       }
 
  // ------analytical solution--------
-/*pcout << "analytical solution" << std::endl;
+pcout << "analytical solution" << std::endl;
   DoFHandler<dim> dof_handler_Lag(triangulation);
   FESystem<dim> fe_Lag(FESystem<dim>(FE_DGQ<dim>(degree), dim),
                        FE_DGQ<dim>(degree));
@@ -2685,7 +2716,12 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
         data_out_const.write_pvtu_record(master_output, filenames);
       }
 
-*/
+//----------cell_wise error ---------------
+
+
+
+
+
    //-----omega-----------
  // std::cout << "omega solution" << std::endl;
   std::vector<std::string> solution_names_omega;
@@ -2753,7 +2789,7 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   dimension_gap = dim - dim_omega;
   pcout << "geometric configuration "<<geo_conf <<"<< dim_Omega: "<< dim <<", dim_omega: "<<dim_omega<< " -> dimension_gap "<<dimension_gap<<std::endl; 
 rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
-  penalty = 5;
+  penalty = 50;
   make_grid();
   make_dofs();
   assemble_system();
@@ -2824,7 +2860,7 @@ int main(int argc, char *argv[]) {
       constexpr unsigned int p_degree_size =
           sizeof(p_degree) / sizeof(p_degree[0]);
  //   const unsigned int refinement[3] = {3,4,5};
-    const unsigned int refinement[4] = {6,7,8,9};
+    const unsigned int refinement[5] = {4,5,6,7,8};
 
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
