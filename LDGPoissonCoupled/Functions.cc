@@ -536,7 +536,7 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
     }
     else  
       values(i) = 1;
- values(i) = 1;
+ //values(i) = 1;
  values(i) = values(i) * std::pow(r,2*alpha);
   }
  
