@@ -118,7 +118,7 @@
 
 using namespace dealii;
 #define USE_MPI_ASSEMBLE 1
-#define SOLVE_BLOCKWISE 1
+#define SOLVE_BLOCKWISE 0
 #define FASTER 1 //nur verfügbar bei der aktuellsten dealii version
 #define CYLINDER 0
 #define A11SCHUR 0
@@ -144,11 +144,12 @@ const double half_length =  is_omega_on_face ? std::sqrt(0.5) : std::sqrt(0.5-0.
 const double distance_tolerance = 10;
 const unsigned int N_quad_points = 3;
 const double reduction = 1e-8;
-const double tolerance = 1e-8;
+const double tolerance = 1e-10;
 
 struct Parameters {
   double radius;
   bool lumpedAverage;
+  std::string folder_name;
 };
 
 class BlockPreconditioner : public dealii::Subscriptor {
@@ -355,7 +356,7 @@ private:
 
   void solve();
 
-  std::array<double, 4> compute_errors() const;
+  std::array<double, 4> compute_errors() ;//const
   void output_results() const;
 
   const unsigned int degree;
@@ -376,7 +377,7 @@ private:
   double radius;
   double g;
   bool lumpedAverage;
-
+  std::string folder_name;
 
   //parallel::distributed::Triangulation<dim> triangulation_dist;
 
@@ -403,7 +404,8 @@ private:
 
 
   Vector<double> solution_omega;
-
+  Vector<double> cellwise_errors_U;
+  Vector<double> cellwise_errors_Q;
 
   IndexSet locally_owned_dofs_Omega;
   IndexSet locally_relevant_dofs_Omega;
@@ -423,6 +425,8 @@ private:
   AffineConstraints<double> constraints;
 
   std::vector<bool> marked_vertices;
+
+
 
   ConditionalOStream pcout;
   TimerOutput computing_timer;
@@ -477,7 +481,7 @@ LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
       rhs_function(),
       Dirichlet_bc_function(), rhs_function_omega(),
       Dirichlet_bc_function_omega(), radius(parameters.radius),
-      lumpedAverage(parameters.lumpedAverage) {
+      lumpedAverage(parameters.lumpedAverage), folder_name(parameters.folder_name) {
 
   g = constructed_solution == 3 || constructed_solution == 2
           ? (2 * numbers::PI) / (2 * numbers::PI + std::log(radius))
@@ -639,47 +643,6 @@ if(is_repartioned)
  GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_connection_graph,triangulation, SparsityTools::Partitioner::zoltan );
 }  
   
-
-//Boundary
-DataPostprocessors::BoundaryIds<dim> boundary_ids;
-DataOutFaces<dim> data_out_faces;
-FE_Q<dim>         dummy_fe(1);
- 
-DoFHandler<dim>   dummy_dof_handler(triangulation);
-dummy_dof_handler.distribute_dofs(dummy_fe);
- 
-Vector<double> dummy_solution (dummy_dof_handler.n_dofs());
- 
-data_out_faces.attach_dof_handler(dummy_dof_handler);
-data_out_faces.add_data_vector(dummy_solution, boundary_ids);
-data_out_faces.build_patches();
- 
- const std::string filename = ("boundary_ids."   +
-                                  Utilities::int_to_string(
-                                    triangulation.locally_owned_subdomain(),4));
-std::ofstream out((filename + ".vtu").c_str());
-data_out_faces.write_vtu(out);
-
-
-
-
-    if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
-      {
-        std::vector<std::string>    filenames;
-        for (unsigned int i=0;
-             i < Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
-             i++)
-          {
-            filenames.push_back("boundary_ids." +
-                                Utilities::int_to_string(i,4) +
-                                ".vtu");
-          }
-        std::ofstream master_output("boundary_ids.pvtu");
-       data_out_faces.write_pvtu_record(master_output, filenames);
-      }
-
-
-
 
 
 
@@ -2369,7 +2332,7 @@ void LDGPoissonProblem<dim, dim_omega>::distribute_local_flux_to_global(
 
 template <int dim, int dim_omega>
 std::array<double, 4>
-LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
+LDGPoissonProblem<dim, dim_omega>::compute_errors(){
   /*std::cout << "compute_errors "
             << Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) << std::endl;*/
   double potential_l2_error, vectorfield_l2_error, potential_l2_error_omega,
@@ -2387,10 +2350,19 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
                                                             distance_weight);
     const ProductFunction<dim> connected_function_vectorfield(vectorfield_mask,
                                                               distance_weight);
-  Vector<double> cellwise_errors_Q;
-  Vector<double> cellwise_errors_U;
-    cellwise_errors_Q.grow_or_shrink (triangulation.n_active_cells());
-    cellwise_errors_U.grow_or_shrink (triangulation.n_active_cells());
+
+
+/*std::cout<<"grow< "<< triangulation.n_active_cells()<<std::endl;*/
+    cellwise_errors_Q.grow_or_shrink(triangulation.n_active_cells());
+   cellwise_errors_U.grow_or_shrink(triangulation.n_active_cells());
+
+/*
+  Vector<double> cellwise_errors_U(
+      triangulation.n_active_cells());
+  Vector<double> cellwise_errors_Q(
+      triangulation.n_active_cells());
+*/
+
     /*pcout << "triangulation.n_active_cells() " << triangulation.n_active_cells()
           << " dof_handler_Omega.n_dofs() " << dof_handler_Omega.n_dofs()
           << " dof_handler_Omega.n_locally_owned_dofs() "
@@ -2416,45 +2388,18 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors() const {
         triangulation, cellwise_errors_Q, VectorTools::L2_norm);
 
 
+//cellwise_errors_Q.print(std::cout);
 
-    DataOut<dim> data_out_error;
-    data_out_error.attach_triangulation(triangulation);
-    data_out_error.add_data_vector(cellwise_errors_Q, "Q");
-    data_out_error.add_data_vector(cellwise_errors_U, "U");
-    data_out_error.build_patches();
-
-
-  const std::string filename_error = ("error" + Utilities::int_to_string(n_refine,2) + "."  +
-                                  Utilities::int_to_string(
-                                    triangulation.locally_owned_subdomain(),4));
-  std::ofstream output_error((filename_error + ".vtu").c_str());
-  data_out_error.write_vtu(output_error);
-    if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
-      {
-        std::vector<std::string>    filenames;
-        for (unsigned int i=0;
-             i < Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
-             i++)
-          {
-            filenames.push_back("error" +Utilities::int_to_string(n_refine,2) + "."  +
-                                Utilities::int_to_string(i,4) +
-                                ".vtu");
-          }
-        std::ofstream master_output("error"  +Utilities::int_to_string(n_refine,2) + "."  +"pvtu");
-        data_out_error.write_pvtu_record(master_output, filenames);
-      }
-
-
-
+  Vector<double> cellwise_errors_u(
+      triangulation_omega.n_active_cells());
+  Vector<double> cellwise_errors_q(
+      triangulation_omega.n_active_cells());
 
       const ComponentSelectFunction<dim_omega> potential_mask_omega(
           dim_omega, dim_omega + 1);
       const ComponentSelectFunction<dim_omega> vectorfield_mask_omega(
           std::make_pair(0, dim_omega), dim_omega + 1);
-      Vector<double> cellwise_errors_u(
-          triangulation_omega.n_active_cells());
-      Vector<double> cellwise_errors_q(
-          triangulation_omega.n_active_cells());
+
     
       const QTrapezoid<1> q_trapez_omega;
       const QIterated<dim_omega> quadrature_omega(q_trapez_omega, degree + 2);
@@ -2579,8 +2524,8 @@ SolverControl solver_control22(dof_handler_Omega.n_locally_owned_dofs(), toleran
 
 if(geo_conf == GeometryConfiguration::TwoD_ZeroD)
 {
-TrilinosWrappers::PreconditionILUT preconditioner_block_0;
-TrilinosWrappers::PreconditionILUT preconditioner_block_1;//PreconditionILU  PreconditionBlockJacobi
+TrilinosWrappers::PreconditionAMG preconditioner_block_0;
+TrilinosWrappers::PreconditionAMG preconditioner_block_1;//PreconditionILU  PreconditionBlockJacobi
 // Initialize the preconditioners with the appropriate blocks of the matrix
 preconditioner_block_0.initialize(system_matrix.block(0, 0));  // ILU for block (0,0)
 preconditioner_block_1.initialize(system_matrix.block(1, 1));  // ILU for block (1,1)
@@ -2657,7 +2602,7 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
   default:
     Assert(false, ExcNotImplemented());
   }
- // std::string name = "_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) +  "_LA_" + LA_string + "_rad_" + radius_string;
+  std::string ref_p_array = "_r_" + Utilities::int_to_string(n_refine,2) + "_p_" + Utilities::int_to_string(degree,2);
   DataOut<dim> data_out;
   data_out.attach_dof_handler(dof_handler_Omega);
   
@@ -2670,10 +2615,10 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
   
   data_out.add_data_vector(subdomain,"subdomain");
   data_out.build_patches(degree);
-    const std::string filename = ("solution."   +
+    const std::string filename = ("solution"  + ref_p_array  +"."+
                                   Utilities::int_to_string(
                                     triangulation.locally_owned_subdomain(),4));
-  std::ofstream output((filename + ".vtu").c_str());
+  std::ofstream output((folder_name + filename + ".vtu").c_str());
   data_out.write_vtu(output);
     if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
       {
@@ -2682,11 +2627,11 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
              i < Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
              i++)
           {
-            filenames.push_back("solution." +
+            filenames.push_back("solution" + ref_p_array  +"."+
                                 Utilities::int_to_string(i,4) +
                                 ".vtu");
           }
-        std::ofstream master_output("solution.pvtu");
+        std::ofstream master_output(folder_name +"solution" + ref_p_array+".pvtu");
         data_out.write_pvtu_record(master_output, filenames);
       }
 
@@ -2706,10 +2651,10 @@ pcout << "analytical solution" << std::endl;
   data_out_const.add_data_vector(solution_const, solution_names); //
 
   data_out_const.build_patches(degree);
-  const std::string filename_const = ("solution_const."   +
+  const std::string filename_const = ("solution_const"    + ref_p_array  +"."+
                                   Utilities::int_to_string(
                                     triangulation.locally_owned_subdomain(),4));
-  std::ofstream output_const((filename_const + ".vtu").c_str());
+  std::ofstream output_const((folder_name+ filename_const + ".vtu").c_str());
   data_out_const.write_vtu(output_const);
 
 
@@ -2720,17 +2665,43 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
              i < Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
              i++)
           {
-            filenames.push_back("solution_const." +
+            filenames.push_back("solution_const"  + ref_p_array  +"."+
                                 Utilities::int_to_string(i,4) +
                                 ".vtu");
           }
-        std::ofstream master_output("solution_const.pvtu");
+        std::ofstream master_output(folder_name + "solution_const.pvtu");
         data_out_const.write_pvtu_record(master_output, filenames);
       }
 
 //----------cell_wise error ---------------
 
 
+    DataOut<dim> data_out_error;
+    data_out_error.attach_triangulation(triangulation);
+    data_out_error.add_data_vector(cellwise_errors_Q, "Q");
+    data_out_error.add_data_vector(cellwise_errors_U, "U");
+    data_out_error.build_patches();
+
+
+  const std::string filename_error = ("error" +  ref_p_array + "."  +
+                                  Utilities::int_to_string(
+                                    triangulation.locally_owned_subdomain(),4));
+  std::ofstream output_error((folder_name + filename_error + ".vtu").c_str());
+  data_out_error.write_vtu(output_error);
+    if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
+      {
+        std::vector<std::string>    filenames;
+        for (unsigned int i=0;
+             i < Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
+             i++)
+          {
+            filenames.push_back("error"  + ref_p_array  +"."+
+                                Utilities::int_to_string(i,4) +
+                                ".vtu");
+          }
+        std::ofstream master_output(folder_name + "error"  + ref_p_array  + "."  +"pvtu");
+        data_out_error.write_pvtu_record(master_output, filenames);
+      }
 
 
 
@@ -2752,10 +2723,10 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
   
   data_out_omega.add_data_vector(subdomain_omega,"subdomain");
   data_out_omega.build_patches(degree);
-    const std::string filename_omega = ("solution_omega."   +
+    const std::string filename_omega = ("solution_omega"    + ref_p_array  +"."+
                                   Utilities::int_to_string(
                                     triangulation_omega.locally_owned_subdomain(),4));
-  std::ofstream output_omega((filename_omega + ".vtu").c_str());
+  std::ofstream output_omega((folder_name + filename_omega + ".vtu").c_str());
   data_out_omega.write_vtu(output_omega);
     if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
       {
@@ -2764,14 +2735,52 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
              i < Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
              i++)
           {
-            filenames.push_back("solution_omega." +
+            filenames.push_back("solution_omega"  + ref_p_array  +"."+
                                 Utilities::int_to_string(i,4) +
                                 ".vtu");
           }
-        std::ofstream master_output("solution_omega.pvtu");
+        std::ofstream master_output(folder_name +"solution_omega.pvtu");
         data_out_omega.write_pvtu_record(master_output, filenames);
       }
 
+
+
+
+
+//Boundary
+DataPostprocessors::BoundaryIds<dim> boundary_ids;
+DataOutFaces<dim> data_out_faces;
+FE_Q<dim>         dummy_fe(1);
+ 
+DoFHandler<dim>   dummy_dof_handler(triangulation);
+dummy_dof_handler.distribute_dofs(dummy_fe);
+ 
+Vector<double> dummy_solution (dummy_dof_handler.n_dofs());
+ 
+data_out_faces.attach_dof_handler(dummy_dof_handler);
+data_out_faces.add_data_vector(dummy_solution, boundary_ids);
+data_out_faces.build_patches();
+ 
+ const std::string filename_faces = ("boundary_ids"    + ref_p_array  +"."+
+                                  Utilities::int_to_string(
+                                    triangulation.locally_owned_subdomain(),4));
+std::ofstream out((folder_name + filename_faces + ".vtu").c_str());
+data_out_faces.write_vtu(out);
+
+if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
+  {
+    std::vector<std::string>    filenames;
+    for (unsigned int i=0;
+          i < Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
+          i++)
+      {
+        filenames.push_back("boundary_ids"  + ref_p_array  +"."+
+                            Utilities::int_to_string(i,4) +
+                            ".vtu");
+      }
+    std::ofstream master_output(folder_name + "boundary_ids.pvtu");
+    data_out_faces.write_pvtu_record(master_output, filenames);
+  }
 
 
 
@@ -2806,8 +2815,9 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
   make_dofs();
   assemble_system();
   solve();
-  output_results();
   std::array<double, 4> results_array= compute_errors();
+  output_results();
+ 
   return results_array;
 }
 
@@ -2858,13 +2868,26 @@ int main(int argc, char *argv[]) {
       std::string radius_string = std::to_string(radii[rad]);
       std::string omega_on_face_string = is_omega_on_face ? "true" : "false";
       std::string name = "_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string;
+      
+      std::string folderName =name +"/";
+     
+      std::string command = "mkdir -p " + folderName;
+      if (system(command.c_str()) == 0) {
+        std::cout << "Folder created successfully." << std::endl;
+    } else {
+        std::cerr << "Error: Could not create folder." << std::endl;
+    }
+
       scenario_names.push_back(name);
+
+      
 
       Parameters parameters;
 
 
       parameters.radius = radii[rad];
       parameters.lumpedAverage = lumpedAverages[LA];
+       parameters.folder_name = folderName;
      // const unsigned int p_degree[2] = {0,1};
       
       constexpr unsigned int p_degree_size =
@@ -2904,7 +2927,7 @@ int main(int argc, char *argv[]) {
             
           std::ofstream csvfile_unsrtd;
 	  std::string filename = "cvg_res_unsrtd" + name + "_r_" + std::to_string(refinement[r]) + "_p_" + std::to_string(p_degree[p]);
-	  csvfile_unsrtd.open(filename + ".csv");
+	  csvfile_unsrtd.open(folderName + filename + ".csv");
             
             csvfile_unsrtd<<name<<";r "<<refinement[r]<<";p "<<p_degree[p]<< ";U " << arr[0] << ";Q " << arr[1]
                     << ";u " << arr[2] << ";q " << arr[3] << "; \n";
@@ -2922,12 +2945,12 @@ int main(int argc, char *argv[]) {
         std::ofstream csvfile;
 #if COUPLED
         std::string filename = "convergence_results_test_coupled" + name;
-        myfile.open(filename + ".txt");
-        csvfile.open(filename + ".csv");
+        myfile.open(folderName + filename + ".txt");
+        csvfile.open(folderName + filename  + ".csv");
 #else
         std::string filename = "convergence_results_uncoupled" + name;
-        myfile.open(filename + ".txt");
-        csvfile.open(filename + ".csv");
+        myfile.open(folderName + filename  + ".txt");
+        csvfile.open(folderName + filename + ".csv");
 #endif
         for (unsigned int f = 0; f < solution_names.size(); f++) {
           myfile << solution_names[f] << "\n";
