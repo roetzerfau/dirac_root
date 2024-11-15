@@ -118,7 +118,6 @@
 
 using namespace dealii;
 #define USE_MPI_ASSEMBLE 1
-#define SOLVE_BLOCKWISE 0
 #define FASTER 1 //nur verfügbar bei der aktuellsten dealii version
 #define CYLINDER 0
 #define A11SCHUR 0
@@ -413,14 +412,13 @@ private:
   IndexSet locally_owned_dofs_omega_local;
   IndexSet locally_relevant_dofs_omega_local;
 
-  IndexSet locally_owned_dofs_omega_global;
-  IndexSet locally_relevant_dofs_omega_global;
+  // IndexSet locally_owned_dofs_omega_global;
+ /// IndexSet locally_relevant_dofs_omega_global;
 
-  IndexSet locally_owned_dofs_total;
-  IndexSet locally_relevant_dofs_total;
+  //IndexSet locally_owned_dofs_total;
+  //IndexSet locally_relevant_dofs_total;
 
-  std::vector<IndexSet> locally_owned_dofs_block;
-  std::vector<IndexSet> locally_relevant_dofs_block;
+
 
   AffineConstraints<double> constraints;
 
@@ -715,8 +713,10 @@ for (unsigned int i = 0; i < triangulation.n_vertices(); i++)
     {
       marked_vertices[i] = false;
     }
-     marked_vertices[i] = true;
+     //marked_vertices[i] = true;
 }
+pcout<< "memory consump marked vertices "<<MemoryConsumption::memory_consumption(marked_vertices)/(1024.0 * 1024.0 * 1024.0) // Convert to MB
+	              << " GB" << std::endl;
 #endif
 
 }
@@ -749,7 +749,8 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
         <<"Number of global active cells: "
         << triangulation.n_global_active_cells() << std::endl
         << "Number of degrees of freedom: " << dof_handler_Omega.n_dofs() << " ("
-        << n_vector_field_Omega << " + " << n_potential_Omega << ")"<<std::endl;
+        << n_vector_field_Omega << " + " << n_potential_Omega << ")"<<std::endl
+        <<" triangulation.n_vertices() "<<triangulation.n_vertices()<< std::endl;
   unsigned int locally_owned_cells = triangulation.n_locally_owned_active_cells();
   std::cout << rank_mpi<<" Number of locally owned active cells: " << locally_owned_cells <<" Number of locally owned DoF: " << dof_handler_Omega.n_locally_owned_dofs()<<std::endl;
 const std::vector<types::global_dof_index> dofs_per_component_omega =
@@ -800,6 +801,8 @@ const std::vector<types::global_dof_index> dofs_per_component_omega =
   locally_relevant_dofs_omega_global.add_indices(locally_relevant_dofs_omega_local,  dof_handler_Omega.n_dofs());
 */
 
+  std::vector<IndexSet> locally_owned_dofs_block;
+  std::vector<IndexSet> locally_relevant_dofs_block;
 
   locally_owned_dofs_block.push_back(locally_owned_dofs_Omega);
   locally_owned_dofs_block.push_back(locally_owned_dofs_omega_local);
@@ -1257,8 +1260,8 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
   }
 #endif
   // std::cout << "loop z uend" << std::endl;
-  system_matrix.compress(VectorOperation::add);
-  system_rhs.compress(VectorOperation::add);
+  //system_matrix.compress(VectorOperation::add);
+  //system_rhs.compress(VectorOperation::add);
 
   // omega
   QGauss<dim_omega> quadrature_formula_omega(fe_Omega.degree + 1);
@@ -1368,7 +1371,7 @@ else
           }
           else if (face_omega->boundary_id() == Neumann)
             {
-              std::cout<<rank_mpi << " c " <<cell_omega->index()<<" f "<<face_omega->index()<<" omega Neumann "<<std::endl;
+             // std::cout<<rank_mpi << " c " <<cell_omega->index()<<" f "<<face_omega->index()<<" omega Neumann "<<std::endl;
               assemble_Neumann_boundary_terms(fe_face_values_omega,
                                               local_matrix_omega,
                                           local_vector_omega, Neumann_bc_function_omega, VectorField_omega, Potential_omega);
@@ -2636,6 +2639,7 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
       }
 
  // ------analytical solution--------
+ /*
 pcout << "analytical solution" << std::endl;
   DoFHandler<dim> dof_handler_Lag(triangulation);
   FESystem<dim> fe_Lag(FESystem<dim>(FE_DGQ<dim>(degree), dim),
@@ -2672,7 +2676,7 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
         std::ofstream master_output(folder_name + "solution_const.pvtu");
         data_out_const.write_pvtu_record(master_output, filenames);
       }
-
+*/
 //----------cell_wise error ---------------
 
 
@@ -2746,7 +2750,7 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 
 
 
-
+/*
 //Boundary
 DataPostprocessors::BoundaryIds<dim> boundary_ids;
 DataOutFaces<dim> data_out_faces;
@@ -2782,7 +2786,7 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
     data_out_faces.write_pvtu_record(master_output, filenames);
   }
 
-
+*/
 
 
 }

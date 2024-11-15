@@ -19,7 +19,7 @@ SET(CLEAN_UP_FILES *.vtu *.pvtu *.visit)
 CMAKE_MINIMUM_REQUIRED(VERSION 3.3.0)
 #set(CMAKE_CXX_STANDARD 20)
 #set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
+set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build (Debug or Release)" FORCE)
 FIND_PACKAGE(deal.II 9.5.1
   HINTS ${deal.II_DIR} ${DEAL_II_DIR} ../ ../../ $ENV{DEAL_II_DIR}
   )

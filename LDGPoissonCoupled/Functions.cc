@@ -15,6 +15,7 @@
 
 #define COUPLED 1
 #define TEST 1
+#define SOLVE_BLOCKWISE 0
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
@@ -29,9 +30,9 @@ enum GeometryConfiguration
 const bool is_omega_on_face = true;
 constexpr double y_l = is_omega_on_face ? 0.0 : 0.01;
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.01;
-constexpr unsigned int geo_conf{0};
+constexpr unsigned int geo_conf{2};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
-constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
+constexpr unsigned int constructed_solution{2};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
 
 
 
