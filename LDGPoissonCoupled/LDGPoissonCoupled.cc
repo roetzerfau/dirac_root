@@ -2938,6 +2938,7 @@ Utilities::System::get_memory_stats(mem_stats);
   */
   //std::cout << "dimension_Omega " << dimension_Omega << std::endl;
 
+
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
 
@@ -2953,6 +2954,7 @@ Utilities::System::get_memory_stats(mem_stats);
       std::string folderName =name +"/";
      
       std::string command = "mkdir -p " + folderName;
+
   /*    if (system(command.c_str()) == 0) {
         std::cout << "Folder created successfully." << std::endl;
     } else {
