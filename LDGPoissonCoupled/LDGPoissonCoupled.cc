@@ -109,10 +109,12 @@
 //#include <boost/archive/text_iarchive.hpp>
 #include <deal.II/numerics/data_out_faces.h>
 #include <deal.II/numerics/data_postprocessor.h>
+#include <deal.II/base/utilities.h>
 
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <malloc.h>
 
 #include "Functions.cc"
 
@@ -644,15 +646,15 @@ if(is_repartioned)
 
 
 
- pcout << " Memory consumption of triangulation: "
-               << triangulation.memory_consumption() / (1024.0 * 1024.0 * 1024.0) // Convert to MB
-	              << " GB" << std::endl;
+ //pcout << "Memory consumption of triangulation: "
+      //         << triangulation.memory_consumption() / (1024.0 * 1024.0 * 1024.0) // Convert to MB
+	   //          << " GB" << std::endl;
 		         
 			     unsigned int global_active_cells = triangulation.n_global_active_cells();
 			       
 				     pcout << "Total number of active cells (global): " << global_active_cells << std::endl;
 
-				         pcout<<"Memory DofHandler "<< dof_handler_Omega.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
+				       
 
 
 
@@ -715,10 +717,17 @@ for (unsigned int i = 0; i < triangulation.n_vertices(); i++)
     }
      //marked_vertices[i] = true;
 }
-pcout<< "memory consump marked vertices "<<MemoryConsumption::memory_consumption(marked_vertices)/(1024.0 * 1024.0 * 1024.0) // Convert to MB
-	              << " GB" << std::endl;
+//pcout<< "memory consump marked vertices "<<MemoryConsumption::memory_consumption(marked_vertices)/(1024.0 * 1024.0 * 1024.0) // Convert to MB
+	 //             << " GB" << std::endl;
 #endif
-
+//malloc_trim(0);  // Force memory release
+Utilities::System::MemoryStats mem_stats;
+Utilities::System::get_memory_stats(mem_stats);
+  pcout << "Memory Statistics Grid:" << std::endl
+<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
+<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
+<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
+<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
 }
 
 template <int dim, int dim_omega>
@@ -775,7 +784,7 @@ const std::vector<types::global_dof_index> dofs_per_component_omega =
         << start_Potential_omega << std::endl;
 
 
-  
+  //std::cout<<"Memory DofHandler "<< dof_handler_Omega.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<" GB"<<std::endl;
   constraints.clear();
   constraints.close();
   unsigned int n_dofs_total = dof_handler_Omega.n_dofs() + dof_handler_omega.n_dofs();
@@ -783,20 +792,23 @@ const std::vector<types::global_dof_index> dofs_per_component_omega =
 
   #if USE_MPI_ASSEMBLE
   locally_owned_dofs_Omega = dof_handler_Omega.locally_owned_dofs();
-  locally_relevant_dofs_Omega;
+  
   DoFTools::extract_locally_relevant_dofs(dof_handler_Omega, locally_relevant_dofs_Omega);
-
+  //std::cout<<"Memory locally_owned_dofs_Omega "<< locally_owned_dofs_Omega.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
+	  //            << " GB" << std::endl;
+  //std::cout<<"Memory locally_relevant_dofs_Omega "<< locally_relevant_dofs_Omega.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
+	  //            << " GB" << std::endl;
   locally_owned_dofs_omega_local = dof_handler_omega.locally_owned_dofs();
   // if(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) != 0 )
    //locally_owned_dofs_omega_local.clear();
    
-  /*
+  DoFTools::extract_locally_relevant_dofs(dof_handler_omega, locally_relevant_dofs_omega_local);
+  
+    /*
   locally_owned_dofs_omega_global.set_size(locally_owned_dofs_omega_local.size());
   locally_owned_dofs_omega_global.add_indices(locally_owned_dofs_omega_local,  dof_handler_Omega.n_dofs());
 */
-  locally_relevant_dofs_omega_local;
-  DoFTools::extract_locally_relevant_dofs(dof_handler_omega, locally_relevant_dofs_omega_local);
-  /*
+    /*
   locally_relevant_dofs_omega_global.set_size(locally_relevant_dofs_omega_local.size());
   locally_relevant_dofs_omega_global.add_indices(locally_relevant_dofs_omega_local,  dof_handler_Omega.n_dofs());
 */
@@ -862,26 +874,46 @@ std::cout <<"----------------------------------- "<<  std::endl;
         std::cout << index << " ";
     std::cout << std::endl;*/
 #endif
+Utilities::System::MemoryStats mem_stats;
+Utilities::System::get_memory_stats(mem_stats);
+pcout << "Memory Statistics 1:" << std::endl
+  <<"cpu_load "<<Utilities::System::get_cpu_load()<<std::endl
+<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
+<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
+<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
+<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
 
-TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsityPattern(2,2);
+
+pcout<<"BlockSparsityPattern"<<std::endl;
+//TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsityPattern(2,2);
+TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsityPattern(locally_owned_dofs_block,locally_owned_dofs_block,locally_relevant_dofs_block, MPI_COMM_WORLD );
+//BlockSparsityPattern sp_block=  BlockSparsityPattern(locally_owned_dofs_block,locally_owned_dofs_block,locally_relevant_dofs_block, MPI_COMM_WORLD );
   sp_block.block(0, 0).reinit(locally_owned_dofs_Omega,locally_owned_dofs_Omega,locally_relevant_dofs_Omega,MPI_COMM_WORLD);
-
+ // std::cout<<"sparsity memory block(0, 0) "<<sp_block.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
+//	              << " GB" << std::endl;
     // Block 1,1: Sparsity for the extra DoFs (global DoFs)
   sp_block.block(1, 1).reinit(locally_owned_dofs_omega_local,locally_owned_dofs_omega_local,locally_relevant_dofs_omega_local,MPI_COMM_WORLD);
-
+ // std::cout<<"sparsity memory block(1, 1) "<<sp_block.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
+//	              << " GB" << std::endl;
   // Block 0,1 and 1,0: Sparsity for connections between mesh-based and extra DoFs
   sp_block.block(0, 1).reinit(locally_owned_dofs_Omega,locally_owned_dofs_omega_local,locally_relevant_dofs_Omega,MPI_COMM_WORLD);  // Block for coupling DoFs
- 
+ // std::cout<<"sparsity memory block(0, 1) "<<sp_block.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
+	 //             << " GB" << std::endl;
   sp_block.block(1, 0).reinit(locally_owned_dofs_omega_local,locally_owned_dofs_Omega,locally_relevant_dofs_omega_local,MPI_COMM_WORLD);
- 
-
+ // std::cout<<"sparsity memory block(1, 0)"<<sp_block.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
+//	              << " GB" << std::endl;
   DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0),constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));//,  constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
+ // std::cout<<"sparsity memory flx block(0, 0)"<<sp_block.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
+	//              << " GB" << std::endl;
   DoFTools::make_flux_sparsity_pattern(dof_handler_omega, sp_block.block(1,1),constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) );
+ // std::cout <<"sparsity memory flx block(1, 1)"<<sp_block.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
+	//              << " GB" << std::endl;
   sp_block.collect_sizes();
+  //malloc_trim(0);  // Force memory release
 #if COUPLED
 if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
     // coupling
-
+  pcout<<"Sparsity Coupling "<<std::endl;
  typename DoFHandler<dim>::active_cell_iterator
         cell_start = dof_handler_Omega.begin_active();
 
@@ -1098,11 +1130,27 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
   }
 #endif
   pcout<<"start to compress"<<std::endl;
+
+ /*   Utilities::System::get_memory_stats(mem_stats);
+  std::cout << "Memory Statistics before compress sparse:" << std::endl
+  <<"cpu_load "<<Utilities::System::get_cpu_load()<<std::endl
+<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
+<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
+<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
+<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;*/
   sp_block.compress();
-  
+
+ /* Utilities::System::get_memory_stats(mem_stats);
+    std::cout << "Memory Statistics after compress sparse:" << std::endl
+  <<"cpu_load "<<Utilities::System::get_cpu_load()<<std::endl
+<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
+<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
+<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
+<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;*/
+
 
    pcout<<"Sparsity "  <<sp_block.n_rows()<<" "<<sp_block.n_cols()<<" n_nonzero_elements " <<sp_block.n_nonzero_elements()<<std::endl;
-  // pcout<<"sparsity memory "<<sp_block.memory_consumption()<<std::endl;
+   pcout<<"sparsity memory "<<sp_block.memory_consumption()<<std::endl;
    pcout<<"start reinit"<<std::endl;
   system_matrix.reinit(sp_block);
   pcout<<"system_matrix.reinit"<<std::endl;
@@ -1113,11 +1161,32 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
 
    std::cout<<rank_mpi<<" memory system_matrix "<<system_matrix.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<" memory system_rhs "<<system_rhs.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
   pcout<<"Ende setup dof"<<std::endl;
+
+      Utilities::System::get_memory_stats(mem_stats);
+  pcout << "Memory Statistics Ende setup dof:" << std::endl
+  <<"cpu_load "<<Utilities::System::get_cpu_load()<<std::endl
+<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
+<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
+<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
+<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
+std::cout<<"malloc_trim "<<malloc_trim(0)<<std::endl;
 }
 
 template <int dim, int dim_omega>
 void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
   TimerOutput::Scope t(computing_timer, "assembly");
+  //malloc_trim(0);  // Force memory release
+  Utilities::System::MemoryStats mem_stats;
+   Utilities::System::get_memory_stats(mem_stats);
+  pcout << "Memory Statistics Ende setup dof:" << std::endl
+  <<"cpu_load "<<Utilities::System::get_cpu_load()<<std::endl
+<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
+<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
+<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
+<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
+
+
+
   pcout << "assemble_system" << std::endl;
  typename DoFHandler<dim>::active_cell_iterator
         cell_start = dof_handler_Omega.begin_active();
@@ -1457,7 +1526,7 @@ else
   pcout << "assemble Coupling" << std::endl;
   
   if (geo_conf == GeometryConfiguration::TwoD_ZeroD) {
-    std::cout << "2D/0D" << std::endl;
+    pcout << "2D/0D" << std::endl;
     Point<dim> quadrature_point_test(y_l, z_l);
     std::vector<types::global_dof_index> local_dof_indices_test(dofs_per_cell);
     // test function
@@ -1571,7 +1640,7 @@ else
     }
   }
   if (geo_conf == GeometryConfiguration::TwoD_OneD || geo_conf == GeometryConfiguration::ThreeD_OneD) {
-    std::cout<<"2D/1D  3D/1D"<<std::endl;
+    pcout<<"2D/1D  3D/1D"<<std::endl;
     std::vector<types::global_dof_index> local_dof_indices_test(dofs_per_cell);
     std::vector<types::global_dof_index> local_dof_indices_trial(dofs_per_cell);
 
@@ -2580,7 +2649,7 @@ solution = completely_distributed_solution;
 
 template <int dim, int dim_omega>
 void LDGPoissonProblem<dim, dim_omega>::output_results() const {
-  std::cout << "Output_result" << std::endl;
+  pcout << "Output_result" << std::endl;
   std::vector<std::string> solution_names;
   switch (dim) {
   case 1:
@@ -2847,7 +2916,15 @@ int main(int argc, char *argv[]) {
   //std::cout << "This is MPI process " << rank_mpi << std::endl;
 
 #endif
-
+/*Utilities::System::MemoryStats mem_stats;
+Utilities::System::get_memory_stats(mem_stats);
+  std::cout << "Memory Statistics Begin:" << std::endl
+  <<"cpu_load "<<Utilities::System::get_cpu_load()<<std::endl
+<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
+<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
+<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
+<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
+  */
   /*
   Parameters parameters;
       parameters.radius = 0.01;
@@ -2859,7 +2936,7 @@ int main(int argc, char *argv[]) {
               << arr[2] << " q " << arr[3] << std::endl;
     return 0;
   */
-  std::cout << "dimension_Omega " << dimension_Omega << std::endl;
+  //std::cout << "dimension_Omega " << dimension_Omega << std::endl;
 
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
@@ -2876,11 +2953,11 @@ int main(int argc, char *argv[]) {
       std::string folderName =name +"/";
      
       std::string command = "mkdir -p " + folderName;
-      if (system(command.c_str()) == 0) {
+  /*    if (system(command.c_str()) == 0) {
         std::cout << "Folder created successfully." << std::endl;
     } else {
         std::cerr << "Error: Could not create folder." << std::endl;
-    }
+    }*/
 
       scenario_names.push_back(name);
 
@@ -3014,7 +3091,13 @@ int main(int argc, char *argv[]) {
       }
     }
   }
-
+ /* Utilities::System::get_memory_stats(mem_stats);
+  std::cout << "Memory Statistics End:" << std::endl
+  <<"cpu_load "<<Utilities::System::get_cpu_load()<<std::endl
+<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
+<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
+<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
+<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;*/
   return 0;
 }
 
