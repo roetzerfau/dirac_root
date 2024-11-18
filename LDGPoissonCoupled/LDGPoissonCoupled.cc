@@ -2859,7 +2859,7 @@ int main(int argc, char *argv[]) {
               << arr[2] << " q " << arr[3] << std::endl;
     return 0;
   */
-  std::cout << "dimension_Omega " << dimension_Omega << std::endl;
+  // std::cout << "dimension_Omega " << dimension_Omega << std::endl;
 
   std::vector<std::array<double, 4>> result_scenario;
   std::vector<std::string> scenario_names;
@@ -2876,11 +2876,11 @@ int main(int argc, char *argv[]) {
       std::string folderName =name +"/";
      
       std::string command = "mkdir -p " + folderName;
-      if (system(command.c_str()) == 0) {
+     /* if (system(command.c_str()) == 0) {
         std::cout << "Folder created successfully." << std::endl;
     } else {
         std::cerr << "Error: Could not create folder." << std::endl;
-    }
+    }*/
 
       scenario_names.push_back(name);
 
