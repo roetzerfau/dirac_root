@@ -1,4 +1,4 @@
 #!/bin/bash –l
 make
-nohup mpirun -np 16 valgrind LDGPoissonCoupled > output_3D1Dconst_15_11.log 2> valgrind.%p.log
+nohup mpirun -np 12 LDGPoissonCoupled > output_3D1Dconst_uncoupled.log 2>&1
 #nohup make run > output_2D.log 2>&1

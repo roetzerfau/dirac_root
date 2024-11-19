@@ -1150,7 +1150,7 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
 
 
    pcout<<"Sparsity "  <<sp_block.n_rows()<<" "<<sp_block.n_cols()<<" n_nonzero_elements " <<sp_block.n_nonzero_elements()<<std::endl;
-   pcout<<"sparsity memory "<<sp_block.memory_consumption()<<std::endl;
+  // pcout<<"sparsity memory "<<sp_block.memory_consumption()<<std::endl;
    pcout<<"start reinit"<<std::endl;
   system_matrix.reinit(sp_block);
   pcout<<"system_matrix.reinit"<<std::endl;
@@ -1159,7 +1159,7 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
   system_rhs.reinit(locally_owned_dofs_block, locally_relevant_dofs_block,  MPI_COMM_WORLD, true);
    pcout<<"system_rhs.reinit"<<std::endl;
 
-   std::cout<<rank_mpi<<" memory system_matrix "<<system_matrix.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<" memory system_rhs "<<system_rhs.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
+ //  std::cout<<rank_mpi<<" memory system_matrix "<<system_matrix.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<" memory system_rhs "<<system_rhs.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
   pcout<<"Ende setup dof"<<std::endl;
 
       Utilities::System::get_memory_stats(mem_stats);
