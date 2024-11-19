@@ -1169,7 +1169,7 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
 << "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
 << "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
 << "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
-std::cout<<"malloc_trim "<<malloc_trim(0)<<std::endl;
+//std::cout<<"malloc_trim "<<malloc_trim(0)<<std::endl;
 }
 
 template <int dim, int dim_omega>
@@ -2949,17 +2949,19 @@ Utilities::System::get_memory_stats(mem_stats);
       std::string LA_string = lumpedAverages[LA] ? "true" : "false";
       std::string radius_string = std::to_string(radii[rad]);
       std::string omega_on_face_string = is_omega_on_face ? "true" : "false";
-      std::string name = "_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string;
+      std::string coupled_string = COUPLED==1 ? "true" : "false";
+      std::string name = "_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_coupled_" + coupled_string + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string;
       
       std::string folderName =name +"/";
      
       std::string command = "mkdir -p " + folderName;
 
-  /*    if (system(command.c_str()) == 0) {
+      if (system(command.c_str()) == 0) {
+        if(rank_mpi == 0)
         std::cout << "Folder created successfully." << std::endl;
     } else {
         std::cerr << "Error: Could not create folder." << std::endl;
-    }*/
+    }
 
       scenario_names.push_back(name);
 
