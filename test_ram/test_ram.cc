@@ -26,10 +26,10 @@
 
 #include <deal.II/base/function.h>
 #include <deal.II/base/tensor_function.h>
-
+#include <deal.II/lac/block_sparsity_pattern.h>
 #include <fstream>
 #include <iostream>
-
+#include <sys/resource.h>
 
 #include <deal.II/fe/fe_dgq.h>
 
@@ -117,7 +117,6 @@
 #include <malloc.h>
 
 
-
 using namespace dealii;
 
 template <int dim, int dim_omega> class TestRam {
@@ -181,6 +180,11 @@ private:
   IndexSet locally_owned_dofs_omega_local;
   IndexSet locally_relevant_dofs_omega_local;
 
+  IndexSet locally_relevant_dofs_omega_global;
+
+  IndexSet locally_owned_dofs_block_global;
+  IndexSet locally_relevant_dofs_block_global;
+  
 
   ConditionalOStream pcout;
   TimerOutput computing_timer;
@@ -203,8 +207,9 @@ TestRam<dim, dim_omega>::TestRam(const unsigned int degree, const unsigned int n
       fe_omega(FESystem<dim_omega>(FE_DGQ<dim_omega>(degree), dim_omega),
                FE_DGQ<dim_omega>(degree)),
       dof_handler_omega(triangulation_omega),
-      pcout(std::cout),
-      computing_timer(pcout, TimerOutput::summary, TimerOutput::wall_times) {}
+      pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0),
+      computing_timer(MPI_COMM_WORLD, pcout, TimerOutput::summary,
+                      TimerOutput::wall_times){}
 
 
 template <int dim, int dim_omega>
@@ -341,20 +346,29 @@ const std::vector<types::global_dof_index> dofs_per_component_omega =
     /*
   locally_owned_dofs_omega_global.set_size(locally_owned_dofs_omega_local.size());
   locally_owned_dofs_omega_global.add_indices(locally_owned_dofs_omega_local,  dof_handler_Omega.n_dofs());
-*/
-    /*
+
+  
   locally_relevant_dofs_omega_global.set_size(locally_relevant_dofs_omega_local.size());
   locally_relevant_dofs_omega_global.add_indices(locally_relevant_dofs_omega_local,  dof_handler_Omega.n_dofs());
 */
-
+//-------------
   std::vector<IndexSet> locally_owned_dofs_block;
   std::vector<IndexSet> locally_relevant_dofs_block;
+
 
   locally_owned_dofs_block.push_back(locally_owned_dofs_Omega);
   locally_owned_dofs_block.push_back(locally_owned_dofs_omega_local);
 
   locally_relevant_dofs_block.push_back(locally_relevant_dofs_Omega);
   locally_relevant_dofs_block.push_back(locally_relevant_dofs_omega_local);
+//--------------
+
+
+  /*locally_owned_dofs_block_global.push_back(locally_owned_dofs_Omega);
+  locally_owned_dofs_block_global.push_back(locally_owned_dofs_omega_global);
+
+  locally_relevant_dofs_block_global.push_back(locally_relevant_dofs_Omega);
+  locally_relevant_dofs_block_global.push_back(locally_relevant_dofs_omega_global);*/
 
 Utilities::System::MemoryStats mem_stats;
 Utilities::System::get_memory_stats(mem_stats);
@@ -364,9 +378,10 @@ pcout << "Memory Statistics 1:" << std::endl
 << "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
 << "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
 << "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
-
-
+{
+#if 1
 pcout<<"BlockSparsityPattern"<<std::endl;
+
 //TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsityPattern(2,2);
 TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsityPattern(locally_owned_dofs_block,locally_owned_dofs_block,locally_relevant_dofs_block, MPI_COMM_WORLD );
 //BlockSparsityPattern sp_block=  BlockSparsityPattern(locally_owned_dofs_block,locally_owned_dofs_block,locally_relevant_dofs_block, MPI_COMM_WORLD );
@@ -384,9 +399,42 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
   sp_block.block(1, 0).reinit(locally_owned_dofs_omega_local,locally_owned_dofs_Omega,locally_relevant_dofs_omega_local,MPI_COMM_WORLD);
  // std::cout<<"sparsity memory block(1, 0)"<<sp_block.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
 //	              << " GB" << std::endl;
-  DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0),constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));//,  constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
+
+  Table< 2, DoFTools::Coupling >	cell_integrals_mask_Omega(dim +1, dim +1);
+  for (unsigned int c = 0; c < dim + 1; ++c)
+  {
+    for (unsigned int d = 0; d < dim + 1; ++d)
+    {
+        if (c == dim || d == dim || c == d) //coupling between scalar values with its test functions (for dimension coupling)
+           cell_integrals_mask_Omega[c][d] = DoFTools::always; //coupling between each entry of vector values and with pressure
+        else
+         cell_integrals_mask_Omega[c][d] = DoFTools::none;
+        //std::cout<<cell_integrals_mask_Omega[c][d]<< " ";
+    }
+    //std::cout<<std::endl;
+  }
+  Table< 2, DoFTools::Coupling > 	face_integrals_mask_Omega(dim +1, dim +1);
+    for (unsigned int c = 0; c < dim + 1; ++c)
+  {
+    for (unsigned int d = 0; d < dim + 1; ++d)
+    {
+        if (c == dim || d == dim ) //coupling between scalar values with its test functions (for dimension coupling) and with vector values
+           face_integrals_mask_Omega[c][d] = DoFTools::always; 
+        else
+         face_integrals_mask_Omega[c][d] = DoFTools::none;
+        //std::cout<<face_integrals_mask_Omega[c][d]<< " ";
+    }
+   // std::cout<<std::endl;
+  }
+  DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0),cell_integrals_mask_Omega, face_integrals_mask_Omega,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));//,  constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
+//DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0),constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)); 
  // std::cout<<"sparsity memory flx block(0, 0)"<<sp_block.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
 	//              << " GB" << std::endl;
+
+  
+  
+  //Table< 2, DoFTools::Coupling >	cell_integrals_mask_omega(dim_omega +1,dim_omega +1);
+  //Table< 2, DoFTools::Coupling > 	face_integrals_mask_omega(dim_omega +1, dim_omega +1);
   DoFTools::make_flux_sparsity_pattern(dof_handler_omega, sp_block.block(1,1),constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) );
  // std::cout <<"sparsity memory flx block(1, 1)"<<sp_block.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
 	//              << " GB" << std::endl;
@@ -403,7 +451,28 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
 << "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
 << "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;*/
   sp_block.compress();
+#else
+  pcout<<"BlockSparsityPattern"<<std::endl;
+  BlockDynamicSparsityPattern sp_block(locally_relevant_dofs_block );
 
+  sp_block.block(0, 0).reinit(locally_relevant_dofs_Omega);
+ 
+  sp_block.block(1, 1).reinit(locally_relevant_dofs_omega_local);
+ 
+  sp_block.block(0, 1).reinit(locally_relevant_dofs_Omega);
+ 
+  sp_block.block(1, 0).reinit(locally_relevant_dofs_omega_local);
+ 
+  DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0),constraints,false);
+ 
+  DoFTools::make_flux_sparsity_pattern(dof_handler_omega, sp_block.block(1,1),constraints,false);
+  SparsityTools::distribute_sparsity_pattern(sp_block,
+                                                 locally_owned_dofs_block_global,
+                                                 MPI_COMM_WORLD,
+                                                 locally_relevant_dofs_block_global);
+
+  pcout<<"start to compress"<<std::endl;
+#endif
  /* Utilities::System::get_memory_stats(mem_stats);
     std::cout << "Memory Statistics after compress sparse:" << std::endl
   <<"cpu_load "<<Utilities::System::get_cpu_load()<<std::endl
@@ -422,7 +491,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
    pcout<<"solution.reinit"<<std::endl;
   system_rhs.reinit(locally_owned_dofs_block, locally_relevant_dofs_block,  MPI_COMM_WORLD, true);
    pcout<<"system_rhs.reinit"<<std::endl;
-
+}
  //  std::cout<<rank_mpi<<" memory system_matrix "<<system_matrix.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<" memory system_rhs "<<system_rhs.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
   pcout<<"Ende setup dof"<<std::endl;
 
@@ -480,11 +549,22 @@ Utilities::System::get_memory_stats(mem_stats);
   */
 
   
-  TestRam<3, 1> myTestRam(1,7);
+  TestRam<3, 1> myTestRam(1,3);
     myTestRam.run();
-   
-  
+   // Get memory usage at the end
+    struct rusage usage;
+    getrusage(RUSAGE_SELF, &usage);
+    double peak_memory = usage.ru_maxrss / 1024.0; // Convert KB to MB
 
+    // Print memory usage for each process
+    std::cout << "Rank " << rank_mpi << " Peak Memory Usage: " << peak_memory << " MB" << std::endl;
+
+double max_memory;
+    MPI_Reduce(&peak_memory, &max_memory, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+        if (rank_mpi == 0) {
+        std::cout << "Peak Memory Usage Across All Ranks: " << max_memory << " MB" << std::endl;
+    }
   //std::cout << "dimension_Omega " << dimension_Omega << std::endl;
 
 
