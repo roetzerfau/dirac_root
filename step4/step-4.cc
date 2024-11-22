@@ -38,6 +38,7 @@
 #include <deal.II/numerics/data_out.h>
 #include <fstream>
 #include <iostream>
+#include <deal.II/base/utilities.h>
 
 // The final step, as in previous programs, is to import all the deal.II class
 // and function names into the global namespace:
@@ -58,10 +59,10 @@ class Step4
 {
 public:
   Step4();
-  void run();
+  void run(unsigned int _refine);
 
 private:
-  void make_grid();
+  void make_grid(unsigned int _refine);
   void setup_system();
   void assemble_system();
   void solve();
@@ -249,15 +250,22 @@ Step4<dim>::Step4()
 // different, but that is something you need not care about. Let the library
 // handle the difficult things.
 template <int dim>
-void Step4<dim>::make_grid()
+void Step4<dim>::make_grid(unsigned int _refine)
 {
   GridGenerator::hyper_cube(triangulation, -1, 1);
-  triangulation.refine_global(4);
+  triangulation.refine_global(_refine);
 
   std::cout << "   Number of active cells: " << triangulation.n_active_cells()
             << std::endl
             << "   Total number of cells: " << triangulation.n_cells()
             << std::endl;
+             Utilities::System::MemoryStats mem_stats;
+            Utilities::System::get_memory_stats(mem_stats);
+  std::cout << "Memory Statistics Grid:" << std::endl
+<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
+<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
+<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
+<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
 }
 
 // @sect4{Step4::setup_system}
@@ -278,11 +286,26 @@ void Step4<dim>::setup_system()
   DynamicSparsityPattern dsp(dof_handler.n_dofs());
   DoFTools::make_sparsity_pattern(dof_handler, dsp);
   sparsity_pattern.copy_from(dsp);
+std::cout<<"n_nonzero_elements() "<<sparsity_pattern.n_nonzero_elements()<<std::endl;
+             Utilities::System::MemoryStats mem_stats;
+            Utilities::System::get_memory_stats(mem_stats);
+  std::cout << "Memory Statistics sparsity:" << std::endl
+<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
+<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
+<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
+<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
 
   system_matrix.reinit(sparsity_pattern);
 
   solution.reinit(dof_handler.n_dofs());
   system_rhs.reinit(dof_handler.n_dofs());
+
+       Utilities::System::get_memory_stats(mem_stats);
+  std::cout << "Memory Statistics reinited" << std::endl
+<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
+<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
+<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
+<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
 }
 
 
@@ -482,16 +505,16 @@ void Step4<dim>::output_results() const
 // from one line of additional output, it is the same as for the previous
 // example.
 template <int dim>
-void Step4<dim>::run()
+void Step4<dim>::run(unsigned int _refine)
 {
   std::cout << "Solving problem in " << dim << " space dimensions."
             << std::endl;
 
-  make_grid();
+  make_grid(_refine);
   setup_system();
-  assemble_system();
-  solve();
-  output_results();
+  //assemble_system();
+  //solve();
+  //output_results();
 }
 
 
@@ -523,14 +546,18 @@ void Step4<dim>::run()
 // could actually use it.
 int main()
 {
-  {
-    Step4<2> laplace_problem_2d;
-    laplace_problem_2d.run();
-  }
-
+ 
   {
     Step4<3> laplace_problem_3d;
-    laplace_problem_3d.run();
+    laplace_problem_3d.run(7);
+  }
+  {
+    Step4<3> laplace_problem_3d;
+    laplace_problem_3d.run(8);
+  }
+    {
+    Step4<3> laplace_problem_3d;
+    laplace_problem_3d.run(9);
   }
 
   return 0;
