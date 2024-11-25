@@ -245,7 +245,7 @@ triangulation.refine_global(n_refine);
 pcout<<"refined"<<std::endl;
 
  //pcout << "Memory consumption of triangulation: "
-      //         << triangulation.memory_consumption() / (1024.0 * 1024.0 * 1024.0) // Convert to MB
+   //            << triangulation.memory_consumption() / (1024.0 * 1024.0 * 1024.0) // Convert to MB
 	   //          << " GB" << std::endl;
 		         
 			     unsigned int global_active_cells = triangulation.n_global_active_cells();

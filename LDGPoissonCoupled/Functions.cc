@@ -36,12 +36,12 @@ constexpr unsigned int constructed_solution{2};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[7] = {4,5,6,7,8,9,10};//,7,8,9,10
+const unsigned int refinement[4] = {3,4,5,6};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
-const double radii[n_r] = {  0.01};
+const double radii[n_r] = {  0.1};
 const bool lumpedAverages[n_LA] = {false};//TODO bei punkt wuelle noch berücksichtnge
 
 template <int dim> double distance(Point<dim> point1, Point<dim> point2) {

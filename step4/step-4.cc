@@ -34,6 +34,7 @@
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/precondition.h>
+#include <deal.II/fe/fe_dgq.h>
 
 #include <deal.II/numerics/data_out.h>
 #include <fstream>
@@ -74,7 +75,7 @@ private:
 
   SparsityPattern      sparsity_pattern;
   SparseMatrix<double> system_matrix;
-
+#include <deal.II/fe/fe_dgq.h>
   Vector<double> solution;
   Vector<double> system_rhs;
 };
@@ -285,6 +286,7 @@ void Step4<dim>::setup_system()
 
   DynamicSparsityPattern dsp(dof_handler.n_dofs());
   DoFTools::make_sparsity_pattern(dof_handler, dsp);
+  //DoFTools::make_flux_sparsity_pattern(dof_handler, dsp);
   sparsity_pattern.copy_from(dsp);
 std::cout<<"n_nonzero_elements() "<<sparsity_pattern.n_nonzero_elements()<<std::endl;
              Utilities::System::MemoryStats mem_stats;
@@ -508,7 +510,7 @@ template <int dim>
 void Step4<dim>::run(unsigned int _refine)
 {
   std::cout << "Solving problem in " << dim << " space dimensions."
-            << std::endl;
+            << "refine "<< _refine<<std::endl;
 
   make_grid(_refine);
   setup_system();
@@ -546,6 +548,10 @@ void Step4<dim>::run(unsigned int _refine)
 // could actually use it.
 int main()
 {
+  {
+    Step4<3> laplace_problem_3d;
+    laplace_problem_3d.run(5);
+  }
  
   {
     Step4<3> laplace_problem_3d;

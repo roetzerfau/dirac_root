@@ -115,6 +115,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <malloc.h>
+#include <sys/resource.h>
 
 #include "Functions.cc"
 
@@ -572,11 +573,12 @@ std::vector<unsigned int> cells_inside_box;
 
 int num_processes = dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
 bool is_shared_triangulation = num_processes > 1 ? true : false;
-bool is_repartioned =  is_shared_triangulation && (geo_conf != GeometryConfiguration::TwoD_ZeroD);
+bool is_repartioned =  is_shared_triangulation && (geo_conf != GeometryConfiguration::TwoD_ZeroD) && COUPLED;
 pcout<<"is_shared_triangulation "<<  is_shared_triangulation<<" is_repartioned "<<is_repartioned<<std::endl;
 if(is_repartioned)
+{
 GridTools::get_face_connectivity_of_cells(triangulation,connectivity);
-
+}
  max_diameter = 0.0;
  typename DoFHandler<dim>::active_cell_iterator
         cell = dof_handler_Omega.begin_active(),
@@ -640,15 +642,16 @@ if(is_repartioned)
     connectivity.add_entries(row, cells_inside_box.begin(), cells_inside_box.end());
   cell_connection_graph.copy_from(connectivity);
   pcout<<"los "<< dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)<<std::endl;
- GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_connection_graph,triangulation, SparsityTools::Partitioner::zoltan );
-}  
+ //GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_connection_graph,triangulation, SparsityTools::Partitioner::zoltan );
+ GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_connection_graph,triangulation);
+ }  
   
 
 
 
- //pcout << "Memory consumption of triangulation: "
-      //         << triangulation.memory_consumption() / (1024.0 * 1024.0 * 1024.0) // Convert to MB
-	   //          << " GB" << std::endl;
+ pcout << "Memory consumption of triangulation: "
+              << triangulation.memory_consumption() / (1024.0 * 1024.0 * 1024.0) // Convert to MB
+	             << " GB" << std::endl;
 		         
 			     unsigned int global_active_cells = triangulation.n_global_active_cells();
 			       
@@ -883,7 +886,7 @@ pcout << "Memory Statistics 1:" << std::endl
 << "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
 << "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
 
-
+{
 pcout<<"BlockSparsityPattern"<<std::endl;
 //TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsityPattern(2,2);
 TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsityPattern(locally_owned_dofs_block,locally_owned_dofs_block,locally_relevant_dofs_block, MPI_COMM_WORLD );
@@ -902,7 +905,34 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
   sp_block.block(1, 0).reinit(locally_owned_dofs_omega_local,locally_owned_dofs_Omega,locally_relevant_dofs_omega_local,MPI_COMM_WORLD);
  // std::cout<<"sparsity memory block(1, 0)"<<sp_block.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
 //	              << " GB" << std::endl;
-  DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0),constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));//,  constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
+ 
+  Table< 2, DoFTools::Coupling >	cell_integrals_mask_Omega(dim +1, dim +1);
+  for (unsigned int c = 0; c < dim + 1; ++c)
+  {
+    for (unsigned int d = 0; d < dim + 1; ++d)
+    {
+        if (c == dim || d == dim || c == d) //coupling between scalar values with its test functions (for dimension coupling)
+           cell_integrals_mask_Omega[c][d] = DoFTools::always; //coupling between each entry of vector values and with pressure
+        else
+         cell_integrals_mask_Omega[c][d] = DoFTools::none;
+        //std::cout<<cell_integrals_mask_Omega[c][d]<< " ";
+    }
+    //std::cout<<std::endl;
+  }
+  Table< 2, DoFTools::Coupling > 	face_integrals_mask_Omega(dim +1, dim +1);
+    for (unsigned int c = 0; c < dim + 1; ++c)
+  {
+    for (unsigned int d = 0; d < dim + 1; ++d)
+    {
+        if (c == dim || d == dim ) //coupling between scalar values with its test functions (for dimension coupling) and with vector values
+           face_integrals_mask_Omega[c][d] = DoFTools::always; 
+        else
+         face_integrals_mask_Omega[c][d] = DoFTools::none;
+        //std::cout<<face_integrals_mask_Omega[c][d]<< " ";
+    }
+   // std::cout<<std::endl;
+  }
+  DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0),cell_integrals_mask_Omega, face_integrals_mask_Omega,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
  // std::cout<<"sparsity memory flx block(0, 0)"<<sp_block.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
 	//              << " GB" << std::endl;
   DoFTools::make_flux_sparsity_pattern(dof_handler_omega, sp_block.block(1,1),constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) );
@@ -1153,6 +1183,7 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
   // pcout<<"sparsity memory "<<sp_block.memory_consumption()<<std::endl;
    pcout<<"start reinit"<<std::endl;
   system_matrix.reinit(sp_block);
+}
   pcout<<"system_matrix.reinit"<<std::endl;
   solution.reinit(locally_relevant_dofs_block,  MPI_COMM_WORLD);
    pcout<<"solution.reinit"<<std::endl;
@@ -1178,7 +1209,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
   //malloc_trim(0);  // Force memory release
   Utilities::System::MemoryStats mem_stats;
    Utilities::System::get_memory_stats(mem_stats);
-  pcout << "Memory Statistics Ende setup dof:" << std::endl
+  pcout << "Memory Statistics start assemble_system:" << std::endl
   <<"cpu_load "<<Utilities::System::get_cpu_load()<<std::endl
 <<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
 << "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
@@ -2153,7 +2184,13 @@ std::cout<<"ja"<<std::endl;
   pcout<<"Start compress " <<std::endl;
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
-
+   Utilities::System::get_memory_stats(mem_stats);
+  pcout << "Memory Statistics end assemble_system:" << std::endl
+  <<"cpu_load "<<Utilities::System::get_cpu_load()<<std::endl
+<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
+<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
+<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
+<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
 }
 
 template <int dim, int dim_omega>
@@ -2889,7 +2926,7 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
   assemble_system();
   solve();
   std::array<double, 4> results_array= compute_errors();
-  output_results();
+ // output_results();
  
   return results_array;
 }
@@ -3007,7 +3044,21 @@ Utilities::System::get_memory_stats(mem_stats);
 
           std::cout << rank_mpi << " Result_ende: U " << arr[0] << " Q " << arr[1]
                     << " u " << arr[2] << " q " << arr[3] << std::endl;
-                
+
+
+            struct rusage usage;
+    getrusage(RUSAGE_SELF, &usage);
+    double peak_memory = usage.ru_maxrss / 1024.0; // Convert KB to MB
+
+    // Print memory usage for each process
+    std::cout << "Rank " << rank_mpi << " Peak Memory Usage: " << peak_memory << " MB" << std::endl;
+
+double max_memory;
+    MPI_Reduce(&peak_memory, &max_memory, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+        if (rank_mpi == 0) {
+        std::cout << "Peak Memory Usage Across All Ranks: " << max_memory << " MB" << std::endl;
+    }     
           if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
             
           std::ofstream csvfile_unsrtd;
@@ -3102,6 +3153,7 @@ Utilities::System::get_memory_stats(mem_stats);
 << "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
 << "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
 << "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;*/
+   
   return 0;
 }
 
