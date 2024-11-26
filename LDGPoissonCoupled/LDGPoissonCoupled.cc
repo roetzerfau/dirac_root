@@ -116,6 +116,7 @@
 #include <stdexcept>
 #include <malloc.h>
 #include <sys/resource.h>
+#include <numeric> 
 
 #include "Functions.cc"
 
@@ -555,16 +556,66 @@ if (dim == 3) {
       Point<dim>(half_length + offset, half_length + offset);
 
  }
- GridGenerator::hyper_rectangle(triangulation, p1, p2);
+
+std::cout<<"grid extent, p1:  "<<p1 <<" p2: "<<p2<<std::endl;
+
+
+  std::vector< std::vector< double > > step_sizes;
+ unsigned int nof_cells_needed = std::pow(2,dim * n_refine);
+ 
+ double max_h = 2 * half_length/ (double)std::pow(2.0,n_refine);
+ std::cout<<"nof_cells_needed "<<nof_cells_needed<<" max_h "<<max_h<<std::endl;
+
+ for(unsigned int i = 0; i < dim; i++)
+ {
+  std::vector<double> spacing, step_sizes_dir, step_sizes_dir_uniform, spacing_reverse;
+  for(unsigned int j = 0; j < std::pow(2,n_refine); j++)
+    step_sizes_dir_uniform.push_back(max_h);
+
+
+  spacing.push_back(max_h * max_h);
+  double step_size, r, sum = max_h * max_h;
+   while(sum < half_length)
+   //for(unsigned int j = 0; j < 10; j++)
+   {
+    r = std::accumulate(spacing.begin(), spacing.end(), 0.0);
+    //std::cout<<"r "<<r <<std::endl;
+    spacing.push_back(max_h * std::pow(r,0.5));
+    sum = r + spacing[spacing.size()-1];
+   }
+   spacing.pop_back();
+   sum = std::accumulate(spacing.begin(), spacing.end(), 0.0);
+
+   double to_distribute = half_length - sum;
+    for(unsigned int j = 0; j < spacing.size(); j++)
+    {
+      spacing[j] = spacing[j] + to_distribute/spacing.size();
+    }
+    sum = std::accumulate(spacing.begin(), spacing.end(), 0.0);
+    std::cout<<"sum "<<sum<<" diff " <<sum - half_length<<std::endl;
+
+   
+   spacing_reverse.insert(spacing_reverse.end(), spacing.begin(), spacing.end());
+   std::reverse(spacing_reverse.begin(), spacing_reverse.end());
+
+   step_sizes_dir.insert(step_sizes_dir.end(), spacing_reverse.begin(), spacing_reverse.end()); 
+   step_sizes_dir.insert(step_sizes_dir.end(), spacing.begin(), spacing.end()); 
+   if(i != 0)
+   step_sizes.push_back(step_sizes_dir);
+   else
+   step_sizes.push_back(step_sizes_dir_uniform);
+ }
+ GridGenerator::subdivided_hyper_rectangle(triangulation, step_sizes, p1, p2, true);
+ //GridGenerator::hyper_rectangle(triangulation,  p1, p2);
 #endif
 pcout<<"refined++++++"<<std::endl;
-triangulation.refine_global(n_refine);
+//triangulation.refine_global(n_refine);
 pcout<<"refined"<<std::endl;
-/*
+
 GridOut grid_out;
 std::ofstream out("grid_Omega.vtk"); // Choose your preferred filename and format
 grid_out.write_vtk(triangulation, out);
-*/
+
 const std::vector<Point<dim>> &vertices = triangulation.get_vertices();
 
 SparsityPattern cell_connection_graph;
@@ -1239,6 +1290,9 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
   FEFaceValues<dim> fe_neighbor_face_values(fe_Omega, face_quadrature_formula,
                                             face_update_flags);
 
+  FESubfaceValues<dim> fe_subface_values(fe_Omega, face_quadrature_formula,
+                                            face_update_flags);
+
   FullMatrix<double> local_matrix(dofs_per_cell, dofs_per_cell);
   Vector<double> local_vector(dofs_per_cell);
 
@@ -1322,6 +1376,51 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
             typename DoFHandler<dim>::cell_iterator neighbor =
                 cell->neighbor(face_no);
 
+          
+          if (face->has_children())
+          {
+              const unsigned int neighbor_face_no =
+                cell->neighbor_of_neighbor(face_no);
+
+            for (unsigned int subface_no=0;
+                        subface_no < face->n_children();
+                        ++subface_no)
+              {
+
+                  typename DoFHandler<dim>::cell_iterator neighbor_child =
+                            cell->neighbor_child_on_subface(face_no,
+                                                            subface_no);
+
+                Assert(!neighbor_child->has_children(),
+                        ExcInternalError());
+                vi_ui_matrix = 0;
+                vi_ue_matrix = 0;
+                ve_ui_matrix = 0;
+                ve_ue_matrix = 0;
+
+              fe_subface_values.reinit(cell, face_no, subface_no);
+              fe_neighbor_face_values.reinit(neighbor_child,
+                                              neighbor_face_no);
+              double h = std::min(cell->diameter(), neighbor_child->diameter());
+
+                    assemble_flux_terms(fe_subface_values,
+                  fe_neighbor_face_values,
+      vi_ui_matrix, vi_ue_matrix, ve_ui_matrix,
+      ve_ue_matrix, h, VectorField, Potential);
+        neighbor_child->get_dof_indices(local_neighbor_dof_indices);
+
+              distribute_local_flux_to_global(
+              vi_ui_matrix,
+              vi_ue_matrix,
+              ve_ui_matrix,
+              ve_ue_matrix,
+              local_dof_indices,
+              local_neighbor_dof_indices);
+
+            }
+          }
+          else
+          {
             if (cell->id() < neighbor->id()) {
 
               const unsigned int neighbor_face_no =
@@ -1347,6 +1446,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                   vi_ui_matrix, vi_ue_matrix, ve_ui_matrix, ve_ue_matrix,
                   local_dof_indices, local_neighbor_dof_indices);
             }
+          }
           }
         }
 
@@ -2922,10 +3022,10 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
 rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
   penalty = 50;
   make_grid();
-  make_dofs();
-  assemble_system();
-  solve();
-  std::array<double, 4> results_array= compute_errors();
+  //make_dofs();
+  //assemble_system();
+  //solve();
+  std::array<double, 4> results_array;//= compute_errors();
  // output_results();
  
   return results_array;

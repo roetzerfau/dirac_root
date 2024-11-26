@@ -247,8 +247,8 @@ Point<dim> p1, p2;
  GridGenerator::hyper_rectangle(triangulation, p1, p2);
 
  //GridGenerator::hyper_cube(triangulation, 0, 1);
-  triangulation.refine_global(n_refine);
-
+triangulation.refine_global(n_refine);
+  
  /* unsigned int local_refine = 2;
   for (unsigned int i =0; i <local_refine; ++i)
     {
@@ -281,7 +281,7 @@ Point<dim> p1, p2;
     }*/
     std::ofstream out("grid-2.vtk");
     GridOut       grid_out;
-  //  grid_out.write_vtk(triangulation, out);
+    grid_out.write_vtk(triangulation, out);
   // To label the boundary faces of the mesh with their
   // type, i.e. Dirichlet or Neumann,
   // we loop over all the cells in the mesh and then over
@@ -1503,7 +1503,7 @@ run()
 {
   penalty = 1.0;
   make_grid();
-  make_dofs();
+  //make_dofs();
   //assemble_system();
   //solve();
   //output_results();
@@ -1525,12 +1525,27 @@ int main(int argc, char *argv[])
 
       Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv,
                                                           numbers::invalid_unsigned_int);
+ int rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 {
       unsigned int degree = 1;
       unsigned int n_refine = 4;
       std::cout<<"n_refine "<<n_refine<<std::endl;
       LDGPoissonProblem<3>    Poisson(degree, n_refine);
       Poisson.run();
+                  struct rusage usage;
+    getrusage(RUSAGE_SELF, &usage);
+    double peak_memory = usage.ru_maxrss / 1024.0; // Convert KB to MB
+
+    // Print memory usage for each process
+    std::cout << "Rank " << rank_mpi << " Peak Memory Usage: " << peak_memory << " MB" << std::endl;
+
+double max_memory;
+    MPI_Reduce(&peak_memory, &max_memory, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+        if (rank_mpi == 0) {
+        std::cout << "Peak Memory Usage Across All Ranks: " << max_memory << " MB" << std::endl;
+    }
+      
 }
 {
       unsigned int degree = 1;
@@ -1538,6 +1553,19 @@ int main(int argc, char *argv[])
       std::cout<<"n_refine "<<n_refine<<std::endl;
       LDGPoissonProblem<3>    Poisson(degree, n_refine);
       Poisson.run();
+                  struct rusage usage;
+    getrusage(RUSAGE_SELF, &usage);
+    double peak_memory = usage.ru_maxrss / 1024.0; // Convert KB to MB
+
+    // Print memory usage for each process
+    std::cout << "Rank " << rank_mpi << " Peak Memory Usage: " << peak_memory << " MB" << std::endl;
+
+double max_memory;
+    MPI_Reduce(&peak_memory, &max_memory, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+        if (rank_mpi == 0) {
+        std::cout << "Peak Memory Usage Across All Ranks: " << max_memory << " MB" << std::endl;
+    }
 }
 {
       unsigned int degree = 1;
@@ -1545,6 +1573,19 @@ int main(int argc, char *argv[])
       std::cout<<"n_refine "<<n_refine<<std::endl;
       LDGPoissonProblem<3>    Poisson(degree, n_refine);
       Poisson.run();
+                  struct rusage usage;
+    getrusage(RUSAGE_SELF, &usage);
+    double peak_memory = usage.ru_maxrss / 1024.0; // Convert KB to MB
+
+    // Print memory usage for each process
+    std::cout << "Rank " << rank_mpi << " Peak Memory Usage: " << peak_memory << " MB" << std::endl;
+
+double max_memory;
+    MPI_Reduce(&peak_memory, &max_memory, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+        if (rank_mpi == 0) {
+        std::cout << "Peak Memory Usage Across All Ranks: " << max_memory << " MB" << std::endl;
+    }
 }
 {
       unsigned int degree = 1;
@@ -1553,6 +1594,27 @@ int main(int argc, char *argv[])
       LDGPoissonProblem<3>    Poisson(degree, n_refine);
       Poisson.run();
 }
+{
+	      unsigned int degree = 1;
+	            unsigned int n_refine = 8;
+		          std::cout<<"n_refine "<<n_refine<<std::endl;
+			        LDGPoissonProblem<3>    Poisson(degree, n_refine);
+				      Poisson.run();
+                          struct rusage usage;
+    getrusage(RUSAGE_SELF, &usage);
+    double peak_memory = usage.ru_maxrss / 1024.0; // Convert KB to MB
+
+    // Print memory usage for each process
+    std::cout << "Rank " << rank_mpi << " Peak Memory Usage: " << peak_memory << " MB" << std::endl;
+
+double max_memory;
+    MPI_Reduce(&peak_memory, &max_memory, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+        if (rank_mpi == 0) {
+        std::cout << "Peak Memory Usage Across All Ranks: " << max_memory << " MB" << std::endl;
+    }
+}
+
 
     }
   catch (std::exception &exc)
@@ -1571,7 +1633,8 @@ int main(int argc, char *argv[])
   catch (...)
     {
       std::cerr << std::endl << std::endl
-                << "----------------------------------------------------"
+                
+	      << "----------------------------------------------------"
                 << std::endl;
       std::cerr << "Unknown exception!" << std::endl
                 << "Aborting!" << std::endl
