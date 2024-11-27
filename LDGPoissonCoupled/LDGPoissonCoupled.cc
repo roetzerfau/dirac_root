@@ -557,7 +557,7 @@ if (dim == 3) {
 
  }
 
-std::cout<<"grid extent, p1:  "<<p1 <<" p2: "<<p2<<std::endl;
+pcout<<"grid extent, p1:  "<<p1 <<" p2: "<<p2<<std::endl;
 std::vector< unsigned int > 	repetitions({1,1,1});
 GridGenerator::subdivided_hyper_rectangle(triangulation,repetitions,  p1, p2);
  //GridGenerator::hyper_rectangle(triangulation,  p1, p2);
@@ -569,7 +569,7 @@ GridGenerator::subdivided_hyper_rectangle(triangulation,repetitions,  p1, p2);
 #if GRADEDMESH
  double h_max = 2 * half_length/std::pow(2,n_refine);
  h_max = dim == 3 ? h_max * std::sqrt(3) :  h_max  * std::sqrt(2);
- std::cout<<"h_max "<<h_max<<std::endl;
+pcout<<"h_max "<<h_max<<std::endl;
 
  for (unsigned int i =n_refine; i <n_refine * 2; ++i)
     {
@@ -595,7 +595,7 @@ GridGenerator::subdivided_hyper_rectangle(triangulation,repetitions,  p1, p2);
       endc = triangulation.end();
       for (; cell != endc; ++cell)
        max_level = std::max(cell->level(), max_level);
-std::cout<<"max_level "<<max_level<<std::endl;
+pcout<<"max_level "<<max_level<<std::endl;
 }
 #endif
 #endif

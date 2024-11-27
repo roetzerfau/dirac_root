@@ -1,4 +1,4 @@
 #!/bin/bash –l
 make
-nohup mpirun -np 10 LDGPoissonCoupled > output_3D1Dconst_uncoupled_graded_mesh.log 2>&1
-#nohup make run > output_2D.log 2>&1
+#nohup mpirun -np 4 LDGPoissonCoupled > output_3D1Dconst_graded_mesh.log 2>&1
+nohup make run > output_3D1Dconst_graded_mesh.log 2>&1
