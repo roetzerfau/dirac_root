@@ -558,55 +558,30 @@ if (dim == 3) {
  }
 
 std::cout<<"grid extent, p1:  "<<p1 <<" p2: "<<p2<<std::endl;
-
-
-  std::vector< std::vector< double > > step_sizes;
- unsigned int nof_cells_needed = std::pow(2,dim * n_refine);
- 
- double max_h = 2 * half_length/ (double)std::pow(2.0,n_refine);
- std::cout<<"nof_cells_needed "<<nof_cells_needed<<" max_h "<<max_h<<std::endl;
-
- for(unsigned int i = 0; i < dim; i++)
- {
-  std::vector<double> spacing, step_sizes_dir, step_sizes_dir_uniform, spacing_reverse;
-  for(unsigned int j = 0; j < std::pow(2,n_refine); j++)
-    step_sizes_dir_uniform.push_back(max_h);
-
-
-  spacing.push_back(max_h * max_h);
-  double step_size, r, sum = max_h * max_h;
-   while(sum < half_length)
-   //for(unsigned int j = 0; j < 10; j++)
-   {
-    r = std::accumulate(spacing.begin(), spacing.end(), 0.0);
-    //std::cout<<"r "<<r <<std::endl;
-    spacing.push_back(max_h * std::pow(r,0.5));
-    sum = r + spacing[spacing.size()-1];
-   }
-   spacing.pop_back();
-   sum = std::accumulate(spacing.begin(), spacing.end(), 0.0);
-
-   double to_distribute = half_length - sum;
-    for(unsigned int j = 0; j < spacing.size(); j++)
-    {
-      spacing[j] = spacing[j] + to_distribute/spacing.size();
-    }
-    sum = std::accumulate(spacing.begin(), spacing.end(), 0.0);
-    std::cout<<"sum "<<sum<<" diff " <<sum - half_length<<std::endl;
-
-   
-   spacing_reverse.insert(spacing_reverse.end(), spacing.begin(), spacing.end());
-   std::reverse(spacing_reverse.begin(), spacing_reverse.end());
-
-   step_sizes_dir.insert(step_sizes_dir.end(), spacing_reverse.begin(), spacing_reverse.end()); 
-   step_sizes_dir.insert(step_sizes_dir.end(), spacing.begin(), spacing.end()); 
-   if(i != 0)
-   step_sizes.push_back(step_sizes_dir);
-   else
-   step_sizes.push_back(step_sizes_dir_uniform);
- }
- GridGenerator::subdivided_hyper_rectangle(triangulation, step_sizes, p1, p2, true);
+std::vector< unsigned int > 	repetitions({1,1,1});
+GridGenerator::subdivided_hyper_rectangle(triangulation,repetitions,  p1, p2);
  //GridGenerator::hyper_rectangle(triangulation,  p1, p2);
+ double h_max = 2 * half_length/std::pow(2,3*n_refine);
+  for (unsigned int i =0; i <n_refine + 1; ++i)
+    {
+      typename Triangulation<dim>::active_cell_iterator
+      cell = triangulation.begin_active(),
+      endc = triangulation.end();
+      for (; cell != endc; ++cell)
+        {
+
+        if( > h_max * std::pow( distance_to_singularity<dim>(cell->center()),0.5) )
+         cell->set_refine_flag();
+        
+        }
+      // Now that we have marked all the cells
+      // that we want to refine locally we can go ahead and
+      // refine them.
+      triangulation.execute_coarsening_and_refinement();
+    }
+
+
+
 #endif
 pcout<<"refined++++++"<<std::endl;
 //triangulation.refine_global(n_refine);
