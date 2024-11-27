@@ -249,7 +249,7 @@ Point<dim> p1, p2;
  //GridGenerator::hyper_cube(triangulation, 0, 1);
 triangulation.refine_global(n_refine);
   
- /* unsigned int local_refine = 2;
+  unsigned int local_refine = 2;
   for (unsigned int i =0; i <local_refine; ++i)
     {
       typename Triangulation<dim>::active_cell_iterator
@@ -268,9 +268,8 @@ triangulation.refine_global(n_refine);
       // documentation.
       for (; cell != endc; ++cell)
         {
-          if ((cell->center()[1]) > 0.9 )
+          if ((cell->center()[0]) > half_length )
             {
-              if ((cell->center()[0] > 0.9)  || (cell->center()[0] < 0.1))
                cell->set_refine_flag();
             }
         }
@@ -278,10 +277,12 @@ triangulation.refine_global(n_refine);
       // that we want to refine locally we can go ahead and
       // refine them.
       triangulation.execute_coarsening_and_refinement();
-    }*/
+    }
+    std::cout<<"gridout"<<std::endl;
     std::ofstream out("grid-2.vtk");
     GridOut       grid_out;
     grid_out.write_vtk(triangulation, out);
+    std::cout<<"gridout ende"<<std::endl;
   // To label the boundary faces of the mesh with their
   // type, i.e. Dirichlet or Neumann,
   // we loop over all the cells in the mesh and then over
@@ -293,7 +294,7 @@ triangulation.refine_global(n_refine);
   // conditions where there are both Dirichlet or
   // Neumann boundaries.
   
-/*  typename Triangulation<dim>::cell_iterator
+ typename Triangulation<dim>::cell_iterator
   cell = triangulation.begin(),
   endc = triangulation.end();
   for (; cell != endc; ++cell)
@@ -306,7 +307,7 @@ triangulation.refine_global(n_refine);
             cell->face(face_no)->set_boundary_id(Dirichlet);
         }
     }
-*/
+
 }
 
 // @sect3{make_dofs}
@@ -1503,10 +1504,10 @@ run()
 {
   penalty = 1.0;
   make_grid();
-  //make_dofs();
-  //assemble_system();
-  //solve();
-  //output_results();
+  make_dofs();
+  assemble_system();
+  solve();
+  output_results();
 }
 
 
@@ -1528,7 +1529,7 @@ int main(int argc, char *argv[])
  int rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 {
       unsigned int degree = 1;
-      unsigned int n_refine = 4;
+      unsigned int n_refine = 2;
       std::cout<<"n_refine "<<n_refine<<std::endl;
       LDGPoissonProblem<3>    Poisson(degree, n_refine);
       Poisson.run();
@@ -1549,54 +1550,54 @@ double max_memory;
 }
 {
       unsigned int degree = 1;
+      unsigned int n_refine = 3;
+      std::cout<<"n_refine "<<n_refine<<std::endl;
+      LDGPoissonProblem<3>    Poisson(degree, n_refine);
+      Poisson.run();
+                  struct rusage usage;
+    getrusage(RUSAGE_SELF, &usage);
+    double peak_memory = usage.ru_maxrss / 1024.0; // Convert KB to MB
+
+    // Print memory usage for each process
+    std::cout << "Rank " << rank_mpi << " Peak Memory Usage: " << peak_memory << " MB" << std::endl;
+
+double max_memory;
+    MPI_Reduce(&peak_memory, &max_memory, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+        if (rank_mpi == 0) {
+        std::cout << "Peak Memory Usage Across All Ranks: " << max_memory << " MB" << std::endl;
+    }
+}
+{
+      unsigned int degree = 1;
+      unsigned int n_refine = 4;
+      std::cout<<"n_refine "<<n_refine<<std::endl;
+      LDGPoissonProblem<3>    Poisson(degree, n_refine);
+      Poisson.run();
+                  struct rusage usage;
+    getrusage(RUSAGE_SELF, &usage);
+    double peak_memory = usage.ru_maxrss / 1024.0; // Convert KB to MB
+
+    // Print memory usage for each process
+    std::cout << "Rank " << rank_mpi << " Peak Memory Usage: " << peak_memory << " MB" << std::endl;
+
+double max_memory;
+    MPI_Reduce(&peak_memory, &max_memory, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+        if (rank_mpi == 0) {
+        std::cout << "Peak Memory Usage Across All Ranks: " << max_memory << " MB" << std::endl;
+    }
+}
+{
+      unsigned int degree = 1;
       unsigned int n_refine = 5;
-      std::cout<<"n_refine "<<n_refine<<std::endl;
-      LDGPoissonProblem<3>    Poisson(degree, n_refine);
-      Poisson.run();
-                  struct rusage usage;
-    getrusage(RUSAGE_SELF, &usage);
-    double peak_memory = usage.ru_maxrss / 1024.0; // Convert KB to MB
-
-    // Print memory usage for each process
-    std::cout << "Rank " << rank_mpi << " Peak Memory Usage: " << peak_memory << " MB" << std::endl;
-
-double max_memory;
-    MPI_Reduce(&peak_memory, &max_memory, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-
-        if (rank_mpi == 0) {
-        std::cout << "Peak Memory Usage Across All Ranks: " << max_memory << " MB" << std::endl;
-    }
-}
-{
-      unsigned int degree = 1;
-      unsigned int n_refine = 6;
-      std::cout<<"n_refine "<<n_refine<<std::endl;
-      LDGPoissonProblem<3>    Poisson(degree, n_refine);
-      Poisson.run();
-                  struct rusage usage;
-    getrusage(RUSAGE_SELF, &usage);
-    double peak_memory = usage.ru_maxrss / 1024.0; // Convert KB to MB
-
-    // Print memory usage for each process
-    std::cout << "Rank " << rank_mpi << " Peak Memory Usage: " << peak_memory << " MB" << std::endl;
-
-double max_memory;
-    MPI_Reduce(&peak_memory, &max_memory, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-
-        if (rank_mpi == 0) {
-        std::cout << "Peak Memory Usage Across All Ranks: " << max_memory << " MB" << std::endl;
-    }
-}
-{
-      unsigned int degree = 1;
-      unsigned int n_refine = 7;
       std::cout<<"n_refine "<<n_refine<<std::endl;
       LDGPoissonProblem<3>    Poisson(degree, n_refine);
       Poisson.run();
 }
 {
 	      unsigned int degree = 1;
-	            unsigned int n_refine = 8;
+	            unsigned int n_refine = 6;
 		          std::cout<<"n_refine "<<n_refine<<std::endl;
 			        LDGPoissonProblem<3>    Poisson(degree, n_refine);
 				      Poisson.run();

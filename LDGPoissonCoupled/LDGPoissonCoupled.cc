@@ -561,17 +561,27 @@ std::cout<<"grid extent, p1:  "<<p1 <<" p2: "<<p2<<std::endl;
 std::vector< unsigned int > 	repetitions({1,1,1});
 GridGenerator::subdivided_hyper_rectangle(triangulation,repetitions,  p1, p2);
  //GridGenerator::hyper_rectangle(triangulation,  p1, p2);
- double h_max = 2 * half_length/std::pow(2,3*n_refine);
-  for (unsigned int i =0; i <n_refine + 1; ++i)
+ double h_max = 2 * half_length/std::pow(2,n_refine);
+ h_max = dim == 3 ? h_max * std::sqrt(3) :  h_max  * std::sqrt(2);
+ pcout<<"refined++++++"<<std::endl;
+ triangulation.refine_global(n_refine);
+ pcout<<"refined"<<std::endl;
+ std::cout<<"h_max "<<h_max<<std::endl;
+
+
+ for (unsigned int i =n_refine; i <n_refine * 2; ++i)
     {
       typename Triangulation<dim>::active_cell_iterator
       cell = triangulation.begin_active(),
       endc = triangulation.end();
-      for (; cell != endc; ++cell)
+   for (; cell != endc; ++cell)
         {
-
-        if( > h_max * std::pow( distance_to_singularity<dim>(cell->center()),0.5) )
-         cell->set_refine_flag();
+        double r = distance_to_singularity<dim>(cell->center());
+        //
+      if(cell->diameter() > h_max * std::pow(r,0.5) )
+        cell->set_refine_flag();
+    //     else
+//std::cout<<"r "<<r<<" h_max * std::pow(r,0.5) "<<h_max * std::pow(r,0.5)<< " cell->diameter() " <<cell->diameter()<<std::endl;
         
         }
       // Now that we have marked all the cells
@@ -579,13 +589,19 @@ GridGenerator::subdivided_hyper_rectangle(triangulation,repetitions,  p1, p2);
       // refine them.
       triangulation.execute_coarsening_and_refinement();
     }
-
-
-
+int max_level = 0;
+{
+ typename Triangulation<dim>::active_cell_iterator
+      cell = triangulation.begin_active(),
+      endc = triangulation.end();
+      for (; cell != endc; ++cell)
+       max_level = std::max(cell->level(), max_level);
+std::cout<<"max_level "<<max_level<<std::endl;
+}
 #endif
-pcout<<"refined++++++"<<std::endl;
-//triangulation.refine_global(n_refine);
-pcout<<"refined"<<std::endl;
+
+
+
 
 GridOut grid_out;
 std::ofstream out("grid_Omega.vtk"); // Choose your preferred filename and format
@@ -703,7 +719,7 @@ if(is_repartioned)
     if(dim == 3)
     GridGenerator::hyper_cube(triangulation_omega,0 ,  2*half_length);
 
-  triangulation_omega.refine_global(n_refine);
+  triangulation_omega.refine_global(max_level);
 
  typename DoFHandler<dim_omega>::active_cell_iterator
         cell_omega = dof_handler_omega.begin_active(),
@@ -1065,7 +1081,7 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
 
           auto cell_test_tri = cellpair.first;
          typename DoFHandler<dim>::active_cell_iterator
-        cell_test = dof_handler_Omega.begin_active();
+        cell_test = dof_handler_Omega.begin_active(cell_test_tri->level());
         std::advance(cell_test, cell_test_tri->index());
         cell_start =cell_test;  
 
@@ -1118,7 +1134,7 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
                   auto cell_trial_tri = cellpair_trial.first;
 
               typename DoFHandler<dim>::active_cell_iterator
-              cell_trial = dof_handler_Omega.begin_active();
+              cell_trial = dof_handler_Omega.begin_active(cell_trial_tri->level());
               std::advance(cell_trial, cell_trial_tri->index());
 #endif
 
@@ -1343,88 +1359,114 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                 //Assert(false, ExcNotImplemented());
             }
               
-          } else {
-
-            Assert(cell->neighbor(face_no).state() == IteratorState::valid,
-                   ExcInternalError());
-
-            typename DoFHandler<dim>::cell_iterator neighbor =
-                cell->neighbor(face_no);
-
-          
-          if (face->has_children())
+          } else 
           {
-              const unsigned int neighbor_face_no =
-                cell->neighbor_of_neighbor(face_no);
+               
+                  //
+                  Assert(cell->neighbor(face_no).state() ==
+                         IteratorState::valid,
+                         ExcInternalError());
 
-            for (unsigned int subface_no=0;
-                        subface_no < face->n_children();
-                        ++subface_no)
-              {
+                  typename DoFHandler<dim>::cell_iterator neighbor =
+                    cell->neighbor(face_no);
 
-                  typename DoFHandler<dim>::cell_iterator neighbor_child =
+               
+                  if (face->has_children())
+                    {
+                     // std::cout<<"has childeren"<<std::endl;
+    
+                      const unsigned int neighbor_face_no =
+                        cell->neighbor_of_neighbor(face_no);
+
+                    
+                      for (unsigned int subface_no=0;
+                           subface_no < face->n_children();
+                           ++subface_no)
+                        {
+                         
+                          typename DoFHandler<dim>::cell_iterator neighbor_child =
                             cell->neighbor_child_on_subface(face_no,
                                                             subface_no);
 
-                Assert(!neighbor_child->has_children(),
-                        ExcInternalError());
-                vi_ui_matrix = 0;
-                vi_ue_matrix = 0;
-                ve_ui_matrix = 0;
-                ve_ue_matrix = 0;
+                          Assert(!neighbor_child->has_children(),
+                                 ExcInternalError());
 
-              fe_subface_values.reinit(cell, face_no, subface_no);
-              fe_neighbor_face_values.reinit(neighbor_child,
-                                              neighbor_face_no);
-              double h = std::min(cell->diameter(), neighbor_child->diameter());
+                       
+                          vi_ui_matrix = 0;
+                          vi_ue_matrix = 0;
+                          ve_ui_matrix = 0;
+                          ve_ue_matrix = 0;
 
-                    assemble_flux_terms(fe_subface_values,
-                  fe_neighbor_face_values,
-      vi_ui_matrix, vi_ue_matrix, ve_ui_matrix,
-      ve_ue_matrix, h, VectorField, Potential);
-        neighbor_child->get_dof_indices(local_neighbor_dof_indices);
+                          fe_subface_values.reinit(cell, face_no, subface_no);
+                          fe_neighbor_face_values.reinit(neighbor_child,
+                                                         neighbor_face_no);
 
-              distribute_local_flux_to_global(
-              vi_ui_matrix,
-              vi_ue_matrix,
-              ve_ui_matrix,
-              ve_ue_matrix,
-              local_dof_indices,
-              local_neighbor_dof_indices);
+                        
+                          double h = std::min(cell->diameter(),
+                                              neighbor_child->diameter());
 
-            }
-          }
-          else
-          {
-            if (cell->id() < neighbor->id()) {
+                        
+                        assemble_flux_terms(fe_subface_values,
+                                      fe_neighbor_face_values,
+                          vi_ui_matrix, vi_ue_matrix, ve_ui_matrix,
+                          ve_ue_matrix, h, VectorField, Potential);
 
-              const unsigned int neighbor_face_no =
-                  cell->neighbor_of_neighbor(face_no);
+                          
+                          neighbor_child->get_dof_indices(local_neighbor_dof_indices);
 
-              vi_ui_matrix = 0;
-              vi_ue_matrix = 0;
-              ve_ui_matrix = 0;
-              ve_ue_matrix = 0;
+                        
+                          distribute_local_flux_to_global(
+                            vi_ui_matrix,
+                            vi_ue_matrix,
+                            ve_ui_matrix,
+                            ve_ue_matrix,
+                            local_dof_indices,
+                            local_neighbor_dof_indices);
+                        }
+                    }
+                  else
+                    {
+                     
+                      if (neighbor->level() == cell->level() &&
+                          cell->id() < neighbor->id())
+                        {
+                        
+                          const unsigned int neighbor_face_no =
+                            cell->neighbor_of_neighbor(face_no);
 
-              fe_face_values.reinit(cell, face_no);
-              fe_neighbor_face_values.reinit(neighbor, neighbor_face_no);
+                          vi_ui_matrix = 0;
+                          vi_ue_matrix = 0;
+                          ve_ui_matrix = 0;
+                          ve_ue_matrix = 0;
 
-              double h = std::min(cell->diameter(), neighbor->diameter());
+                          fe_face_values.reinit(cell, face_no);
+                          fe_neighbor_face_values.reinit(neighbor,
+                                                         neighbor_face_no);
 
-              assemble_flux_terms(fe_face_values, fe_neighbor_face_values,
-                                  vi_ui_matrix, vi_ue_matrix, ve_ui_matrix,
-                                  ve_ue_matrix, h, VectorField, Potential);
+                          double h = std::min(cell->diameter(),
+                                              neighbor->diameter());
 
-              neighbor->get_dof_indices(local_neighbor_dof_indices);
+                              assemble_flux_terms(fe_face_values, fe_neighbor_face_values,
+                        vi_ui_matrix, vi_ue_matrix, ve_ui_matrix,
+                        ve_ue_matrix, h, VectorField, Potential);
 
-              distribute_local_flux_to_global(
-                  vi_ui_matrix, vi_ue_matrix, ve_ui_matrix, ve_ue_matrix,
-                  local_dof_indices, local_neighbor_dof_indices);
-            }
-          }
-          }
+                          neighbor->get_dof_indices(local_neighbor_dof_indices);
+
+                          distribute_local_flux_to_global(
+                            vi_ui_matrix,
+                            vi_ue_matrix,
+                            ve_ui_matrix,
+                            ve_ue_matrix,
+                            local_dof_indices,
+                            local_neighbor_dof_indices);
+
+
+                        }
+                    }
+                }
+
         }
-
+   
         constraints.distribute_local_to_global(local_matrix, local_dof_indices,
                                                system_matrix);
 
@@ -1811,7 +1853,7 @@ else
         // test function
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
-
+        //pcout<<"quadrature_point_coupling "<<quadrature_point_coupling<<std::endl;
    
         unsigned int n_te;
 #if TEST
@@ -1829,7 +1871,7 @@ else
 
 
         n_te = cell_test_array.size();    
-       // pcout << "cell_test_array " << cell_test_array.size() << std::endl;
+       //pcout << "cell_test_array " << cell_test_array.size() << std::endl;
         for (auto cellpair : cell_test_array)
 #else
         auto cell_test = GridTools::find_active_cell_around_point(
@@ -1841,9 +1883,10 @@ else
 #if TEST
                 auto cell_test_tri = cellpair.first;
               typename DoFHandler<dim>::active_cell_iterator
-              cell_test = dof_handler_Omega.begin_active();
+              cell_test = dof_handler_Omega.begin_active(cell_test_tri->level());
               std::advance(cell_test, cell_test_tri->index());
               cell_start = cell_test;
+           //   std::cout<<"cellcomp " <<cell_test_tri->index()<<" " <<cell_test_tri<<" : "<<cell_test<<std::endl;
 #endif
 
 #if 1// USE_MPI_ASSEMBLE
@@ -1851,7 +1894,7 @@ else
             if (cell_test->is_locally_owned())
 #endif
             {
-              
+              //std::cout<<"cell_test "<<cell_test->center() <<std::endl;
               cell_test->get_dof_indices(local_dof_indices_test);
 
               std::vector<unsigned int> face_no_test;
@@ -1927,14 +1970,18 @@ else
                         double z;
                         if(constructed_solution == 2)
                           z = 1;
-                        else
+                        else if(constructed_solution == 2)
                           z = (1 + quadrature_point_omega[0]);
+                        else
+                          z = 0;
                         local_vector(i) +=
                             fe_values_coupling_test_face[Potential].value(i,
                                                                           q) *
                             1 / (n_te * n_ftest) *
                             z *
                             fe_values_omega.JxW(p);
+                        
+
                       }
                     }
                     constraints.distribute_local_to_global(
@@ -1955,8 +2002,10 @@ else
                   double z;
                   if(constructed_solution == 2)
                     z = 1;
-                  else
+                  else if (constructed_solution == 2)
                     z = (1 + quadrature_point_omega[0]);
+                  else 
+                    z = 0;
                   local_vector(i) +=
                       fe_values_coupling_test[Potential].value(i, 0) * z
                         *
@@ -2033,7 +2082,7 @@ else
 #if TEST
               auto cell_trial_tri = cellpair_trial.first;
               typename DoFHandler<dim>::active_cell_iterator
-              cell_trial = dof_handler_Omega.begin_active();
+              cell_trial = dof_handler_Omega.begin_active(cell_trial_tri->level());
               std::advance(cell_trial, cell_trial_tri->index());
 #endif
                  if (cell_trial != dof_handler_Omega.end())
@@ -2997,11 +3046,11 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
 rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
   penalty = 50;
   make_grid();
-  //make_dofs();
-  //assemble_system();
-  //solve();
-  std::array<double, 4> results_array;//= compute_errors();
- // output_results();
+  make_dofs();
+  assemble_system();
+  solve();
+  std::array<double, 4> results_array = compute_errors();
+  output_results();
  
   return results_array;
 }
@@ -3062,7 +3111,7 @@ Utilities::System::get_memory_stats(mem_stats);
       std::string radius_string = std::to_string(radii[rad]);
       std::string omega_on_face_string = is_omega_on_face ? "true" : "false";
       std::string coupled_string = COUPLED==1 ? "true" : "false";
-      std::string name = "_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_coupled_" + coupled_string + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string;
+      std::string name = "_cons_sol_refined_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_coupled_" + coupled_string + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string;
       
       std::string folderName =name +"/";
      
