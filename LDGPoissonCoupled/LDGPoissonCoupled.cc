@@ -561,13 +561,15 @@ std::cout<<"grid extent, p1:  "<<p1 <<" p2: "<<p2<<std::endl;
 std::vector< unsigned int > 	repetitions({1,1,1});
 GridGenerator::subdivided_hyper_rectangle(triangulation,repetitions,  p1, p2);
  //GridGenerator::hyper_rectangle(triangulation,  p1, p2);
- double h_max = 2 * half_length/std::pow(2,n_refine);
- h_max = dim == 3 ? h_max * std::sqrt(3) :  h_max  * std::sqrt(2);
+ 
  pcout<<"refined++++++"<<std::endl;
  triangulation.refine_global(n_refine);
  pcout<<"refined"<<std::endl;
+ int max_level = n_refine;
+#if GRADEDMESH
+ double h_max = 2 * half_length/std::pow(2,n_refine);
+ h_max = dim == 3 ? h_max * std::sqrt(3) :  h_max  * std::sqrt(2);
  std::cout<<"h_max "<<h_max<<std::endl;
-
 
  for (unsigned int i =n_refine; i <n_refine * 2; ++i)
     {
@@ -584,12 +586,9 @@ GridGenerator::subdivided_hyper_rectangle(triangulation,repetitions,  p1, p2);
 //std::cout<<"r "<<r<<" h_max * std::pow(r,0.5) "<<h_max * std::pow(r,0.5)<< " cell->diameter() " <<cell->diameter()<<std::endl;
         
         }
-      // Now that we have marked all the cells
-      // that we want to refine locally we can go ahead and
-      // refine them.
       triangulation.execute_coarsening_and_refinement();
     }
-int max_level = 0;
+
 {
  typename Triangulation<dim>::active_cell_iterator
       cell = triangulation.begin_active(),
@@ -598,6 +597,7 @@ int max_level = 0;
        max_level = std::max(cell->level(), max_level);
 std::cout<<"max_level "<<max_level<<std::endl;
 }
+#endif
 #endif
 
 
@@ -3111,7 +3111,8 @@ Utilities::System::get_memory_stats(mem_stats);
       std::string radius_string = std::to_string(radii[rad]);
       std::string omega_on_face_string = is_omega_on_face ? "true" : "false";
       std::string coupled_string = COUPLED==1 ? "true" : "false";
-      std::string name = "_cons_sol_refined_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_coupled_" + coupled_string + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string;
+      std::string gradedMesh_string = GRADEDMESH ==1 ? "true" : "false";
+      std::string name = "_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string;
       
       std::string folderName =name +"/";
      
