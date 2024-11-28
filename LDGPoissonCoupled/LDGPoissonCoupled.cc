@@ -603,9 +603,9 @@ pcout<<"max_level "<<max_level<<std::endl;
 
 
 
-GridOut grid_out;
+/*GridOut grid_out;
 std::ofstream out("grid_Omega.vtk"); // Choose your preferred filename and format
-grid_out.write_vtk(triangulation, out);
+grid_out.write_vtk(triangulation, out);*/
 
 const std::vector<Point<dim>> &vertices = triangulation.get_vertices();
 
@@ -1081,10 +1081,19 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
 
           auto cell_test_tri = cellpair.first;
          typename DoFHandler<dim>::active_cell_iterator
-        cell_test = dof_handler_Omega.begin_active(cell_test_tri->level());
-        std::advance(cell_test, cell_test_tri->index());
-        cell_start =cell_test;  
+        cell_test = dof_handler_Omega.begin_active(cell_test_tri->level()),
+         endc_test = dof_handler_Omega.end();
 
+    for (; cell_test != endc_test; ++cell_test) {
+      if(cell_test->level() == cell_test_tri->level() && cell_test->index() == cell_test_tri->index())
+      {
+        //std::cout<<"break"<<std::endl;
+        break;
+      }
+    }
+       // std::advance(cell_test, cell_test_tri->index());
+        cell_start =cell_test;  
+        // pcout<<"cellcomp " <<cell_test_tri->index()<<" " <<cell_test_tri<<" : "<<cell_test<<std::endl;
 
 #if USE_MPI_ASSEMBLE
          if (cell_test != dof_handler_Omega.end())
@@ -1133,9 +1142,20 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
 #if TEST
                   auto cell_trial_tri = cellpair_trial.first;
 
-              typename DoFHandler<dim>::active_cell_iterator
-              cell_trial = dof_handler_Omega.begin_active(cell_trial_tri->level());
-              std::advance(cell_trial, cell_trial_tri->index());
+    
+                  typename DoFHandler<dim>::active_cell_iterator
+                  cell_trial = dof_handler_Omega.begin_active(cell_trial_tri->level()),
+                  endc_trial = dof_handler_Omega.end();
+
+              for (; cell_trial != endc_trial; ++cell_trial) {
+                if(cell_trial->level() == cell_trial_tri->level() && cell_trial->index() == cell_trial_tri->index())
+                {
+                  //std::cout<<"break"<<std::endl;
+                  break;
+                }
+              }
+
+              //pcout<<"cellcomp trial " <<cell_trial_tri<<" : "<<cell_trial<<std::endl;
 #endif
 
                   if (cell_trial != dof_handler_Omega.end()) {
@@ -1881,12 +1901,20 @@ else
 
         {
 #if TEST
-                auto cell_test_tri = cellpair.first;
-              typename DoFHandler<dim>::active_cell_iterator
-              cell_test = dof_handler_Omega.begin_active(cell_test_tri->level());
-              std::advance(cell_test, cell_test_tri->index());
+     auto cell_test_tri = cellpair.first;
+         typename DoFHandler<dim>::active_cell_iterator
+        cell_test = dof_handler_Omega.begin_active(cell_test_tri->level()),
+         endc_test = dof_handler_Omega.end();
+
+    for (; cell_test != endc_test; ++cell_test) {
+      if(cell_test->level() == cell_test_tri->level() && cell_test->index() == cell_test_tri->index())
+      {
+        //std::cout<<"break"<<std::endl;
+        break;
+      }
+    }
               cell_start = cell_test;
-           //   std::cout<<"cellcomp " <<cell_test_tri->index()<<" " <<cell_test_tri<<" : "<<cell_test<<std::endl;
+    //pcout<<"cellcomp " <<cell_test_tri->index()<<" " <<cell_test_tri<<" : "<<cell_test<<std::endl;
 #endif
 
 #if 1// USE_MPI_ASSEMBLE
@@ -2081,9 +2109,18 @@ else
                 {
 #if TEST
               auto cell_trial_tri = cellpair_trial.first;
-              typename DoFHandler<dim>::active_cell_iterator
-              cell_trial = dof_handler_Omega.begin_active(cell_trial_tri->level());
-              std::advance(cell_trial, cell_trial_tri->index());
+                  typename DoFHandler<dim>::active_cell_iterator
+                  cell_trial = dof_handler_Omega.begin_active(cell_trial_tri->level()),
+                  endc_trial = dof_handler_Omega.end();
+
+              for (; cell_trial != endc_trial; ++cell_trial) {
+                if(cell_trial->level() == cell_trial_tri->level() && cell_trial->index() == cell_trial_tri->index())
+                {
+                  //std::cout<<"break"<<std::endl;
+                  break;
+                }
+              }
+                //pcout<<"cellcomp trial " <<cell_trial_tri<<" : "<<cell_trial<<std::endl;
 #endif
                  if (cell_trial != dof_handler_Omega.end())
                     if (cell_trial->is_locally_owned() &&
@@ -2909,7 +2946,7 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 */
 //----------cell_wise error ---------------
 
-
+/*
     DataOut<dim> data_out_error;
     data_out_error.attach_triangulation(triangulation);
     data_out_error.add_data_vector(cellwise_errors_Q, "Q");
@@ -2938,9 +2975,10 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
       }
 
 
-
+*/
    //-----omega-----------
  // std::cout << "omega solution" << std::endl;
+ /*
   std::vector<std::string> solution_names_omega;
   solution_names_omega.emplace_back("q");
   solution_names_omega.emplace_back("u");
@@ -2976,7 +3014,7 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
         std::ofstream master_output(folder_name +"solution_omega.pvtu");
         data_out_omega.write_pvtu_record(master_output, filenames);
       }
-
+*/
 
 
 
