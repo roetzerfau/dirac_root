@@ -467,10 +467,10 @@ LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
       //triangulation_dist(MPI_COMM_WORLD),
       cache(triangulation),
       triangulation_omega(MPI_COMM_WORLD),
-      fe_Omega(FESystem<dim>(FE_DGQ<dim>(degree), dim), FE_DGQ<dim>(degree)),
+      fe_Omega(FESystem<dim>(FE_DGP<dim>(degree), dim), FE_DGP<dim>(degree)),
       dof_handler_Omega(triangulation),
-      fe_omega(FESystem<dim_omega>(FE_DGQ<dim_omega>(degree), dim_omega),
-               FE_DGQ<dim_omega>(degree)),
+      fe_omega(FESystem<dim_omega>(FE_DGP<dim_omega>(degree), dim_omega),
+               FE_DGP<dim_omega>(degree)),
       dof_handler_omega(triangulation_omega),
 #if USE_MPI_ASSEMBLE
       pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0),
@@ -500,22 +500,6 @@ template <int dim, int dim_omega>
 void LDGPoissonProblem<dim, dim_omega>::make_grid() {
   TimerOutput::Scope t(computing_timer, "make grid");
   pcout<<"make grid"<<std::endl;
-  Point<dim> corner1, corner2;
-double margin = 1.0;
-double h = 0;
-if(dim == 3)
-{
-corner1 =  Point<dim>(0, - (margin*radius + h), - (margin*radius + h));//2*radius
-corner2 =  Point<dim>(2 * half_length,  (margin*radius + h),  (margin*radius + h));//radius
-}
-if(dim == 2)
-{
-corner1 =  Point<dim>( -half_length,- (margin*radius + h));
-corner2 =  Point<dim>(half_length,(margin*radius + h));
-}
-std::pair<Point<dim>, Point<dim>> corner_pair(corner1, corner2);     
-    
- bbox = BoundingBox<dim>(corner_pair);
 
   double offset = 0.0;
 
@@ -565,7 +549,7 @@ GridGenerator::subdivided_hyper_rectangle(triangulation,repetitions,  p1, p2);
  pcout<<"refined++++++"<<std::endl;
  triangulation.refine_global(n_refine);
  pcout<<"refined"<<std::endl;
- int max_level = n_refine;
+ 
 #if GRADEDMESH
  double h_max = 2 * half_length/std::pow(2,n_refine);
  h_max = dim == 3 ? h_max * std::sqrt(3) :  h_max  * std::sqrt(2);
@@ -588,30 +572,63 @@ pcout<<"h_max "<<h_max<<std::endl;
         }
       triangulation.execute_coarsening_and_refinement();
     }
-
+int level_max = n_refine;
+//int level_min = std::numeric_limits<unsigned int >::max();
 {
  typename Triangulation<dim>::active_cell_iterator
       cell = triangulation.begin_active(),
       endc = triangulation.end();
       for (; cell != endc; ++cell)
-       max_level = std::max(cell->level(), max_level);
-pcout<<"max_level "<<max_level<<std::endl;
+      {
+        level_max = std::max(cell->level(), level_max);
+     //   level_min = std::min(cell->level(), level_min);
+      }
+       
+pcout<<"level_max "<<level_max<<std::endl;
 }
 #endif
 #endif
-
-
-
+double minimal_cell_diameter = GridTools::minimal_cell_diameter(triangulation);
+ double maximal_cell_diameter = GridTools::maximal_cell_diameter(triangulation);
+ pcout<<"minimal_cell_diameter "<<minimal_cell_diameter<< " maximal_cell_diameter "<<maximal_cell_diameter<<std::endl;
+ pcout << "Memory consumption of triangulation: "
+              << triangulation.memory_consumption() / (1024.0 * 1024.0 * 1024.0) // Convert to MB
+	             << " GB" << std::endl;
+		         
+			     unsigned int global_active_cells = triangulation.n_global_active_cells();
+			       
+				     pcout << "Total number of active cells (global): " << global_active_cells << std::endl;
 
 /*GridOut grid_out;
 std::ofstream out("grid_Omega.vtk"); // Choose your preferred filename and format
 grid_out.write_vtk(triangulation, out);*/
+
+
+  Point<dim> corner1, corner2;
+double margin = 1.0;
+double h = minimal_cell_diameter * 2;
+if(dim == 3)
+{
+corner1 =  Point<dim>(0, - (margin*radius + h), - (margin*radius + h));//2*radius
+corner2 =  Point<dim>(2 * half_length,  (margin*radius + h),  (margin*radius + h));//radius
+}
+if(dim == 2)
+{
+corner1 =  Point<dim>( -half_length,- (margin*radius + h));
+corner2 =  Point<dim>(half_length,(margin*radius + h));
+}
+std::pair<Point<dim>, Point<dim>> corner_pair(corner1, corner2);     
+    
+ bbox = BoundingBox<dim>(corner_pair);
+
+
 
 const std::vector<Point<dim>> &vertices = triangulation.get_vertices();
 
 SparsityPattern cell_connection_graph;
 DynamicSparsityPattern connectivity;
 std::vector<unsigned int> cells_inside_box;
+std::vector<unsigned int> cell_weights;
 
 int num_processes = dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
 bool is_shared_triangulation = num_processes > 1 ? true : false;
@@ -619,7 +636,9 @@ bool is_repartioned =  is_shared_triangulation && (geo_conf != GeometryConfigura
 pcout<<"is_shared_triangulation "<<  is_shared_triangulation<<" is_repartioned "<<is_repartioned<<std::endl;
 if(is_repartioned)
 {
+ // connectivity.reinit(triangulation.n_global_active_cells(),triangulation.n_global_active_cells());
 GridTools::get_face_connectivity_of_cells(triangulation,connectivity);
+//GridTools::get_vertex_connectivity_of_cells_on_level(triangulation,level_max, connectivity);
 }
  max_diameter = 0.0;
  typename DoFHandler<dim>::active_cell_iterator
@@ -638,12 +657,20 @@ if( is_repartioned)
     if (bbox.point_inside(vertices[cell->vertex_index(v)]))
     {
      cell_is_inside_box = true;
+     
     // cell_start = cell;
     }
-    }
-    if(cell_is_inside_box)
-      cells_inside_box.push_back(cell_number);
    
+    }
+
+    if(cell_is_inside_box)
+    {
+      cells_inside_box.push_back(cell_number);
+      //cell_weights.push_back(10);
+    } 
+    //else
+     // cell_weights.push_back(0);
+     cell_weights.push_back(distance_to_singularity<dim>(cell->center())* 100);
 
 }
 
@@ -680,24 +707,26 @@ if( is_repartioned)
   }
 if(is_repartioned)
 {
+  //pcout<<"trow"<<std::endl;
   for(unsigned int row : cells_inside_box)
-    connectivity.add_entries(row, cells_inside_box.begin(), cells_inside_box.end());
+  {
+  // pcout<<row<<" "<<std::endl;
+    //connectivity.clear_row(row);
+    //connectivity.add_entries(row, cells_inside_box.begin(), cells_inside_box.end());
+  }
+ // pcout<<std::endl;
+ //connectivity.symmetrize();
   cell_connection_graph.copy_from(connectivity);
+ // connectivity.reinit(1,1);
   pcout<<"los "<< dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)<<std::endl;
  //GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_connection_graph,triangulation, SparsityTools::Partitioner::zoltan );
- GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_connection_graph,triangulation);
+ GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD), cell_weights, cell_connection_graph,triangulation);
+ //GridTools::partition_triangulation_zorder(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),triangulation);
  }  
   
 
 
 
- pcout << "Memory consumption of triangulation: "
-              << triangulation.memory_consumption() / (1024.0 * 1024.0 * 1024.0) // Convert to MB
-	             << " GB" << std::endl;
-		         
-			     unsigned int global_active_cells = triangulation.n_global_active_cells();
-			       
-				     pcout << "Total number of active cells (global): " << global_active_cells << std::endl;
 
 				       
 
@@ -719,7 +748,7 @@ if(is_repartioned)
     if(dim == 3)
     GridGenerator::hyper_cube(triangulation_omega,0 ,  2*half_length);
 
-  triangulation_omega.refine_global(max_level);
+  triangulation_omega.refine_global(level_max);
 
  typename DoFHandler<dim_omega>::active_cell_iterator
         cell_omega = dof_handler_omega.begin_active(),
@@ -1093,7 +1122,8 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
     }
        // std::advance(cell_test, cell_test_tri->index());
         cell_start =cell_test;  
-        // pcout<<"cellcomp " <<cell_test_tri->index()<<" " <<cell_test_tri<<" : "<<cell_test<<std::endl;
+        if(cell_test_tri->index() != cell_test->index())
+        pcout<<"cellcomp " <<cell_test_tri->index()<<" " <<cell_test_tri<<" : "<<cell_test<<std::endl;
 
 #if USE_MPI_ASSEMBLE
          if (cell_test != dof_handler_Omega.end())
@@ -1154,8 +1184,8 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
                   break;
                 }
               }
-
-              //pcout<<"cellcomp trial " <<cell_trial_tri<<" : "<<cell_trial<<std::endl;
+                if(cell_trial_tri->index() != cell_trial->index())
+              pcout<<"cellcomp trial " <<cell_trial_tri<<" : "<<cell_trial<<std::endl;
 #endif
 
                   if (cell_trial != dof_handler_Omega.end()) {
@@ -2313,7 +2343,8 @@ else
                           // --------------------
                         }
                       }
-                    }
+                    }else
+                      std::cout<<"düdüm1 - assem"<<std::endl;
                 }
                    }
              
@@ -3085,9 +3116,9 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
   penalty = 50;
   make_grid();
   make_dofs();
-  assemble_system();
-  solve();
-  std::array<double, 4> results_array = compute_errors();
+ // assemble_system();
+  //solve();
+  std::array<double, 4> results_array;// = compute_errors();
   output_results();
  
   return results_array;
@@ -3153,7 +3184,7 @@ Utilities::System::get_memory_stats(mem_stats);
       std::string name = "_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string;
       
       std::string folderName =name +"/";
-     
+     std::cout<<folderName<<std::endl;
       std::string command = "mkdir -p " + folderName;
 
       if (system(command.c_str()) == 0) {
