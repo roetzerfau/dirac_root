@@ -46,7 +46,7 @@ One or all of these are OFF in your installation but are required for this tutor
     )
 ENDIF()
 
-DEAL_II_INITIALIZE_CACHED_VARIABLES()
+#DEAL_II_INITIALIZE_CACHED_VARIABLES()
 PROJECT(${TARGET})
 
 DEAL_II_INVOKE_AUTOPILOT()
