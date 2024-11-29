@@ -626,8 +626,10 @@ std::pair<Point<dim>, Point<dim>> corner_pair(corner1, corner2);
 const std::vector<Point<dim>> &vertices = triangulation.get_vertices();
 
 SparsityPattern cell_connection_graph;
+DynamicSparsityPattern connectivity_cells;
 DynamicSparsityPattern connectivity;
 std::vector<unsigned int> cells_inside_box;
+std::vector<bool> is_cell_inside_box;
 std::vector<unsigned int> cell_weights;
 
 int num_processes = dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
@@ -637,7 +639,7 @@ pcout<<"is_shared_triangulation "<<  is_shared_triangulation<<" is_repartioned "
 if(is_repartioned)
 {
  // connectivity.reinit(triangulation.n_global_active_cells(),triangulation.n_global_active_cells());
-GridTools::get_face_connectivity_of_cells(triangulation,connectivity);
+GridTools::get_face_connectivity_of_cells(triangulation,connectivity_cells);
 //GridTools::get_vertex_connectivity_of_cells_on_level(triangulation,level_max, connectivity);
 }
  max_diameter = 0.0;
@@ -653,16 +655,14 @@ if( is_repartioned)
     bool cell_is_inside_box = false;
     for (unsigned int v = 0; v < GeometryInfo<dim>::vertices_per_cell; ++v)
     {
-      //std::cout<<"p "<<vertices[cell->vertex_index(v)]<<std::endl;
     if (bbox.point_inside(vertices[cell->vertex_index(v)]))
     {
      cell_is_inside_box = true;
-     
-    // cell_start = cell;
+    break;
     }
    
     }
-
+    is_cell_inside_box.push_back(cell_is_inside_box);
     if(cell_is_inside_box)
     {
       cells_inside_box.push_back(cell_number);
@@ -707,20 +707,53 @@ if( is_repartioned)
   }
 if(is_repartioned)
 {
+  pcout<<"Cell connection graph "<<std::endl;
+  //connectivity.reinit(triangulation.n_global_active_cells(),triangulation.n_global_active_cells());
   //pcout<<"trow"<<std::endl;
-  for(unsigned int row : cells_inside_box)
+  for(unsigned int row = 0; row< triangulation.n_global_active_cells();row++)
   {
+    IndexSet index_set;
+    index_set.add_index(row);
+    DynamicSparsityPattern dsp = connectivity_cells.get_view(index_set);
+    connectivity_cells.clear_row(row);
+    if(is_cell_inside_box[row])
+      {
+           
+       connectivity_cells.add_entries(row, cells_inside_box.begin(), cells_inside_box.end());
+      }
+        else
+     {
+      // typename DynamicSparsityPattern::iterator it(&connectivity_cells,row,0 );
+      // std::cout<<"index"<<it->index()<<std::endl;
+    // typename DynamicSparsityPattern::iterator it_end(&connectivity_cells,row,connectivity_cells.row_length(row) );
+     //for(; it != it_end; it++)
+      //for (auto col = connectivity_cells.begin(row); col != connectivity_cells.end(row); ++col) 
+   
+   
+   
+    for (auto col = dsp.begin(); col != dsp.end(); ++col) 
+     {
+        const unsigned int column = col->column();
+       if(is_cell_inside_box[column] == false)
+          connectivity_cells.add(row, column);
+     }
+    
+    
+    
+     }
+    // std::cout<<"connectivity_cells.row_length(row) "<<connectivity_cells.row_length(row)<<std::endl;
   // pcout<<row<<" "<<std::endl;
-    //connectivity.clear_row(row);
-    //connectivity.add_entries(row, cells_inside_box.begin(), cells_inside_box.end());
+
   }
  // pcout<<std::endl;
  //connectivity.symmetrize();
-  cell_connection_graph.copy_from(connectivity);
- // connectivity.reinit(1,1);
+ std::cout<<rank_mpi<<" copy graph"<<std::endl;
+  cell_connection_graph.copy_from(connectivity_cells);
+  connectivity.reinit(1,1);
+   connectivity_cells.reinit(1,1);
   pcout<<"los "<< dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)<<std::endl;
  //GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_connection_graph,triangulation, SparsityTools::Partitioner::zoltan );
- GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD), cell_weights, cell_connection_graph,triangulation);
+ GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_weights, cell_connection_graph,triangulation);
  //GridTools::partition_triangulation_zorder(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),triangulation);
  }  
   
