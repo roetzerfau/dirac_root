@@ -362,6 +362,7 @@ private:
   std::array<double, 4> compute_errors() ;//const
   void output_results() const;
 
+  void memory_consumption(std::string _name);
   const unsigned int degree;
   const unsigned int n_refine;
   double penalty;
@@ -592,8 +593,8 @@ double minimal_cell_diameter = GridTools::minimal_cell_diameter(triangulation);
  double maximal_cell_diameter = GridTools::maximal_cell_diameter(triangulation);
  pcout<<"minimal_cell_diameter "<<minimal_cell_diameter<< " maximal_cell_diameter "<<maximal_cell_diameter<<std::endl;
  pcout << "Memory consumption of triangulation: "
-              << triangulation.memory_consumption() / (1024.0 * 1024.0 * 1024.0) // Convert to MB
-	             << " GB" << std::endl;
+              << triangulation.memory_consumption() / (1024.0 * 1024.0) // Convert to MB
+	             << " MB" << std::endl;
 		         
 			     unsigned int global_active_cells = triangulation.n_global_active_cells();
 			       
@@ -637,15 +638,7 @@ bool is_repartioned =  is_shared_triangulation && (geo_conf != GeometryConfigura
 pcout<<"is_shared_triangulation "<<  is_shared_triangulation<<" is_repartioned "<<is_repartioned<<std::endl;
 if(is_repartioned)
 {
-
 GridTools::get_face_connectivity_of_cells(triangulation,connectivity_cells);
-Utilities::System::MemoryStats mem_stats;
-Utilities::System::get_memory_stats(mem_stats);
-  pcout << "Memory Statistics get_face_connectivity_of_cells" << std::endl
-<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
-<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
-<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
-<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
 }
 
  max_diameter = 0.0;
@@ -769,10 +762,12 @@ if(is_repartioned)
   }
  // pcout<<std::endl;
  //connectivity.symmetrize();
+  memory_consumption("copy graph");
  std::cout<<rank_mpi<<" copy graph"<<std::endl;
   cell_connection_graph.copy_from(connectivity_cells);
   //connectivity.reinit(1,1);
    connectivity_cells.reinit(1,1);
+    memory_consumption("connectivity_cells");
   pcout<<"los "<< dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)<<std::endl;
  //GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_connection_graph,triangulation, SparsityTools::Partitioner::zoltan );
  GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_weights, cell_connection_graph,triangulation);
@@ -848,13 +843,7 @@ for (unsigned int i = 0; i < triangulation.n_vertices(); i++)
 	 //             << " GB" << std::endl;
 #endif
 //malloc_trim(0);  // Force memory release
-Utilities::System::MemoryStats mem_stats;
-Utilities::System::get_memory_stats(mem_stats);
-  pcout << "Memory Statistics Grid:" << std::endl
-<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
-<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
-<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
-<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
+
 
 }
 
@@ -922,10 +911,10 @@ const std::vector<types::global_dof_index> dofs_per_component_omega =
   locally_owned_dofs_Omega = dof_handler_Omega.locally_owned_dofs();
   
   DoFTools::extract_locally_relevant_dofs(dof_handler_Omega, locally_relevant_dofs_Omega);
-  //std::cout<<"Memory locally_owned_dofs_Omega "<< locally_owned_dofs_Omega.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
-	  //            << " GB" << std::endl;
-  //std::cout<<"Memory locally_relevant_dofs_Omega "<< locally_relevant_dofs_Omega.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
-	  //            << " GB" << std::endl;
+ /* std::cout<<"Memory locally_owned_dofs_Omega "<< locally_owned_dofs_Omega.memory_consumption()/ (1024.0 * 1024.0 ) // Convert to MB
+	          << " MB" << std::endl;
+  std::cout<<"Memory locally_relevant_dofs_Omega "<< locally_relevant_dofs_Omega.memory_consumption()/ (1024.0 * 1024.0 ) // Convert to MB
+	            << " MB" << std::endl;*/
   locally_owned_dofs_omega_local = dof_handler_omega.locally_owned_dofs();
   // if(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) != 0 )
    //locally_owned_dofs_omega_local.clear();
@@ -1002,14 +991,6 @@ std::cout <<"----------------------------------- "<<  std::endl;
         std::cout << index << " ";
     std::cout << std::endl;*/
 #endif
-Utilities::System::MemoryStats mem_stats;
-Utilities::System::get_memory_stats(mem_stats);
-pcout << "Memory Statistics 1:" << std::endl
-  <<"cpu_load "<<Utilities::System::get_cpu_load()<<std::endl
-<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
-<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
-<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
-<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
 
 {
 pcout<<"BlockSparsityPattern"<<std::endl;
@@ -1307,60 +1288,39 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
 #endif
   pcout<<"start to compress"<<std::endl;
 
- /*   Utilities::System::get_memory_stats(mem_stats);
-  std::cout << "Memory Statistics before compress sparse:" << std::endl
-  <<"cpu_load "<<Utilities::System::get_cpu_load()<<std::endl
-<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
-<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
-<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
-<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;*/
+
   sp_block.compress();
 
- /* Utilities::System::get_memory_stats(mem_stats);
-    std::cout << "Memory Statistics after compress sparse:" << std::endl
-  <<"cpu_load "<<Utilities::System::get_cpu_load()<<std::endl
-<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
-<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
-<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
-<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;*/
-
-
    pcout<<"Sparsity "  <<sp_block.n_rows()<<" "<<sp_block.n_cols()<<" n_nonzero_elements " <<sp_block.n_nonzero_elements()<<std::endl;
-  // pcout<<"sparsity memory "<<sp_block.memory_consumption()<<std::endl;
-   pcout<<"start reinit"<<std::endl;
+   std::cout<<"mpi_rank "<<rank_mpi<<" sparsity memory "<<sp_block.memory_consumption()/(1024*1024)<<" MB"<<std::endl;
+   std::cout<<"mpi_rank "<<rank_mpi<<" dof_handler_Omega "<<dof_handler_Omega.memory_consumption()/(1024*1024)<<" MB"<<std::endl;
+   //pcout<<"start reinit"<<std::endl;
+   memory_consumption("before system_matrix reinit");
   system_matrix.reinit(sp_block);
+  std::cout<<"mpi_rank "<<rank_mpi<<" memory system_matrix "<<system_matrix.memory_consumption()/(1024*1024)<<" MB"<<std::endl;
+  memory_consumption("after system_matrix reinit");
 }
-  pcout<<"system_matrix.reinit"<<std::endl;
+  //pcout<<"system_matrix.reinit"<<std::endl;
   solution.reinit(locally_relevant_dofs_block,  MPI_COMM_WORLD);
-   pcout<<"solution.reinit"<<std::endl;
+  memory_consumption("after solution.reinit");
+   //pcout<<"solution.reinit"<<std::endl;
   system_rhs.reinit(locally_owned_dofs_block, locally_relevant_dofs_block,  MPI_COMM_WORLD, true);
-   pcout<<"system_rhs.reinit"<<std::endl;
+  memory_consumption("after system_rhs.reinit");
+ //  pcout<<"system_rhs.reinit"<<std::endl;
 
  //  std::cout<<rank_mpi<<" memory system_matrix "<<system_matrix.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<" memory system_rhs "<<system_rhs.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
   pcout<<"Ende setup dof"<<std::endl;
 
-      Utilities::System::get_memory_stats(mem_stats);
-  pcout << "Memory Statistics Ende setup dof:" << std::endl
-  <<"cpu_load "<<Utilities::System::get_cpu_load()<<std::endl
-<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
-<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
-<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
-<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
-//std::cout<<"malloc_trim "<<malloc_trim(0)<<std::endl;
+
+std::cout<<"malloc_trim "<<malloc_trim(0)<<std::endl;
+
 }
 
 template <int dim, int dim_omega>
 void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
   TimerOutput::Scope t(computing_timer, "assembly");
   //malloc_trim(0);  // Force memory release
-  Utilities::System::MemoryStats mem_stats;
-   Utilities::System::get_memory_stats(mem_stats);
-  pcout << "Memory Statistics start assemble_system:" << std::endl
-  <<"cpu_load "<<Utilities::System::get_cpu_load()<<std::endl
-<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
-<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
-<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
-<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
+
 
 
 
@@ -2430,13 +2390,6 @@ std::cout<<"ja"<<std::endl;
   pcout<<"Start compress " <<std::endl;
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
-   Utilities::System::get_memory_stats(mem_stats);
-  pcout << "Memory Statistics end assemble_system:" << std::endl
-  <<"cpu_load "<<Utilities::System::get_cpu_load()<<std::endl
-<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
-<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
-<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
-<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
 }
 
 template <int dim, int dim_omega>
@@ -3159,7 +3112,30 @@ template <int dim, int dim_omega>
   }
   return 1;
 }
+template <int dim, int dim_omega>
+void LDGPoissonProblem<dim, dim_omega>::memory_consumption(std::string _name) {
 
+  Utilities::System::MemoryStats mem_stats;
+  Utilities::System::get_memory_stats(mem_stats);
+   
+ struct rusage usage;
+ getrusage(RUSAGE_SELF, &usage);
+ double peak_memory = usage.ru_maxrss / 1024.0;
+ double max_memory;
+ MPI_Reduce(&peak_memory, &max_memory, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+       
+ std::cout<< "---------------------------------------------------" <<std::endl
+ << "| " <<_name<< " Rank " << rank_mpi<<std::endl
+  <<"| VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" <<", "
+  << "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" <<", "
+  << "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" <<", "
+  << "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl
+  << "| Peak Memory Usage: " << peak_memory << " MB" << ", "
+  << "Peak Memory Usage Across All Ranks: " << max_memory << " MB" << std::endl
+  << "-------------------------------------------------------------" <<std::endl;
+
+}
 template <int dim, int dim_omega>
 std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   pcout << "n_refine " << n_refine << "  degree " << degree << std::endl;
@@ -3167,19 +3143,17 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   pcout << "geometric configuration "<<geo_conf <<"<< dim_Omega: "<< dim <<", dim_omega: "<<dim_omega<< " -> dimension_gap "<<dimension_gap<<std::endl; 
 rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
   penalty = 50;
+  memory_consumption("start");
   make_grid();
+  memory_consumption("after  make_grid");
   make_dofs();
+  memory_consumption("after make_dofs()");
   assemble_system();
+  memory_consumption("after  assemble_system()");
   solve();
+  memory_consumption("after solve()");
 
 
-Utilities::System::MemoryStats mem_stats;
-Utilities::System::get_memory_stats(mem_stats);
-  pcout << "Memory Statistics after make grid" << std::endl
-<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
-<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
-<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
-<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
 
 
 
@@ -3211,15 +3185,7 @@ int main(int argc, char *argv[]) {
   //std::cout << "This is MPI process " << rank_mpi << std::endl;
 
 #endif
-/*Utilities::System::MemoryStats mem_stats;
-Utilities::System::get_memory_stats(mem_stats);
-  std::cout << "Memory Statistics Begin:" << std::endl
-  <<"cpu_load "<<Utilities::System::get_cpu_load()<<std::endl
-<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
-<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
-<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
-<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
-  */
+
   /*
   Parameters parameters;
       parameters.radius = 0.01;
@@ -3305,19 +3271,6 @@ Utilities::System::get_memory_stats(mem_stats);
                     << " u " << arr[2] << " q " << arr[3] << std::endl;
 
 
-            struct rusage usage;
-    getrusage(RUSAGE_SELF, &usage);
-    double peak_memory = usage.ru_maxrss / 1024.0; // Convert KB to MB
-
-    // Print memory usage for each process
-    std::cout << "Rank " << rank_mpi << " Peak Memory Usage: " << peak_memory << " MB" << std::endl;
-
-double max_memory;
-    MPI_Reduce(&peak_memory, &max_memory, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-
-        if (rank_mpi == 0) {
-        std::cout << "Peak Memory Usage Across All Ranks: " << max_memory << " MB" << std::endl;
-    }     
           if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
             
           std::ofstream csvfile_unsrtd;
@@ -3405,13 +3358,7 @@ double max_memory;
       }
     }
   }
- /* Utilities::System::get_memory_stats(mem_stats);
-  std::cout << "Memory Statistics End:" << std::endl
-  <<"cpu_load "<<Utilities::System::get_cpu_load()<<std::endl
-<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
-<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
-<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
-<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;*/
+
    
   return 0;
 }

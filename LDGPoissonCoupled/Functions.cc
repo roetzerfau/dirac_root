@@ -13,9 +13,9 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 1
+#define COUPLED 0
 #define TEST 1
-#define SOLVE_BLOCKWISE 0
+#define SOLVE_BLOCKWISE 1
 #define GRADEDMESH 1
 
 using namespace dealii;
@@ -37,7 +37,7 @@ constexpr unsigned int constructed_solution{2};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[4] = {2,3,4,5};//,7,8,9,10
+const unsigned int refinement[5] = {2,3,4,5,6};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
