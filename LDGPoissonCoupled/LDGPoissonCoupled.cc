@@ -672,6 +672,7 @@ if( is_repartioned)
     if(cell_is_inside_box)
     {
       cells_inside_box.push_back(cell_number);
+
       //cell_weights.push_back(10);
     } 
     //else
@@ -715,42 +716,33 @@ if( is_repartioned)
 if(is_repartioned)
 {
   pcout<<"Cell connection graph "<<std::endl;
+  //connectivity.reinit(triangulation.n_global_active_cells(),triangulation.n_global_active_cells());
   //pcout<<"trow"<<std::endl;
-  DynamicSparsityPattern dsp;
-  IndexSet index_set;
-  for(unsigned int row = 0; row< triangulation.n_global_active_cells();row++)
+  unsigned int row = 0;
+   typename Triangulation<dim>::active_cell_iterator
+      cell = triangulation.begin_active(),
+      endc = triangulation.end();
+  for (; cell != endc; ++cell)
   {
-/*Utilities::System::MemoryStats mem_stats;
-Utilities::System::get_memory_stats(mem_stats);
-  pcout << "Memory Statistics cell_connection" << std::endl
-<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
-<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
-<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
-<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;*/
-    index_set.clear();
+    IndexSet index_set;
     index_set.add_index(row);
-    dsp = connectivity_cells.get_view(index_set);
+    DynamicSparsityPattern dsp = connectivity_cells.get_view(index_set);
     connectivity_cells.clear_row(row);
     if(is_cell_inside_box[row])
       {
-        //pcout<<row<<" is_cell_inside_box "<<cells_inside_box.size()<<std::endl;
-        /*for (auto col = cells_inside_box.begin(); col != cells_inside_box.end(); ++col) 
-        {
-          if(row and column gleiche ebene)
 
-        }
-        
-        connectivity_cells.add(row, column);*/
-       //connectivity_cells.add_entries(row, cells_inside_box.begin(), cells_inside_box.end());
-
-    for (auto col = dsp.begin(); col != dsp.end(); ++col) 
+      for (auto col = dsp.begin(); col != dsp.end(); ++col) 
      {
         const unsigned int column = col->column();
+       if(is_cell_inside_box[column] == true)
           connectivity_cells.add(row, column);
      }
 
-
+      //if(cell-center()[0] )
+      //connectivity_cells.add(row, column);
+      // 
       }
+     // connectivity_cells.add_entries(row, cells_inside_box.begin(), cells_inside_box.end());
         else
      {
       // typename DynamicSparsityPattern::iterator it(&connectivity_cells,row,0 );
@@ -760,7 +752,7 @@ Utilities::System::get_memory_stats(mem_stats);
       //for (auto col = connectivity_cells.begin(row); col != connectivity_cells.end(row); ++col) 
    
    
-    //pcout<< "not_inside_box"<<std::endl;
+   
     for (auto col = dsp.begin(); col != dsp.end(); ++col) 
      {
         const unsigned int column = col->column();
@@ -773,19 +765,19 @@ Utilities::System::get_memory_stats(mem_stats);
      }
     // std::cout<<"connectivity_cells.row_length(row) "<<connectivity_cells.row_length(row)<<std::endl;
   // pcout<<row<<" "<<std::endl;
-
+  row++;
   }
  // pcout<<std::endl;
+ //connectivity.symmetrize();
  std::cout<<rank_mpi<<" copy graph"<<std::endl;
   cell_connection_graph.copy_from(connectivity_cells);
-  connectivity_cells.reinit(1,1);
+  //connectivity.reinit(1,1);
+   connectivity_cells.reinit(1,1);
   pcout<<"los "<< dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)<<std::endl;
  //GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_connection_graph,triangulation, SparsityTools::Partitioner::zoltan );
  GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_weights, cell_connection_graph,triangulation);
  //GridTools::partition_triangulation_zorder(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),triangulation);
  }  
-  
-
 
 
 
@@ -863,6 +855,7 @@ Utilities::System::get_memory_stats(mem_stats);
 << "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
 << "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
 << "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
+
 }
 
 template <int dim, int dim_omega>
@@ -2968,8 +2961,7 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
   DataOut<dim> data_out;
   data_out.attach_dof_handler(dof_handler_Omega);
   
-  data_out.add_data_vector(solution.block(0),
-                         solution_names); //, DataOut<dim>::type_cell_data  
+  data_out.add_data_vector(solution.block(0), solution_names); //, DataOut<dim>::type_cell_data  
  
   Vector<float>   subdomain(triangulation.n_active_cells());
   for (unsigned int i=0; i<subdomain.size(); ++i)
@@ -3180,18 +3172,18 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
   assemble_system();
   solve();
 
-/*
+
 Utilities::System::MemoryStats mem_stats;
 Utilities::System::get_memory_stats(mem_stats);
   pcout << "Memory Statistics after make grid" << std::endl
 <<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
 << "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
 << "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
-<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;*/
+<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl;
 
 
 
-  std::array<double, 4> results_array = compute_errors();
+  std::array<double, 4> results_array= compute_errors();
   output_results();
  
   return results_array;
