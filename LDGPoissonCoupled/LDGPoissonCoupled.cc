@@ -719,6 +719,7 @@ if(is_repartioned)
   for (; cell != endc; ++cell)
   {
     IndexSet index_set;
+    index_set.set_size(triangulation.n_global_active_cells());
     index_set.add_index(row);
     DynamicSparsityPattern dsp = connectivity_cells.get_view(index_set);
     connectivity_cells.clear_row(row);
@@ -771,7 +772,7 @@ if(is_repartioned)
     memory_consumption("connectivity_cells");
   pcout<<"los "<< dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)<<std::endl;
  //GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_connection_graph,triangulation, SparsityTools::Partitioner::zoltan );
- GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_weights, cell_connection_graph,triangulation);
+ GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD), cell_connection_graph,triangulation, SparsityTools::Partitioner::zoltan );
  //GridTools::partition_triangulation_zorder(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),triangulation);
  }  
 
@@ -3142,7 +3143,7 @@ void LDGPoissonProblem<dim, dim_omega>::memory_consumption(std::string _name) {
 }
 template <int dim, int dim_omega>
 std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
-  pcout << "n_refine " << n_refine << "  degree " << degree << std::endl;
+  pcout << "******************* REFINE " << n_refine << "  DEGREE  " << degree << " ***********************" <<std::endl;
   dimension_gap = dim - dim_omega;
   pcout << "geometric configuration "<<geo_conf <<"<< dim_Omega: "<< dim <<", dim_omega: "<<dim_omega<< " -> dimension_gap "<<dimension_gap<<std::endl; 
 rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
@@ -3152,21 +3153,35 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
   memory_consumption("after  make_grid");
   make_dofs();
   memory_consumption("after make_dofs()");
-  assemble_system();
+  /*assemble_system();
   memory_consumption("after  assemble_system()");
   solve();
   memory_consumption("after solve()");
+*/
 
 
 
 
-
-  std::array<double, 4> results_array= compute_errors();
+  std::array<double, 4> results_array;// = compute_errors();
   output_results();
  
   return results_array;
 }
 
+size_t getCurrentRSS() {
+    std::ifstream statm("/proc/self/statm");
+    if (!statm.is_open()) {
+        std::cerr << "Could not open /proc/self/statm" << std::endl;
+        return 0;
+    }
+
+    size_t rss = 0;
+    statm >> rss;  // Read the number of resident pages
+    statm.close();
+
+    long pageSize = sysconf(_SC_PAGESIZE);  // Get the page size in bytes
+    return rss * pageSize;  // Convert pages to bytes
+}
 int main(int argc, char *argv[]) {
   //std::cout << "USE_MPI_ASSEMBLE " << USE_MPI_ASSEMBLE << std::endl;
 #if 1
@@ -3271,10 +3286,22 @@ int main(int argc, char *argv[]) {
           }
           
 
+                  struct rusage usage;
+          getrusage(RUSAGE_SELF, &usage);
+          double peak_memory = usage.ru_maxrss / 1024.0;
+          double max_memory;
+          MPI_Reduce(&peak_memory, &max_memory, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+           size_t memoryUsed = getCurrentRSS()/ (1024.0* 1024.0);
+      std::cout<< "---------------------------------------------------" <<std::endl
+        << "| Peak Memory Usage: " << peak_memory << " MB" << ", "
+        << "Peak Memory Usage Across All Ranks: " << max_memory << " MB" << std::endl
+          << "Memory used by the process: " << memoryUsed << " MB" << std::endl
+        << "-------------------------------------------------------------" <<std::endl;
+
           std::cout << rank_mpi << " Result_ende: U " << arr[0] << " Q " << arr[1]
                     << " u " << arr[2] << " q " << arr[3] << std::endl;
 
-
+          
           if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
             
           std::ofstream csvfile_unsrtd;
@@ -3287,6 +3314,7 @@ int main(int argc, char *argv[]) {
           }
           results[p][r] = arr;
           max_diameter[r] = LDGPoissonCoupled.max_diameter;
+          malloc_trim(0);
         }
       }
 
