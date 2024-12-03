@@ -592,10 +592,11 @@ pcout<<"level_max "<<level_max<<std::endl;
 double minimal_cell_diameter = GridTools::minimal_cell_diameter(triangulation);
  double maximal_cell_diameter = GridTools::maximal_cell_diameter(triangulation);
  pcout<<"minimal_cell_diameter "<<minimal_cell_diameter<< " maximal_cell_diameter "<<maximal_cell_diameter<<std::endl;
+ #if MEMORY_CONSUMPTION
  pcout << "Memory consumption of triangulation: "
               << triangulation.memory_consumption() / (1024.0 * 1024.0) // Convert to MB
 	             << " MB" << std::endl;
-		         
+#endif		         
 			     unsigned int global_active_cells = triangulation.n_global_active_cells();
 			       
 				     pcout << "Total number of active cells (global): " << global_active_cells << std::endl;
@@ -901,7 +902,6 @@ const std::vector<types::global_dof_index> dofs_per_component_omega =
         << start_Potential_omega << std::endl;
 
 
-  //std::cout<<"Memory DofHandler "<< dof_handler_Omega.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<" GB"<<std::endl;
   constraints.clear();
   constraints.close();
   unsigned int n_dofs_total = dof_handler_Omega.n_dofs() + dof_handler_omega.n_dofs();
@@ -1292,12 +1292,16 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
   sp_block.compress();
 
    pcout<<"Sparsity "  <<sp_block.n_rows()<<" "<<sp_block.n_cols()<<" n_nonzero_elements " <<sp_block.n_nonzero_elements()<<std::endl;
+#if MEMORY_CONSUMPTION
    std::cout<<"mpi_rank "<<rank_mpi<<" sparsity memory "<<sp_block.memory_consumption()/(1024*1024)<<" MB"<<std::endl;
    std::cout<<"mpi_rank "<<rank_mpi<<" dof_handler_Omega "<<dof_handler_Omega.memory_consumption()/(1024*1024)<<" MB"<<std::endl;
+#endif
    //pcout<<"start reinit"<<std::endl;
    memory_consumption("before system_matrix reinit");
   system_matrix.reinit(sp_block);
+#if MEMORY_CONSUMPTION
   std::cout<<"mpi_rank "<<rank_mpi<<" memory system_matrix "<<system_matrix.memory_consumption()/(1024*1024)<<" MB"<<std::endl;
+#endif
   memory_consumption("after system_matrix reinit");
 }
   //pcout<<"system_matrix.reinit"<<std::endl;
