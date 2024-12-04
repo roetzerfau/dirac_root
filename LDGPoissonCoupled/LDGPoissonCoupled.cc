@@ -3198,7 +3198,7 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
 
   std::array<double, 4> results_array= compute_errors();
-  output_results();
+ // output_results();
  
   return results_array;
 }
