@@ -13,7 +13,7 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 1
+#define COUPLED 0
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
 #define GRADEDMESH 1
@@ -38,13 +38,13 @@ constexpr unsigned int constructed_solution{2};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[5] = {3,4,5,6,7};//,7,8,9,10
+const unsigned int refinement[4] = {5,6,7,8};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
 const double radii[n_r] = {  0.01};
-const bool lumpedAverages[n_LA] = {false};//TODO bei punkt wuelle noch berücksichtnge
+const bool lumpedAverages[n_LA] = {true};//TODO bei punkt wuelle noch berücksichtnge
 
 template <int dim> double distance(Point<dim> point1, Point<dim> point2) {
   double d = 0;

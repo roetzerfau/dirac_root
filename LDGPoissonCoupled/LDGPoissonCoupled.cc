@@ -154,10 +154,23 @@ struct Parameters {
   bool lumpedAverage;
   std::string folder_name;
 };
+size_t getCurrentRSS() {
+    std::ifstream statm("/proc/self/statm");
+    if (!statm.is_open()) {
+        std::cerr << "Could not open /proc/self/statm" << std::endl;
+        return 0;
+    }
 
+    size_t rss = 0;
+    statm >> rss;  // Read the number of resident pages
+    statm.close();
+
+    long pageSize = sysconf(_SC_PAGESIZE);  // Get the page size in bytes
+    return rss * pageSize;  // Convert pages to bytes
+}
 class BlockPreconditioner : public dealii::Subscriptor {
 public:
-    BlockPreconditioner(TrilinosWrappers::PreconditionAMG &precond0, TrilinosWrappers::PreconditionAMG &precond1)
+    BlockPreconditioner(TrilinosWrappers::PreconditionILUT &precond0, TrilinosWrappers::PreconditionILUT &precond1)
         : preconditioner0(precond0), preconditioner1(precond1) {}
 
     void vmult(TrilinosWrappers::MPI::BlockVector &dst, const TrilinosWrappers::MPI::BlockVector &src) const {
@@ -172,8 +185,8 @@ public:
     }
 
 private:
-    TrilinosWrappers::PreconditionAMG &preconditioner0;
-    TrilinosWrappers::PreconditionAMG &preconditioner1;
+    TrilinosWrappers::PreconditionILUT &preconditioner0;
+    TrilinosWrappers::PreconditionILUT &preconditioner1;
 };
   class InverseMatrix : public Subscriptor
   {
@@ -249,7 +262,7 @@ TrilinosWrappers::PreconditionILUT preconditioner;
       const SmartPointer< const InverseMatrix> A_inverse;
   
       mutable TrilinosWrappers::MPI::Vector tmp1, tmp2, tmp3, tmp4;
-       IndexSet set1,set2;
+ 
     };
 
 
@@ -263,18 +276,21 @@ class SchurComplement_A_22 : public Subscriptor
         const TrilinosWrappers::MPI::BlockVector &block_vector)
          : system_matrix(&system_matrix)
         , A_inverse(&A_inverse)
-      , tmp1(block_vector.block(1))
+    /*  , tmp1(block_vector.block(1))
       , tmp2(block_vector.block(1))
       , tmp3(block_vector.block(0))
-      , tmp4(block_vector.block(0))
+      , tmp4(block_vector.block(0))*/
 
       {
       }
 
       void vmult(TrilinosWrappers::MPI::Vector &dst, const TrilinosWrappers::MPI::Vector &src) const
       {
-   
-
+    
+      TrilinosWrappers::MPI::Vector tmp1(system_matrix->block(1,1).locally_owned_range_indices());
+      TrilinosWrappers::MPI::Vector tmp2(system_matrix->block(1,1).locally_owned_range_indices());
+      TrilinosWrappers::MPI::Vector tmp3(system_matrix->block(0,0).locally_owned_range_indices());
+      TrilinosWrappers::MPI::Vector tmp4(system_matrix->block(0,0).locally_owned_range_indices());
 
       system_matrix->block(1,0).vmult(tmp1, src);
     
@@ -291,8 +307,8 @@ class SchurComplement_A_22 : public Subscriptor
       const SmartPointer<const TrilinosWrappers::BlockSparseMatrix> system_matrix;
       const SmartPointer< const InverseMatrix> A_inverse;
   
-      mutable TrilinosWrappers::MPI::Vector tmp1, tmp2, tmp3, tmp4;
-       IndexSet set1,set2;
+     // mutable TrilinosWrappers::MPI::Vector tmp1, tmp2, tmp3, tmp4;
+      
     };
 
 
@@ -411,12 +427,13 @@ private:
   Vector<double> cellwise_errors_U;
   Vector<double> cellwise_errors_Q;
 
+/*
   IndexSet locally_owned_dofs_Omega;
   IndexSet locally_relevant_dofs_Omega;
 
   IndexSet locally_owned_dofs_omega_local;
   IndexSet locally_relevant_dofs_omega_local;
-
+*/
   // IndexSet locally_owned_dofs_omega_global;
  /// IndexSet locally_relevant_dofs_omega_global;
 
@@ -764,12 +781,12 @@ if(is_repartioned)
   }
  // pcout<<std::endl;
  //connectivity.symmetrize();
-  memory_consumption("copy graph");
- std::cout<<rank_mpi<<" copy graph"<<std::endl;
+ // memory_consumption("copy graph");
+ pcout<<rank_mpi<<" copy graph"<<std::endl;
   cell_connection_graph.copy_from(connectivity_cells);
   //connectivity.reinit(1,1);
    connectivity_cells.reinit(1,1);
-    memory_consumption("connectivity_cells");
+  //  memory_consumption("connectivity_cells");
   pcout<<"los "<< dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)<<std::endl;
  //GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_connection_graph,triangulation, SparsityTools::Partitioner::zoltan );
  GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD), cell_connection_graph,triangulation, SparsityTools::Partitioner::zoltan );
@@ -853,16 +870,26 @@ template <int dim, int dim_omega>
 void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
   TimerOutput::Scope t(computing_timer, "setup");
 
+  IndexSet locally_owned_dofs_Omega;
+  IndexSet locally_relevant_dofs_Omega;
+
+  IndexSet locally_owned_dofs_omega_local;
+  IndexSet locally_relevant_dofs_omega_local;
+
+
   dof_handler_Omega.distribute_dofs(fe_Omega);
   const unsigned int dofs_per_cell = fe_Omega.dofs_per_cell;
   pcout << "dofs_per_cell " << dofs_per_cell << std::endl;
- // DoFRenumbering::component_wise(dof_handler_Omega); //uncomment for unput result
+ 
 
   dof_handler_omega.distribute_dofs(fe_omega);
   const unsigned int dofs_per_cell_omega = fe_omega.dofs_per_cell;
   pcout << "dofs_per_cell_omega " << dofs_per_cell_omega << std::endl;
-  //DoFRenumbering::component_wise(dof_handler_omega); //TODO nochmal kontrollieren
 
+#if !COUPLED
+  DoFRenumbering::component_wise(dof_handler_Omega); //uncomment for unput result
+  DoFRenumbering::component_wise(dof_handler_omega); //TODO nochmal kontrollieren
+#endif
 
   const std::vector<types::global_dof_index> dofs_per_component_Omega =
       DoFTools::count_dofs_per_fe_component(dof_handler_Omega);
@@ -1298,19 +1325,19 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
    std::cout<<"mpi_rank "<<rank_mpi<<" dof_handler_Omega "<<dof_handler_Omega.memory_consumption()/(1024*1024)<<" MB"<<std::endl;
 #endif
    //pcout<<"start reinit"<<std::endl;
-   memory_consumption("before system_matrix reinit");
+  // memory_consumption("before system_matrix reinit");
   system_matrix.reinit(sp_block);
 #if MEMORY_CONSUMPTION
   std::cout<<"mpi_rank "<<rank_mpi<<" memory system_matrix "<<system_matrix.memory_consumption()/(1024*1024)<<" MB"<<std::endl;
 #endif
-  memory_consumption("after system_matrix reinit");
+  //memory_consumption("after system_matrix reinit");
 }
   //pcout<<"system_matrix.reinit"<<std::endl;
   solution.reinit(locally_relevant_dofs_block,  MPI_COMM_WORLD);
-  memory_consumption("after solution.reinit");
+ // memory_consumption("after solution.reinit");
    //pcout<<"solution.reinit"<<std::endl;
   system_rhs.reinit(locally_owned_dofs_block, locally_relevant_dofs_block,  MPI_COMM_WORLD, true);
-  memory_consumption("after system_rhs.reinit");
+ // memory_consumption("after system_rhs.reinit");
  //  pcout<<"system_rhs.reinit"<<std::endl;
 
  //  std::cout<<rank_mpi<<" memory system_matrix "<<system_matrix.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<" memory system_rhs "<<system_rhs.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
@@ -2750,7 +2777,7 @@ solution = system_rhs;
   completely_distributed_solution = solution;
 
 
-#if SOLVE_BLOCKWISE
+#if SOLVE_BLOCKWISE && COUPLED
   pcout<<"solve blockwise"<<std::endl;
 #if A11SCHUR
 pcout<<"A11 Schur"<<std::endl;
@@ -2773,8 +2800,8 @@ pcout<<"A11 Schur"<<std::endl;
   SolverControl solver_control1(completely_distributed_solution.block(0).locally_owned_size(), tolerance);
   SolverGMRES<TrilinosWrappers::MPI::Vector > solver(solver_control1);
 
-TrilinosWrappers::PreconditionILU preconditioner;
-  TrilinosWrappers::PreconditionILU::AdditionalData data;
+TrilinosWrappers::PreconditionILUT preconditioner;
+  TrilinosWrappers::PreconditionILUT::AdditionalData data;
   preconditioner.initialize(system_matrix.block(1, 1), data);
 
   solver.solve(schur_complement, completely_distributed_solution.block(1),schur_rhs, preconditioner);
@@ -2787,6 +2814,7 @@ TrilinosWrappers::PreconditionILU preconditioner;
   A_inverse.vmult(completely_distributed_solution.block(0), tmp);
 
  // A_inverse.vmult(completely_distributed_solution.block(0), system_rhs.block(0));//unkoppled
+    pcout << "Number of iterations: " << solver_control1.last_step() << std::endl;
 #else
 pcout<<"A22 Schur"<<std::endl;
 const InverseMatrix A_inverse(system_matrix.block(1,1));
@@ -2809,8 +2837,8 @@ const InverseMatrix A_inverse(system_matrix.block(1,1));
   SolverGMRES<TrilinosWrappers::MPI::Vector > solver(solver_control1);
  
 
-TrilinosWrappers::PreconditionAMG preconditioner;
-  TrilinosWrappers::PreconditionAMG::AdditionalData data;
+TrilinosWrappers::PreconditionILUT preconditioner;
+  TrilinosWrappers::PreconditionILUT::AdditionalData data;
   preconditioner.initialize(system_matrix.block(0, 0), data);
 
   solver.solve(schur_complement, completely_distributed_solution.block(0),schur_rhs, preconditioner);
@@ -2823,7 +2851,7 @@ TrilinosWrappers::PreconditionAMG preconditioner;
   A_inverse.vmult(completely_distributed_solution.block(1), tmp);
 
  // A_inverse.vmult(completely_distributed_solution.block(0), system_rhs.block(0));//unkoppled
-
+pcout << "Number of iterations: " << solver_control1.last_step() << std::endl;
 #endif
 #else 
 pcout<<"solve full"<<std::endl;
@@ -2835,10 +2863,10 @@ SolverControl solver_control22(dof_handler_Omega.n_locally_owned_dofs(), toleran
 
 
 
-if(geo_conf == GeometryConfiguration::TwoD_ZeroD)
+if(geo_conf == GeometryConfiguration::TwoD_ZeroD || COUPLED==0)
 {
-TrilinosWrappers::PreconditionAMG preconditioner_block_0;
-TrilinosWrappers::PreconditionAMG preconditioner_block_1;//PreconditionILU  PreconditionBlockJacobi
+TrilinosWrappers::PreconditionILUT preconditioner_block_0;
+TrilinosWrappers::PreconditionILUT preconditioner_block_1;//PreconditionILU  PreconditionBlockJacobi
 // Initialize the preconditioners with the appropriate blocks of the matrix
 preconditioner_block_0.initialize(system_matrix.block(0, 0));  // ILU for block (0,0)
 preconditioner_block_1.initialize(system_matrix.block(1, 1));  // ILU for block (1,1)
@@ -2850,8 +2878,8 @@ else
 {
   // Solve the system using the block preconditioner
   // Preconditioners for each block
-TrilinosWrappers::PreconditionAMG preconditioner_block_0;
-TrilinosWrappers::PreconditionAMG preconditioner_block_1;//PreconditionILU  PreconditionBlockJacobi
+TrilinosWrappers::PreconditionILUT preconditioner_block_0;
+TrilinosWrappers::PreconditionILUT preconditioner_block_1;//PreconditionILU  PreconditionBlockJacobi
 // Initialize the preconditioners with the appropriate blocks of the matrix
 preconditioner_block_0.initialize(system_matrix.block(0, 0));  // ILU for block (0,0)
 preconditioner_block_1.initialize(system_matrix.block(1, 1));  // ILU for block (1,1)
@@ -2860,7 +2888,7 @@ preconditioner_block_1.initialize(system_matrix.block(1, 1));  // ILU for block 
  solver.solve(system_matrix, completely_distributed_solution, system_rhs,block_preconditioner);
 }
 
-
+   pcout << "Number of iterations: " << solver_control22.last_step() << std::endl;
 #endif
 constraints.distribute(completely_distributed_solution);
 solution = completely_distributed_solution;
@@ -2873,6 +2901,7 @@ solution = completely_distributed_solution;
 
   
   timer.stop();
+
   pcout << "done (" << timer.cpu_time() << "s)" << std::endl;
 
 
@@ -3129,8 +3158,8 @@ void LDGPoissonProblem<dim, dim_omega>::memory_consumption(std::string _name) {
  double max_memory;
  MPI_Reduce(&peak_memory, &max_memory, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
-       
- std::cout<< "---------------------------------------------------" <<std::endl
+ size_t memoryUsed = getCurrentRSS()/ (1024.0* 1024.0);      
+ pcout<< "---------------------------------------------------" <<std::endl
  << "| " <<_name<< " Rank " << rank_mpi<<std::endl
   <<"| VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" <<", "
   << "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" <<", "
@@ -3138,6 +3167,7 @@ void LDGPoissonProblem<dim, dim_omega>::memory_consumption(std::string _name) {
   << "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl
   << "| Peak Memory Usage: " << peak_memory << " MB" << ", "
   << "Peak Memory Usage Across All Ranks: " << max_memory << " MB" << std::endl
+  << "memoryUsed: " << memoryUsed<< " MB" << std::endl
   << "-------------------------------------------------------------" <<std::endl;
 
 }
@@ -3153,35 +3183,27 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
   memory_consumption("after  make_grid");
   make_dofs();
   memory_consumption("after make_dofs()");
-  /*assemble_system();
+  assemble_system();
   memory_consumption("after  assemble_system()");
+
+  marked_vertices.clear();
+
+
+   malloc_trim(0);
   solve();
   memory_consumption("after solve()");
-*/
 
 
 
 
-  std::array<double, 4> results_array;// = compute_errors();
+
+  std::array<double, 4> results_array= compute_errors();
   output_results();
  
   return results_array;
 }
 
-size_t getCurrentRSS() {
-    std::ifstream statm("/proc/self/statm");
-    if (!statm.is_open()) {
-        std::cerr << "Could not open /proc/self/statm" << std::endl;
-        return 0;
-    }
 
-    size_t rss = 0;
-    statm >> rss;  // Read the number of resident pages
-    statm.close();
-
-    long pageSize = sysconf(_SC_PAGESIZE);  // Get the page size in bytes
-    return rss * pageSize;  // Convert pages to bytes
-}
 int main(int argc, char *argv[]) {
   //std::cout << "USE_MPI_ASSEMBLE " << USE_MPI_ASSEMBLE << std::endl;
 #if 1
@@ -3285,7 +3307,8 @@ int main(int argc, char *argv[]) {
            arr = {42,42,42,42};
           }
           
-
+ if(rank_mpi == 0)
+ {
                   struct rusage usage;
           getrusage(RUSAGE_SELF, &usage);
           double peak_memory = usage.ru_maxrss / 1024.0;
@@ -3300,7 +3323,7 @@ int main(int argc, char *argv[]) {
 
           std::cout << rank_mpi << " Result_ende: U " << arr[0] << " Q " << arr[1]
                     << " u " << arr[2] << " q " << arr[3] << std::endl;
-
+}
           
           if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
             
