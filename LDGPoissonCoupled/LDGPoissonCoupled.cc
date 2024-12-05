@@ -323,6 +323,7 @@ public:
 
   std::array<double, 4> run();
   double max_diameter;
+  unsigned int nof_cells;
 private:
   void make_grid();
 
@@ -617,7 +618,7 @@ double minimal_cell_diameter = GridTools::minimal_cell_diameter(triangulation);
 			     unsigned int global_active_cells = triangulation.n_global_active_cells();
 			       
 				     pcout << "Total number of active cells (global): " << global_active_cells << std::endl;
-
+nof_cells = global_active_cells;
 /*GridOut grid_out;
 std::ofstream out("grid_Omega.vtk"); // Choose your preferred filename and format
 grid_out.write_vtk(triangulation, out);*/
@@ -1074,6 +1075,8 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
 	//              << " GB" << std::endl;
   sp_block.collect_sizes();
   //malloc_trim(0);  // Force memory release
+
+  int error_flag = 0, global_error_flag = 0;
 #if COUPLED
 if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
     // coupling
@@ -1297,7 +1300,9 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
                    else
                    {
                   std::cout<<"düdüm1"<<std::endl;
-                  //throw std::runtime_error("cell coupling error");
+                  error_flag = 1;
+                 //throw std::runtime_error("cell coupling error");
+                // MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
                   }
                   }
                // else
@@ -1314,6 +1319,11 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
     }
   }
 #endif
+ MPI_Allreduce(&error_flag, &global_error_flag, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+if (global_error_flag) {
+       // printf("Process exiting function due to global error.\n");
+        throw std::runtime_error("cell coupling error");
+  }
   pcout<<"start to compress"<<std::endl;
 
 
@@ -1344,7 +1354,7 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
   pcout<<"Ende setup dof"<<std::endl;
 
 
-std::cout<<"malloc_trim "<<malloc_trim(0)<<std::endl;
+//std::cout<<"malloc_trim "<<malloc_trim(0)<<std::endl;
 
 }
 
@@ -3182,8 +3192,8 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
   make_grid();
   memory_consumption("after  make_grid");
   make_dofs();
-  memory_consumption("after make_dofs()");
-  assemble_system();
+ memory_consumption("after make_dofs()");
+   assemble_system();
   memory_consumption("after  assemble_system()");
 
   marked_vertices.clear();
@@ -3197,7 +3207,8 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
 
 
-  std::array<double, 4> results_array= compute_errors();
+
+  std::array<double, 4> results_array = compute_errors();
  // output_results();
  
   return results_array;
@@ -3287,27 +3298,32 @@ int main(int argc, char *argv[]) {
 
       std::array<double, 4> results[p_degree_size][refinement_size];
       double max_diameter[refinement_size];
+      double nof_cells[refinement_size];
 
       std::vector<std::string> solution_names = {"U_Omega", "Q_Omega",
                                                  "u_omega", "q_omega"};
                                          
       for (unsigned int r = 0; r < refinement_size; r++) {
         for (unsigned int p = 0; p < p_degree_size; p++) {
+           malloc_trim(0);
           LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled =
               LDGPoissonProblem<dimension_Omega, 1>(p_degree[p], refinement[r],
                                                     parameters);
           std::array<double, 4> arr;
+          bool is_not_failed =true;
           try
           {
             arr = LDGPoissonCoupled.run();
+            is_not_failed = true;
           }
           catch(const std::exception& e)
           {
            std::cout  << e.what() << std::endl;
            arr = {42,42,42,42};
+           is_not_failed = false;
           }
           
- if(rank_mpi == 0)
+/* if(rank_mpi == 0)
  {
                   struct rusage usage;
           getrusage(RUSAGE_SELF, &usage);
@@ -3323,21 +3339,27 @@ int main(int argc, char *argv[]) {
 
           std::cout << rank_mpi << " Result_ende: U " << arr[0] << " Q " << arr[1]
                     << " u " << arr[2] << " q " << arr[3] << std::endl;
-}
-          
-          if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
+}*/
+           std::cout << rank_mpi << " Result_ende: U " << arr[0] << " Q " << arr[1]
+                    << " u " << arr[2] << " q " << arr[3] << std::endl;
+
+          results[p][r] = arr;
+          max_diameter[r] = LDGPoissonCoupled.max_diameter;
+          nof_cells[r] = LDGPoissonCoupled.nof_cells;
+        
+
+         if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 && is_not_failed) {
             
           std::ofstream csvfile_unsrtd;
 	  std::string filename = "cvg_res_unsrtd" + name + "_r_" + std::to_string(refinement[r]) + "_p_" + std::to_string(p_degree[p]);
 	  csvfile_unsrtd.open(folderName + filename + ".csv");
             
-            csvfile_unsrtd<<name<<";r "<<refinement[r]<<";p "<<p_degree[p]<< ";U " << arr[0] << ";Q " << arr[1]
+            csvfile_unsrtd<<name<<";r "<<refinement[r]<<";h " <<max_diameter[r]<<";#c "<<nof_cells[r]<< ";p "<<p_degree[p]<< ";U " << arr[0] << ";Q " << arr[1]
                     << ";u " << arr[2] << ";q " << arr[3] << "; \n";
             csvfile_unsrtd.close();
+            std::cout<<"file written"<<std::endl;
           }
-          results[p][r] = arr;
-          max_diameter[r] = LDGPoissonCoupled.max_diameter;
-          malloc_trim(0);
+        
         }
       }
 
@@ -3357,18 +3379,22 @@ int main(int argc, char *argv[]) {
 #endif
         for (unsigned int f = 0; f < solution_names.size(); f++) {
           myfile << solution_names[f] << "\n";
-          myfile << "refinement/p_degree, ";
+          myfile << "refinement/p_degree; ";
           myfile << "diameter h;";
+          myfile << "#cells;";
 
           csvfile << solution_names[f] << "\n";
           csvfile << "refinement/p_degree;";
           csvfile << "diameter h;";
+          csvfile << "#cells;";
 
           std::cout << solution_names[f] << "\n";
           std::cout << "refinement/p_degree;";
           std::cout << "diameter h;";
+          std::cout << "#cells;";
+
           for (unsigned int p = 0; p < p_degree_size; p++) {
-            myfile << p_degree[p] << ",";
+            myfile << p_degree[p] << ";";
             csvfile << p_degree[p] << ";";
             std::cout << p_degree[p] << ";";
           }
@@ -3376,9 +3402,9 @@ int main(int argc, char *argv[]) {
           csvfile << "\n";
           std::cout << "\n";
           for (unsigned int r = 0; r < refinement_size; r++) {
-            myfile << refinement[r] << ";" << max_diameter[r] << ";";
-            csvfile << refinement[r] << ";" << max_diameter[r]  << ";";
-            std::cout << refinement[r] <<";" << max_diameter[r] << ";";
+            myfile << refinement[r] << ";" << max_diameter[r] << ";" <<nof_cells[r]<< ";";
+            csvfile << refinement[r] << ";" << max_diameter[r]  << ";" <<nof_cells[r]<< ";";
+            std::cout << refinement[r] <<";" << max_diameter[r] << ";" <<nof_cells[r]<< ";";
             for (unsigned int p = 0; p < p_degree_size; p++) {
               const double error = results[p][r][f];
 
