@@ -15,7 +15,7 @@
 
 #define COUPLED 1
 #define TEST 1
-#define SOLVE_BLOCKWISE 0
+#define SOLVE_BLOCKWISE 1
 #define GRADEDMESH 1
 #define MEMORY_CONSUMPTION 0
 
