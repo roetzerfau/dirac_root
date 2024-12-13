@@ -38,7 +38,7 @@ constexpr unsigned int constructed_solution{2};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[6] = {2,3,4,5,6,7};//,7,8,9,10
+const unsigned int refinement[3] = {5,6,7};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
@@ -824,3 +824,6 @@ equidistant_points_on_circle(const Point<dim> &center, double radius,
  
     return cells_and_points;
   }
+
+
+

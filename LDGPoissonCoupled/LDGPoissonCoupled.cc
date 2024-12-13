@@ -171,6 +171,42 @@ size_t getCurrentRSS() {
     long pageSize = sysconf(_SC_PAGESIZE);  // Get the page size in bytes
     return rss * pageSize;  // Convert pages to bytes
 }
+
+
+
+template <int dim>
+void project 	( 	const Mapping< dim> & 	mapping,
+		const DoFHandler< dim> & 	dof,
+		const Quadrature< dim > & 	quadrature,
+		const Function<dim> & 	function,
+		TrilinosWrappers::MPI::Vector & 	vec, const IndexSet& locally_owned_dofs, int degree)
+    {
+
+  TrilinosWrappers::SparsityPattern trilinos_sparsity(locally_owned_dofs, MPI_COMM_WORLD);
+    DoFTools::make_sparsity_pattern(dof, trilinos_sparsity,{},true,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
+    trilinos_sparsity.compress();
+TrilinosWrappers::SparseMatrix system_matrix;
+system_matrix.reinit(trilinos_sparsity);
+TrilinosWrappers::MPI::Vector rhs(vec);
+MatrixCreator::create_mass_matrix(mapping, dof, QGauss<dim>(degree +1), system_matrix);
+VectorTools::create_right_hand_side(dof,QGauss<dim>(degree +1), function, rhs);
+/*std::cout<<"system matrix"<<std::endl;
+system_matrix.print(std::cout);
+std::cout<<"rhs"<<std::endl;
+rhs.print(std::cout);*/
+    // Step 3: Solve the system
+    SolverControl solver_control(1000, 1e-12);
+    SolverGMRES<TrilinosWrappers::MPI::Vector> solver(solver_control);
+
+    TrilinosWrappers::PreconditionIdentity precondition;
+   // precondition.initialize(system_matrix);
+
+    solver.solve(system_matrix, vec, rhs, precondition);
+
+    }
+
+
+
 class BlockPreconditioner : public dealii::Subscriptor {
 public:
     BlockPreconditioner(TrilinosWrappers::PreconditionILU &precond0, TrilinosWrappers::PreconditionILU &precond1)
@@ -2784,7 +2820,9 @@ void LDGPoissonProblem<dim, dim_omega>::solve() {
   pcout << "Solving linear system... "<<std::endl;
   Timer timer;
   //solution = system_rhs;
-
+  TrilinosWrappers::MPI::BlockVector completely_distributed_solution(
+        system_rhs);
+  completely_distributed_solution = solution;
  // Quadrature<dim_omega> quadrature_omega(fe_omega.get_unit_support_points());  // Quadrature points 
   IndexSet locally_owned_dofs_Omega;
   IndexSet locally_relevant_dofs_Omega;
@@ -2804,46 +2842,61 @@ AffineConstraints<double> constraints;
 constraints.close();
 
 TrilinosWrappers::MPI::Vector solution_const_Omega;
-solution_const_Omega.reinit(locally_owned_dofs_Omega,  MPI_COMM_WORLD);
+solution_const_Omega.reinit(locally_owned_dofs_Omega, MPI_COMM_WORLD);
   MappingQ1<dim> mapping_Omega;  
 //VectorTools::project(mapping_Omega, dof_handler_Omega, {},  QGauss<dim>(degree +1), true_solution, solution_const_Omega);
+project<dim>(mapping_Omega, dof_handler_Omega, QGauss<dim>(degree +1), true_solution, solution_const_Omega, locally_owned_dofs_Omega,degree);
 // solution_const_Omega.print(std::cout);
 
 TrilinosWrappers::MPI::Vector solution_const_omega;
 solution_const_omega.reinit(locally_owned_dofs_omega_local, MPI_COMM_WORLD);
   MappingQ1<dim_omega> mapping_omega;  
-
+/*
 {
+   TrilinosWrappers::SparsityPattern trilinos_sparsity(locally_owned_dofs_omega_local, MPI_COMM_WORLD);
+    DoFTools::make_sparsity_pattern(dof_handler_omega, trilinos_sparsity,{},true,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
+    trilinos_sparsity.compress();
 TrilinosWrappers::SparseMatrix system_matrix;
-TrilinosWrappers::MPI::Vector rhs;
+system_matrix.reinit(trilinos_sparsity);
+TrilinosWrappers::MPI::Vector rhs(solution_const_omega);
 MatrixCreator::create_mass_matrix(mapping_omega, dof_handler_omega, QGauss<dim_omega>(degree +1), system_matrix);
-    //VectorTools::create_right_hand_side(dof_handler_omega,QGauss<dim_omega>(degree +1), true_solution_omega, rhs);
-
+VectorTools::create_right_hand_side(dof_handler_omega,QGauss<dim_omega>(degree +1), true_solution_omega, rhs);
+std::cout<<"system matrix"<<std::endl;
+system_matrix.print(std::cout);
+std::cout<<"rhs"<<std::endl;
+rhs.print(std::cout);
     // Step 3: Solve the system
     SolverControl solver_control(1000, 1e-12);
     SolverGMRES<TrilinosWrappers::MPI::Vector> solver(solver_control);
 
-    PreconditionJacobi<TrilinosWrappers::SparseMatrix> precondition;
-    precondition.initialize(system_matrix);
+    TrilinosWrappers::PreconditionIdentity precondition;
+   // precondition.initialize(system_matrix);
 
     solver.solve(system_matrix, solution_const_omega, rhs, precondition);
 }
+*/
 
-
-
+project<dim_omega>(mapping_omega, dof_handler_omega, QGauss<dim_omega>(degree +1), true_solution_omega, solution_const_omega, locally_owned_dofs_omega_local,degree);
 //VectorTools::project(mapping_omega, dof_handler_omega, {},  QGauss<dim_omega>(degree +1), true_solution_omega, solution_const_omega);
-solution_const_omega.print(std::cout);
-
+//std::cout<<"sol"<<std::endl;
+//solution_const_omega.print(std::cout);
+/*TrilinosWrappers::MPI::Vector relevant_solution(locally_owned_dofs, locally_relevant_dofs, mpi_communicator);
+solution_const_omega.update_ghost_values();
+solution_const_Omega.update_ghost_values();*/
 double l2_norm_solution_omega = solution_const_omega.l2_norm();
 double l2_norm_solution_Omega = solution_const_Omega.l2_norm();
-  TrilinosWrappers::MPI::BlockVector completely_distributed_solution(
-        solution);
-completely_distributed_solution = system_rhs;
+
+//completely_distributed_solution = system_rhs;
 completely_distributed_solution.block(0) = solution_const_Omega;
 completely_distributed_solution.block(1) =  solution_const_omega;
-//completely_distributed_solution.block(1).print(std::cout);
+
 //completely_distributed_solution.block(0) = std::sqrt(std::pow(l2_norm_solution_Omega,2)/solution_const_Omega.locally_owned_size());
 //completely_distributed_solution.block(1) = std::sqrt(std::pow(l2_norm_solution_omega,2)/solution_const_omega.locally_owned_size());
+
+//completely_distributed_solution.block(0).compress(VectorOperation::insert);
+//completely_distributed_solution.block(1).compress(VectorOperation::insert);
+
+//completely_distributed_solution.block(1).print(std::cout);
 pcout<<"l2_norm_solution_omega "<<l2_norm_solution_omega<<" completely_distributed_solution.block(1) "<<completely_distributed_solution.block(1).l2_norm()<<std::endl;
 pcout<<"l2_norm_solution_Omega "<<l2_norm_solution_Omega<<" completely_distributed_solution.block(0) "<<completely_distributed_solution.block(0).l2_norm()<<std::endl;
 #if SOLVE_BLOCKWISE && COUPLED
@@ -2903,8 +2956,9 @@ const InverseMatrix A_inverse(system_matrix.block(1,1));
 
   //ReductionControl solver_control1(completely_distributed_solution.block(0).locally_owned_size(), tolerance * system_rhs.l2_norm(), reduction);
   SolverControl solver_control1(std::max((int)completely_distributed_solution.block(0).locally_owned_size(),1000), tolerance);
+  //SolverGMRES<TrilinosWrappers::MPI::Vector >::AdditionalData datasolver(true);
  SolverGMRES<TrilinosWrappers::MPI::Vector > solver(solver_control1);
- 
+
 
 TrilinosWrappers::PreconditionAMG preconditioner;
   TrilinosWrappers::PreconditionAMG::AdditionalData data;
