@@ -38,7 +38,7 @@ constexpr unsigned int constructed_solution{2};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[5] = {2,3,4,5,6};//,7,8,9,10
+const unsigned int refinement[6] = {2,3,4,5,6,7};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
@@ -462,7 +462,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
 template <int dim>
 void TrueSolution_omega<dim>::vector_value(const Point<dim> &p,
                                            Vector<double> &values) const {
-  // std::cout<<"values.size() "<<values.size()<<std::endl;
+   //std::cout<<"values.size() "<<values.size()<<std::endl;
   Assert(values.size() == dim + 1,
          ExcDimensionMismatch(values.size(), dim + 1));
 
@@ -500,7 +500,7 @@ void TrueSolution_omega<dim>::vector_value(const Point<dim> &p,
   default:
     break;
   }
- // std::cout<<values<<std::endl;
+ //std::cout<<p<<" | "<<values<<std::endl;
 }
 template <int dim>
 void ProductFunction<dim>::vector_value(const Point<dim> &p,

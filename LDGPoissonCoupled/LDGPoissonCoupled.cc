@@ -110,6 +110,9 @@
 #include <deal.II/numerics/data_out_faces.h>
 #include <deal.II/numerics/data_postprocessor.h>
 #include <deal.II/base/utilities.h>
+#include <deal.II/fe/mapping_q1_eulerian.h>
+#include <deal.II/lac/vector_memory.h>
+
 
 #include <fstream>
 #include <iostream>
@@ -170,7 +173,7 @@ size_t getCurrentRSS() {
 }
 class BlockPreconditioner : public dealii::Subscriptor {
 public:
-    BlockPreconditioner(TrilinosWrappers::PreconditionILUT &precond0, TrilinosWrappers::PreconditionILUT &precond1)
+    BlockPreconditioner(TrilinosWrappers::PreconditionILU &precond0, TrilinosWrappers::PreconditionILU &precond1)
         : preconditioner0(precond0), preconditioner1(precond1) {}
 
     void vmult(TrilinosWrappers::MPI::BlockVector &dst, const TrilinosWrappers::MPI::BlockVector &src) const {
@@ -185,8 +188,8 @@ public:
     }
 
 private:
-    TrilinosWrappers::PreconditionILUT &preconditioner0;
-    TrilinosWrappers::PreconditionILUT &preconditioner1;
+    TrilinosWrappers::PreconditionILU &preconditioner0;
+    TrilinosWrappers::PreconditionILU &preconditioner1;
 };
   class InverseMatrix : public Subscriptor
   {
@@ -202,7 +205,7 @@ private:
     dst = 0;
     //std::cout<<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<" src "<<std::endl;
     //src.print(std::cout);
-    if(dimension_Omega == 2)
+   if(dimension_Omega == 2)
     {
     //ReductionControl solver_control(src.size(), tolerance * src.l2_norm(), reduction);
     SolverControl solver_control(src.size(), tolerance );
@@ -216,7 +219,7 @@ TrilinosWrappers::PreconditionILUT preconditioner;
   preconditioner.initialize(*matrix, data);
 
     //ReductionControl solver_control(matrix->local_size(), tolerance * src.l2_norm(), reduction);//, 1e-7 * src.l2_norm());
-    SolverControl solver_control(matrix->local_size(), tolerance );//, 1e-7 * src.l2_norm());
+    SolverControl solver_control(std::max( (int) matrix->local_size(),1000), tolerance );//, 1e-7 * src.l2_norm());
     TrilinosWrappers::SolverGMRES solver(solver_control);
     solver.solve(*matrix, dst,  src, preconditioner );
     }
@@ -286,7 +289,7 @@ class SchurComplement_A_22 : public Subscriptor
 
       void vmult(TrilinosWrappers::MPI::Vector &dst, const TrilinosWrappers::MPI::Vector &src) const
       {
-    
+    //PrimitiveVectorMemory<
       TrilinosWrappers::MPI::Vector tmp1(system_matrix->block(1,1).locally_owned_range_indices());
       TrilinosWrappers::MPI::Vector tmp2(system_matrix->block(1,1).locally_owned_range_indices());
       TrilinosWrappers::MPI::Vector tmp3(system_matrix->block(0,0).locally_owned_range_indices());
@@ -2780,13 +2783,69 @@ void LDGPoissonProblem<dim, dim_omega>::solve() {
   TimerOutput::Scope t(computing_timer, "solve");
   pcout << "Solving linear system... "<<std::endl;
   Timer timer;
-solution = system_rhs;
+  //solution = system_rhs;
 
-        TrilinosWrappers::MPI::BlockVector completely_distributed_solution(
-        system_rhs);
-  completely_distributed_solution = solution;
+ // Quadrature<dim_omega> quadrature_omega(fe_omega.get_unit_support_points());  // Quadrature points 
+  IndexSet locally_owned_dofs_Omega;
+  IndexSet locally_relevant_dofs_Omega;
+
+  IndexSet locally_owned_dofs_omega_local;
+  IndexSet locally_relevant_dofs_omega_local;
+
+  locally_owned_dofs_Omega = dof_handler_Omega.locally_owned_dofs();
+  DoFTools::extract_locally_relevant_dofs(dof_handler_Omega, locally_relevant_dofs_Omega);
+  locally_owned_dofs_omega_local = dof_handler_omega.locally_owned_dofs();
+  DoFTools::extract_locally_relevant_dofs(dof_handler_omega, locally_relevant_dofs_omega_local);
+
+// Ensure constraints are correctly set and closed
+AffineConstraints<double> constraints;
+// Add Dirichlet boundary conditions or other necessary constraints
+// constraints.add_boundary_values(...);
+constraints.close();
+
+TrilinosWrappers::MPI::Vector solution_const_Omega;
+solution_const_Omega.reinit(locally_owned_dofs_Omega,  MPI_COMM_WORLD);
+  MappingQ1<dim> mapping_Omega;  
+//VectorTools::project(mapping_Omega, dof_handler_Omega, {},  QGauss<dim>(degree +1), true_solution, solution_const_Omega);
+// solution_const_Omega.print(std::cout);
+
+TrilinosWrappers::MPI::Vector solution_const_omega;
+solution_const_omega.reinit(locally_owned_dofs_omega_local, MPI_COMM_WORLD);
+  MappingQ1<dim_omega> mapping_omega;  
+
+{
+TrilinosWrappers::SparseMatrix system_matrix;
+TrilinosWrappers::MPI::Vector rhs;
+MatrixCreator::create_mass_matrix(mapping_omega, dof_handler_omega, QGauss<dim_omega>(degree +1), system_matrix);
+    //VectorTools::create_right_hand_side(dof_handler_omega,QGauss<dim_omega>(degree +1), true_solution_omega, rhs);
+
+    // Step 3: Solve the system
+    SolverControl solver_control(1000, 1e-12);
+    SolverGMRES<TrilinosWrappers::MPI::Vector> solver(solver_control);
+
+    PreconditionJacobi<TrilinosWrappers::SparseMatrix> precondition;
+    precondition.initialize(system_matrix);
+
+    solver.solve(system_matrix, solution_const_omega, rhs, precondition);
+}
 
 
+
+//VectorTools::project(mapping_omega, dof_handler_omega, {},  QGauss<dim_omega>(degree +1), true_solution_omega, solution_const_omega);
+solution_const_omega.print(std::cout);
+
+double l2_norm_solution_omega = solution_const_omega.l2_norm();
+double l2_norm_solution_Omega = solution_const_Omega.l2_norm();
+  TrilinosWrappers::MPI::BlockVector completely_distributed_solution(
+        solution);
+completely_distributed_solution = system_rhs;
+completely_distributed_solution.block(0) = solution_const_Omega;
+completely_distributed_solution.block(1) =  solution_const_omega;
+//completely_distributed_solution.block(1).print(std::cout);
+//completely_distributed_solution.block(0) = std::sqrt(std::pow(l2_norm_solution_Omega,2)/solution_const_Omega.locally_owned_size());
+//completely_distributed_solution.block(1) = std::sqrt(std::pow(l2_norm_solution_omega,2)/solution_const_omega.locally_owned_size());
+pcout<<"l2_norm_solution_omega "<<l2_norm_solution_omega<<" completely_distributed_solution.block(1) "<<completely_distributed_solution.block(1).l2_norm()<<std::endl;
+pcout<<"l2_norm_solution_Omega "<<l2_norm_solution_Omega<<" completely_distributed_solution.block(0) "<<completely_distributed_solution.block(0).l2_norm()<<std::endl;
 #if SOLVE_BLOCKWISE && COUPLED
   pcout<<"solve blockwise"<<std::endl;
 #if A11SCHUR
@@ -2807,7 +2866,7 @@ pcout<<"A11 Schur"<<std::endl;
   
   
  // ReductionControl solver_control1(completely_distributed_solution.block(0).locally_owned_size(), tolerance * system_rhs.l2_norm(), reduction);
-  SolverControl solver_control1(completely_distributed_solution.block(0).locally_owned_size(), tolerance);
+  SolverControl solver_control1(std::max((int)completely_distributed_solution.block(0).locally_owned_size(),1000), tolerance);
   SolverGMRES<TrilinosWrappers::MPI::Vector > solver(solver_control1);
 
 TrilinosWrappers::PreconditionILUT preconditioner;
@@ -2843,12 +2902,12 @@ const InverseMatrix A_inverse(system_matrix.block(1,1));
 
 
   //ReductionControl solver_control1(completely_distributed_solution.block(0).locally_owned_size(), tolerance * system_rhs.l2_norm(), reduction);
-  SolverControl solver_control1(completely_distributed_solution.block(0).locally_owned_size(), tolerance);
-  SolverGMRES<TrilinosWrappers::MPI::Vector > solver(solver_control1);
+  SolverControl solver_control1(std::max((int)completely_distributed_solution.block(0).locally_owned_size(),1000), tolerance);
+ SolverGMRES<TrilinosWrappers::MPI::Vector > solver(solver_control1);
  
 
-TrilinosWrappers::PreconditionILUT preconditioner;
-  TrilinosWrappers::PreconditionILUT::AdditionalData data;
+TrilinosWrappers::PreconditionAMG preconditioner;
+  TrilinosWrappers::PreconditionAMG::AdditionalData data;
   preconditioner.initialize(system_matrix.block(0, 0), data);
 
   solver.solve(schur_complement, completely_distributed_solution.block(0),schur_rhs, preconditioner);
@@ -2869,12 +2928,13 @@ pcout<<"solve full"<<std::endl;
 
 // Set up solver control
 //ReductionControl solver_control22(dof_handler_Omega.n_locally_owned_dofs(), tolerance * system_rhs.l2_norm(), reduction);
-SolverControl solver_control22(dof_handler_Omega.n_locally_owned_dofs(), tolerance );
+SolverControl solver_control22(std::max((int)dof_handler_Omega.n_locally_owned_dofs(),1000), tolerance );
 
 
 
 if(geo_conf == GeometryConfiguration::TwoD_ZeroD || COUPLED==0)
 {
+  pcout<<"GeometryConfiguration::TwoD_ZeroD || COUPLED==0"<<std::endl;
 TrilinosWrappers::PreconditionILUT preconditioner_block_0;
 TrilinosWrappers::PreconditionILUT preconditioner_block_1;//PreconditionILU  PreconditionBlockJacobi
 // Initialize the preconditioners with the appropriate blocks of the matrix
@@ -2888,8 +2948,8 @@ else
 {
   // Solve the system using the block preconditioner
   // Preconditioners for each block
-TrilinosWrappers::PreconditionILUT preconditioner_block_0;
-TrilinosWrappers::PreconditionILUT preconditioner_block_1;//PreconditionILU  PreconditionBlockJacobi
+TrilinosWrappers::PreconditionILU preconditioner_block_0;
+TrilinosWrappers::PreconditionILU preconditioner_block_1;//PreconditionILU  PreconditionBlockJacobi
 // Initialize the preconditioners with the appropriate blocks of the matrix
 preconditioner_block_0.initialize(system_matrix.block(0, 0));  // ILU for block (0,0)
 preconditioner_block_1.initialize(system_matrix.block(1, 1));  // ILU for block (1,1)
@@ -2989,6 +3049,19 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
  // ------analytical solution--------
  /*
 pcout << "analytical solution" << std::endl;
+ DoFHandler<dim_omega> dof_handler_Lag(triangulation_omega);
+  FESystem<dim_omega> fe_Lag(FESystem<dim_omega>(FE_DGQ<dim_omega>(degree), dim_omega),
+                       FE_DGQ<dim_omega>(degree));
+  dof_handler_Lag.distribute_dofs(fe_Lag);
+  TrilinosWrappers::MPI::Vector solution_const;
+  solution_const.reinit(dof_handler_Lag.locally_owned_dofs(), MPI_COMM_WORLD);
+
+  VectorTools::interpolate(dof_handler_Lag, true_solution_omega, solution_const);
+ solution_const.print(std::cout);
+std::cout << "solution_const l2 " << solution_const.l2_norm()<<" "<< solution_const.l1_norm()<<std::endl;
+
+{
+
   DoFHandler<dim> dof_handler_Lag(triangulation);
   FESystem<dim> fe_Lag(FESystem<dim>(FE_DGQ<dim>(degree), dim),
                        FE_DGQ<dim>(degree));
@@ -2997,6 +3070,8 @@ pcout << "analytical solution" << std::endl;
   solution_const.reinit(dof_handler_Lag.locally_owned_dofs(), MPI_COMM_WORLD);
 
   VectorTools::interpolate(dof_handler_Lag, true_solution, solution_const);
+  //solution_const.print(std::cout);
+  }
 
   DataOut<dim> data_out_const;
   data_out_const.attach_dof_handler(dof_handler_Lag);
@@ -3209,7 +3284,7 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
 
   std::array<double, 4> results_array = compute_errors();
- // output_results();
+ output_results();
  
   return results_array;
 }
