@@ -2203,8 +2203,8 @@ else
                   weight = 1;
                   C_avag = 1;
                 }
-                weight = 1.0 / nof_quad_points;
-                C_avag = 1.0;
+                //weight = 1.0 / nof_quad_points;
+                //C_avag = 1.0;
                 unsigned int n_tr;
 #if TEST
               
@@ -2338,7 +2338,7 @@ else
 
                           double psi_potential_test;
                           double psi_potential_trial;
-
+                          // V_U_matrix_coupling
                           for (unsigned int i = 0; i < dofs_per_cell; i++) {
                             if (insideCell_test)
                               psi_potential_test =
@@ -2358,7 +2358,7 @@ else
                                 psi_potential_trial =
                                     fe_values_coupling_trial_face[Potential]
                                         .value(j, 0);
-
+                             
                               V_U_matrix_coupling(i, j) +=
                                   g * psi_potential_test * psi_potential_trial *
                                   C_avag * weight * fe_values_omega.JxW(p) * 1 /
@@ -2369,6 +2369,7 @@ else
                               V_U_matrix_coupling, local_dof_indices_test,
                               local_dof_indices_trial, system_matrix);
 
+                          //v_U_matrix_coupling
                           for (unsigned int i = 0; i < dofs_per_cell_omega;
                                i++) {
                             for (unsigned int j = 0; j < dofs_per_cell; j++) {
@@ -2393,6 +2394,7 @@ else
                               v_U_matrix_coupling, local_dof_indices_omega,
                               local_dof_indices_trial, system_matrix);
 
+                          //V_u_matrix_coupling
                           for (unsigned int i = 0; i < dofs_per_cell; i++) {
                             if (insideCell_test)
                               psi_potential_test =
@@ -2405,29 +2407,32 @@ else
 
                             for (unsigned int j = 0; j < dofs_per_cell_omega;
                                  j++) {
+                              if(q_avag == 0)
                               V_u_matrix_coupling(i, j) +=
                                   -g * psi_potential_test *
                                   fe_values_omega[Potential_omega].value(j, p) *
                                   fe_values_omega.JxW(p) * 1 /
-                                  (n_tr * n_ftrial) * 1 / (n_te * n_ftest) *
-                                  C_avag * weight;
+                                  (n_tr * n_ftrial) * 1 / (n_te * n_ftest);
+                                  
                             }
                           }
                           constraints.distribute_local_to_global(
                               V_u_matrix_coupling, local_dof_indices_test,
                               local_dof_indices_omega, system_matrix);
 
+                          //v_u_matrix_coupling
                           for (unsigned int i = 0; i < dofs_per_cell_omega;
                                i++) {
                             for (unsigned int j = 0; j < dofs_per_cell_omega;
                                  j++) {
+                              if(q_avag == 0)
                               v_u_matrix_coupling(i, j) +=
                                   g *
                                   fe_values_omega[Potential_omega].value(j, p) *
                                   fe_values_omega[Potential_omega].value(i, p) *
                                   fe_values_omega.JxW(p) * 1 /
-                                  (n_tr * n_ftrial) * 1 / (n_te * n_ftest) *
-                                  C_avag * weight;
+                                  (n_tr * n_ftrial) * 1 / (n_te * n_ftest);
+                                 
                             }
                           }
                           constraints.distribute_local_to_global(
@@ -2887,11 +2892,11 @@ double l2_norm_solution_omega = solution_const_omega.l2_norm();
 double l2_norm_solution_Omega = solution_const_Omega.l2_norm();
 
 //completely_distributed_solution = system_rhs;
-completely_distributed_solution.block(0) = solution_const_Omega;
-completely_distributed_solution.block(1) =  solution_const_omega;
+//completely_distributed_solution.block(0) = solution_const_Omega;
+//completely_distributed_solution.block(1) =  solution_const_omega;
 
-//completely_distributed_solution.block(0) = std::sqrt(std::pow(l2_norm_solution_Omega,2)/solution_const_Omega.locally_owned_size());
-//completely_distributed_solution.block(1) = std::sqrt(std::pow(l2_norm_solution_omega,2)/solution_const_omega.locally_owned_size());
+completely_distributed_solution.block(0) = std::sqrt(std::pow(l2_norm_solution_Omega,2)/solution_const_Omega.locally_owned_size());
+completely_distributed_solution.block(1) = std::sqrt(std::pow(l2_norm_solution_omega,2)/solution_const_omega.locally_owned_size());
 
 //completely_distributed_solution.block(0).compress(VectorOperation::insert);
 //completely_distributed_solution.block(1).compress(VectorOperation::insert);

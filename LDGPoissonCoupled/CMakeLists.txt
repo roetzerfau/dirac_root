@@ -30,7 +30,7 @@ IF(NOT ${deal.II_FOUND})
     "or set an environment variable \"DEAL_II_DIR\" that contains this path."
     )
 ENDIF()
-
+DEAL_II_WITH_TRILINOS_TPETRA=ON
 #
 # Are all dependencies fullfilled?
 #
