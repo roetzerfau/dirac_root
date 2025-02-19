@@ -15,9 +15,14 @@
 
 #define COUPLED 1
 #define TEST 1
-#define SOLVE_BLOCKWISE 1
+#define SOLVE_BLOCKWISE 0
 #define GRADEDMESH 1
 #define MEMORY_CONSUMPTION 0
+
+#define USE_MPI_ASSEMBLE 1
+#define FASTER 1 //nur verfügbar bei der aktuellsten dealii version
+#define CYLINDER 0
+#define A11SCHUR 0
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
@@ -32,9 +37,9 @@ enum GeometryConfiguration
 const bool is_omega_on_face = true;
 constexpr double y_l = is_omega_on_face ? 0.0 : 0.01;
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.01;
-constexpr unsigned int geo_conf{2};
+constexpr unsigned int geo_conf{0};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
-constexpr unsigned int constructed_solution{2};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
+constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
 
 
 
@@ -141,14 +146,11 @@ public:
     double alpha, radius, cell_size;
 };
 
-
 template <int dim>
-double distance_to_singularity(const Point<dim> &p)
+Point<dim> nearest_point_on_singularity(const Point<dim> &p)
 {
   double x = p[0];
-  double r;
-
-
+  
   Point<dim> nearest_singularity_point;
   if (GeometryConfiguration::TwoD_OneD == geo_conf )
     nearest_singularity_point = Point<dim>(x, y_l); //nearest point on line
@@ -162,7 +164,15 @@ double distance_to_singularity(const Point<dim> &p)
   {
      nearest_singularity_point = Point<dim>( y_l,z_l);//center
   }
-  r = distance(p, nearest_singularity_point);
+  return  nearest_singularity_point;
+}
+template <int dim>
+double distance_to_singularity(const Point<dim> &p)
+{
+  
+  double r;
+
+  r = distance(p, nearest_point_on_singularity(p));
   return r;
 }
 
@@ -537,7 +547,7 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
   double r;
 
  // y = p[1];
-  values = 0;
+  values = 1;
 
   
   r = distance_to_singularity<dim>(p);
@@ -545,14 +555,17 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
 
   for(unsigned int i = 0; i < n_components; i++)
   {
-    if(r < cell_size)//
+  
+    if(r <= cell_size * 1.1)//
     {
        values(i) = 0;
     }
-    else  
-      values(i) = 1;
+    else
+      values(i) = std::pow(r,2*alpha);
+    //else  
+   //  values(i) = 1;
 // values(i) = 1;
- values(i) = values(i) * std::pow(r,2*alpha);
+  //values(i) = values(i) * std::pow(r,2*alpha);
   }
  
  //values = 1;

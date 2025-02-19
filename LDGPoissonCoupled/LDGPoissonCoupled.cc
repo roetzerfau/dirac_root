@@ -124,10 +124,7 @@
 #include "Functions.cc"
 
 using namespace dealii;
-#define USE_MPI_ASSEMBLE 1
-#define FASTER 1 //nur verfügbar bei der aktuellsten dealii version
-#define CYLINDER 0
-#define A11SCHUR 0
+
 
 
 //Geometrie
@@ -604,15 +601,19 @@ std::vector< unsigned int > 	repetitions({1,1,1});
 GridGenerator::subdivided_hyper_rectangle(triangulation,repetitions,  p1, p2);
  //GridGenerator::hyper_rectangle(triangulation,  p1, p2);
  
- pcout<<"refined++++++"<<std::endl;
+#endif
+pcout<<"refined++++++"<<std::endl;
  triangulation.refine_global(n_refine);
+ int level_max = n_refine;
  pcout<<"refined"<<std::endl;
- 
+ pcout<<"maximal_cell_diameter "<<  GridTools::maximal_cell_diameter(triangulation)<<" std::pow(maximal_cell_diameter,2) "<<std::pow(GridTools::maximal_cell_diameter(triangulation),2)<<std::endl;
+
 #if GRADEDMESH
  double h_max = 2 * half_length/std::pow(2,n_refine);
  h_max = dim == 3 ? h_max * std::sqrt(3) :  h_max  * std::sqrt(2);
-pcout<<"h_max "<<h_max<<std::endl;
 
+ h_max = GridTools::maximal_cell_diameter(triangulation);
+ pcout<<"h_max "<<h_max<<std::endl;
  for (unsigned int i =n_refine; i <n_refine * 2; ++i)
     {
       typename Triangulation<dim>::active_cell_iterator
@@ -620,17 +621,29 @@ pcout<<"h_max "<<h_max<<std::endl;
       endc = triangulation.end();
    for (; cell != endc; ++cell)
         {
-        double r = distance_to_singularity<dim>(cell->center());
+        double r = distance_to_singularity<dim>(cell->center());//TODO nicht center, sondern inf or sup
+        
+
         //
-      if(cell->diameter() > h_max * std::pow(r,0.5) )
+      //if(cell->point_inside(nearest_point_on_singularity(cell->center())))//dieser Zelle enthält singularität, aber falsch, da schräge linien nicht beachtet
+      if(r <  GridTools::minimal_cell_diameter(triangulation)* 1.1) //TODO eigentlich wenn innerhalb der singularität celle
+      {
+        //std::cout<<"case 1"<<std::endl;
+        if(cell->diameter() >  std::pow(h_max,2))
+          cell->set_refine_flag();
+      }
+      else 
+      {
+        if(cell->diameter() > h_max * std::pow(r,0.5))// + cell->diameter()/2
         cell->set_refine_flag();
+      }
     //     else
 //std::cout<<"r "<<r<<" h_max * std::pow(r,0.5) "<<h_max * std::pow(r,0.5)<< " cell->diameter() " <<cell->diameter()<<std::endl;
         
         }
       triangulation.execute_coarsening_and_refinement();
     }
-int level_max = n_refine;
+
 //int level_min = std::numeric_limits<unsigned int >::max();
 {
  typename Triangulation<dim>::active_cell_iterator
@@ -645,10 +658,16 @@ int level_max = n_refine;
 pcout<<"level_max "<<level_max<<std::endl;
 }
 #endif
-#endif
+
+
+
+
+
+
 double minimal_cell_diameter = GridTools::minimal_cell_diameter(triangulation);
  double maximal_cell_diameter = GridTools::maximal_cell_diameter(triangulation);
- pcout<<"minimal_cell_diameter "<<minimal_cell_diameter<< " maximal_cell_diameter "<<maximal_cell_diameter<<std::endl;
+ h_min = minimal_cell_diameter;
+ pcout<<"minimal_cell_diameter "<<minimal_cell_diameter<< " maximal_cell_diameter "<<maximal_cell_diameter<<" std::pow(maximal_cell_diameter,2) "<<std::pow(maximal_cell_diameter,2)<<std::endl;
  #if MEMORY_CONSUMPTION
  pcout << "Memory consumption of triangulation: "
               << triangulation.memory_consumption() / (1024.0 * 1024.0) // Convert to MB
@@ -658,9 +677,10 @@ double minimal_cell_diameter = GridTools::minimal_cell_diameter(triangulation);
 			       
 				     pcout << "Total number of active cells (global): " << global_active_cells << std::endl;
 nof_cells = global_active_cells;
-/*GridOut grid_out;
-std::ofstream out("grid_Omega.vtk"); // Choose your preferred filename and format
-grid_out.write_vtk(triangulation, out);*/
+GridOut grid_out;
+std::string gradedMesh_string = GRADEDMESH ==1 ? "true" : "false";
+std::ofstream out("grid_Omega_gradedMesh_"+ gradedMesh_string +"_n_refine_"+std::to_string(n_refine)+ ".vtk"); // Choose your preferred filename and format
+grid_out.write_vtk(triangulation, out);
 
 
   Point<dim> corner1, corner2;
@@ -1500,7 +1520,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                                              Neumann_bc_function, VectorField, Potential);
             } else
             {
-                 std::cout<<rank_mpi<< " c " <<cell->index()<<" f "<<face->index()<<" Omega, boundary condition not implemented "<<std::endl;
+                 //std::cout<<rank_mpi<< " c " <<cell->index()<<" f "<<face->index()<<" Omega, boundary condition not implemented "<<std::endl;
                 //Assert(false, ExcNotImplemented());
             }
               
@@ -1723,7 +1743,7 @@ else
 
           if (face_omega->boundary_id() == Dirichlet) {
             double h = cell_omega->diameter();
-            std::cout<<rank_mpi << " c " <<cell_omega->index()<<" f "<<face_omega->index()<<" omega Dirichlet "<<std::endl;
+            //std::cout<<rank_mpi << " c " <<cell_omega->index()<<" f "<<face_omega->index()<<" omega Dirichlet "<<std::endl;
             assemble_Dirichlet_boundary_terms(
                 fe_face_values_omega, local_matrix_omega, local_vector_omega, h,
                 Dirichlet_bc_function_omega, VectorField_omega,
@@ -1740,7 +1760,7 @@ else
             }
           else
            {
-                std::cout<<rank_mpi << " c " <<cell_omega->index()<<" f "<<face_omega->index()<<" omega, boundary condition not implemented "<<std::endl;
+               // std::cout<<rank_mpi << " c " <<cell_omega->index()<<" f "<<face_omega->index()<<" omega, boundary condition not implemented "<<std::endl;
                 if(constructed_solution != 2)
                 Assert(false, ExcNotImplemented());
            } 
@@ -1866,7 +1886,7 @@ else
                face_no < GeometryInfo<dim>::faces_per_cell; face_no++) {
             typename DoFHandler<dim>::face_iterator face_test =
                 cell_test->face(face_no);
-            std::cout<<"c "<<cell_test<< " f "<<face_no<<std::endl;
+           // std::cout<<"c "<<cell_test<< " f "<<face_no<<std::endl;
             Point<dim - 1> quadrature_point_test_mapped_face =
                 mapping.project_real_point_to_unit_point_on_face(
                     cell_test, face_no, quadrature_point_test);
@@ -2737,8 +2757,8 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors(){
                                                       dim + 1);
     const ComponentSelectFunction<dim> vectorfield_mask(std::make_pair(0, dim),
                                                         dim + 1);
-    double alpha = 0.5;
-    const DistanceWeight<dim> distance_weight(alpha, radius, max_diameter); //, radius
+    double alpha = 1;
+    const DistanceWeight<dim> distance_weight(alpha, radius, h_min); //, radius
 
     const ProductFunction<dim> connected_function_potential(potential_mask,
                                                             distance_weight);
@@ -3161,7 +3181,7 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 */
 //----------cell_wise error ---------------
 
-/*
+
     DataOut<dim> data_out_error;
     data_out_error.attach_triangulation(triangulation);
     data_out_error.add_data_vector(cellwise_errors_Q, "Q");
@@ -3190,7 +3210,7 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
       }
 
 
-*/
+
    //-----omega-----------
  // std::cout << "omega solution" << std::endl;
  /*
@@ -3321,21 +3341,21 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   dimension_gap = dim - dim_omega;
   pcout << "geometric configuration "<<geo_conf <<"<< dim_Omega: "<< dim <<", dim_omega: "<<dim_omega<< " -> dimension_gap "<<dimension_gap<<std::endl; 
 rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
-  penalty = 50;
-  memory_consumption("start");
+  penalty =10;
+ // memory_consumption("start");
   make_grid();
-  memory_consumption("after  make_grid");
+ // memory_consumption("after  make_grid");
   make_dofs();
- memory_consumption("after make_dofs()");
+ //memory_consumption("after make_dofs()");
    assemble_system();
-  memory_consumption("after  assemble_system()");
+  //memory_consumption("after  assemble_system()");
 
   marked_vertices.clear();
 
 
    malloc_trim(0);
   solve();
-  memory_consumption("after solve()");
+ // memory_consumption("after solve()");
 
 
 
@@ -3343,8 +3363,8 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
 
   std::array<double, 4> results_array = compute_errors();
- output_results();
- 
+   output_results();
+  //std::array<double, 4> results_array;
   return results_array;
 }
 
@@ -3513,24 +3533,27 @@ int main(int argc, char *argv[]) {
 #endif
         for (unsigned int f = 0; f < solution_names.size(); f++) {
           myfile << solution_names[f] << "\n";
-          myfile << "refinement/p_degree; ";
+          myfile << "refinement; ";
           myfile << "diameter h;";
           myfile << "#cells;";
+          //myfile << "error;";
 
           csvfile << solution_names[f] << "\n";
-          csvfile << "refinement/p_degree;";
+          csvfile << "refinement;";
           csvfile << "diameter h;";
           csvfile << "#cells;";
+         // csvfile << "error;";
 
           std::cout << solution_names[f] << "\n";
-          std::cout << "refinement/p_degree;";
+          std::cout << "refinement;";
           std::cout << "diameter h;";
           std::cout << "#cells;";
+          //std::cout << "error;";
 
           for (unsigned int p = 0; p < p_degree_size; p++) {
-            myfile << p_degree[p] << ";";
-            csvfile << p_degree[p] << ";";
-            std::cout << p_degree[p] << ";";
+            myfile <<"error p="<< p_degree[p] << ";";
+            csvfile <<"error p="<< p_degree[p] << ";";
+            std::cout <<"error p="<< p_degree[p] << ";";
           }
           myfile << "\n";
           csvfile << "\n";
