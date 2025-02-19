@@ -621,8 +621,16 @@ pcout<<"refined++++++"<<std::endl;
       endc = triangulation.end();
    for (; cell != endc; ++cell)
         {
-        double r = distance_to_singularity<dim>(cell->center());//TODO nicht center, sondern inf or sup
-        
+        double r = 0, r_max = 0;
+        for(unsigned int i = 0; i < cell->n_vertices();i++)  
+        {
+          double r = distance_to_singularity<dim>(cell->vertex(i));//TODO nicht center, sondern inf or sup
+          if(r_max < r)
+            r_max = r;
+          
+        }
+          
+        r = r_max;
 
         //
       //if(cell->point_inside(nearest_point_on_singularity(cell->center())))//dieser Zelle enthält singularität, aber falsch, da schräge linien nicht beachtet
