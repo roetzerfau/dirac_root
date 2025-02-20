@@ -584,7 +584,7 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
   Point<dim> p1, p2;
 if (dim == 3) {
    p1 =
-      Point<dim>(2 * half_length, -half_length + offset, -half_length + offset);
+      Point<dim>(2*half_length, -half_length + offset, -half_length + offset);
    p2 =
       Point<dim>(0, half_length + offset, half_length + offset);
 }
@@ -597,23 +597,38 @@ if (dim == 3) {
  }
 
 pcout<<"grid extent, p1:  "<<p1 <<" p2: "<<p2<<std::endl;
+//std::vector< unsigned int > 	repetitions({std::pow(2,n_refine),std::pow(2,n_refine),3});
 std::vector< unsigned int > 	repetitions({1,1,1});
-GridGenerator::subdivided_hyper_rectangle(triangulation,repetitions,  p1, p2);
+GridGenerator::subdivided_hyper_rectangle(triangulation,repetitions,  p1, p2);//_with_simplices
  //GridGenerator::hyper_rectangle(triangulation,  p1, p2);
  
 #endif
 pcout<<"refined++++++"<<std::endl;
- triangulation.refine_global(n_refine);
+//triangulation.refine_global(n_refine);
+for (unsigned int i =0; i <n_refine; ++i)
+{
+  typename Triangulation<dim>::active_cell_iterator
+  cell = triangulation.begin_active(),
+  endc = triangulation.end();
+  for (; cell != endc; ++cell)
+  {
+    if(i == 0 )
+      cell->set_refine_flag();
+      else
+     cell->set_refine_flag(RefinementCase<dim>::cut_yz);
+  }
+  triangulation.execute_coarsening_and_refinement();
+}
  int level_max = n_refine;
- pcout<<"refined"<<std::endl;
+ pcout<<"refined global level "<<triangulation.n_global_levels()-1<<std::endl;
  pcout<<"maximal_cell_diameter "<<  GridTools::maximal_cell_diameter(triangulation)<<" std::pow(maximal_cell_diameter,2) "<<std::pow(GridTools::maximal_cell_diameter(triangulation),2)<<std::endl;
 
 #if GRADEDMESH
- double h_max = 2 * half_length/std::pow(2,n_refine);
- h_max = dim == 3 ? h_max * std::sqrt(3) :  h_max  * std::sqrt(2);
+ double h_max = 2 * half_length/std::pow(2,n_refine)* std::sqrt(2);
+ //h_max = dim == 3 ? h_max * std::sqrt(3) :  h_max  * std::sqrt(2);
 
- h_max = GridTools::maximal_cell_diameter(triangulation);
- pcout<<"h_max "<<h_max<<std::endl;
+ //double  h_max = GridTools::maximal_cell_diameter(triangulation);
+ pcout<<"h_max "<<h_max<<" level_max "<<level_max<<std::endl;
  for (unsigned int i =n_refine; i <n_refine * 2; ++i)
     {
       typename Triangulation<dim>::active_cell_iterator
@@ -632,18 +647,38 @@ pcout<<"refined++++++"<<std::endl;
           
         r = r_max;
 
-        //
+      //std::cout<<"level "<<cell->level()<<std::endl;
       //if(cell->point_inside(nearest_point_on_singularity(cell->center())))//dieser Zelle enthält singularität, aber falsch, da schräge linien nicht beachtet
-      if(r <  GridTools::minimal_cell_diameter(triangulation)* 1.1) //TODO eigentlich wenn innerhalb der singularität celle
+      
+      //if(r <  GridTools::minimal_cell_diameter(triangulation)* 1.1) //TODO eigentlich wenn innerhalb der singularität celle
+      if(r < 2 * half_length/std::pow(2,triangulation.n_global_levels()-1)* std::sqrt(2)*1.1)
       {
-        //std::cout<<"case 1"<<std::endl;
-        if(cell->diameter() >  std::pow(h_max,2))
-          cell->set_refine_flag();
+        if(2 * half_length/std::pow(2,cell->level())* std::sqrt(2) > std::pow(h_max,2))
+        //if(cell->diameter() >  std::pow(h_max,2))
+        {
+/*#if (dim == 3)
+      pcout<<"RefinementCase<dim>::cut_yz"<<std::endl;*/
+       cell->set_refine_flag(RefinementCase<dim>::cut_yz);//
+/*#else
+       cell->set_refine_flag();
+#endif*/
+
+        }
+
       }
       else 
       {
-        if(cell->diameter() > h_max * std::pow(r,0.5))// + cell->diameter()/2
-        cell->set_refine_flag();
+       if(2 * half_length/std::pow(2,cell->level())* std::sqrt(2) > h_max * std::pow(r,0.5))
+        //if(cell->diameter() > h_max * std::pow(r,0.5) )// factor um relation * 1.5
+        {
+        // std::cout<<"tst "<<(dim == 3)<<std::endl;
+/*#if dim == 3
+pcout<<"RefinementCase<dim>::cut_yz"<<std::endl;*/
+          cell->set_refine_flag(RefinementCase<dim>::cut_yz);//
+/*#else
+            cell->set_refine_flag();
+//#endif*/
+        }
       }
     //     else
 //std::cout<<"r "<<r<<" h_max * std::pow(r,0.5) "<<h_max * std::pow(r,0.5)<< " cell->diameter() " <<cell->diameter()<<std::endl;
@@ -685,6 +720,7 @@ double minimal_cell_diameter = GridTools::minimal_cell_diameter(triangulation);
 			       
 				     pcout << "Total number of active cells (global): " << global_active_cells << std::endl;
 nof_cells = global_active_cells;
+
 GridOut grid_out;
 std::string gradedMesh_string = GRADEDMESH ==1 ? "true" : "false";
 std::ofstream out("grid_Omega_gradedMesh_"+ gradedMesh_string +"_n_refine_"+std::to_string(n_refine)+ ".vtk"); // Choose your preferred filename and format
@@ -931,7 +967,7 @@ for (unsigned int i = 0; i < triangulation.n_vertices(); i++)
 #endif
 //malloc_trim(0);  // Force memory release
 
-
+pcout<<"ende make_grid"<<std::endl;
 }
 
 template <int dim, int dim_omega>
@@ -2151,7 +2187,7 @@ else
                         double z;
                         if(constructed_solution == 2)
                           z = 1;
-                        else if(constructed_solution == 2)
+                        else if(constructed_solution == 3)
                           z = (1 + quadrature_point_omega[0]);
                         else
                           z = 0;
@@ -2183,7 +2219,7 @@ else
                   double z;
                   if(constructed_solution == 2)
                     z = 1;
-                  else if (constructed_solution == 2)
+                  else if (constructed_solution == 3)
                     z = (1 + quadrature_point_omega[0]);
                   else 
                     z = 0;
@@ -2932,7 +2968,7 @@ completely_distributed_solution.block(1) = std::sqrt(std::pow(l2_norm_solution_o
 //completely_distributed_solution.block(1).print(std::cout);
 pcout<<"l2_norm_solution_omega "<<l2_norm_solution_omega<<" completely_distributed_solution.block(1) "<<completely_distributed_solution.block(1).l2_norm()<<std::endl;
 pcout<<"l2_norm_solution_Omega "<<l2_norm_solution_Omega<<" completely_distributed_solution.block(0) "<<completely_distributed_solution.block(0).l2_norm()<<std::endl;
-#if SOLVE_BLOCKWISE && COUPLED
+#if SOLVE_BLOCKWISE// && COUPLED
   pcout<<"solve blockwise"<<std::endl;
 #if A11SCHUR
 pcout<<"A11 Schur"<<std::endl;
@@ -3003,9 +3039,9 @@ TrilinosWrappers::PreconditionAMG preconditioner;
   system_matrix.block(1, 0).vmult(tmp, completely_distributed_solution.block(0));
   tmp *= -1;
   tmp += system_rhs.block(1);
- 
+ //if(COUPLED)
   A_inverse.vmult(completely_distributed_solution.block(1), tmp);
-
+//else
  // A_inverse.vmult(completely_distributed_solution.block(0), system_rhs.block(0));//unkoppled
 pcout << "Number of iterations: " << solver_control1.last_step() << std::endl;
 #endif
@@ -3353,9 +3389,9 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
  // memory_consumption("start");
   make_grid();
  // memory_consumption("after  make_grid");
-  make_dofs();
+ make_dofs();
  //memory_consumption("after make_dofs()");
-   assemble_system();
+  assemble_system();
   //memory_consumption("after  assemble_system()");
 
   marked_vertices.clear();
@@ -3371,7 +3407,7 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
 
   std::array<double, 4> results_array = compute_errors();
-   output_results();
+  output_results();
   //std::array<double, 4> results_array;
   return results_array;
 }
