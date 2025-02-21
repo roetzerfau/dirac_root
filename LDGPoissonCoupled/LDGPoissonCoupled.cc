@@ -145,7 +145,7 @@ const FEValuesExtractors::Scalar Potential(dimension_Omega);
 const double extent = 1;
 const double half_length =  is_omega_on_face ? std::sqrt(0.5) : std::sqrt(0.5-0.1);//0.5
 const double distance_tolerance = 10;
-const unsigned int N_quad_points = 3;
+const unsigned int N_quad_points = 2;
 const double reduction = 1e-8;
 const double tolerance = 1e-10;
 
@@ -616,7 +616,7 @@ if(dim == 3)
 {
  // pcout<<"dim == 3"<<std::endl;
  // pcout<<int(RefinementCase<dim>::cut_y)<< " " <<int(RefinementCase<dim>::cut_z)<<" "<<int(RefinementCase<dim>::cut_y | RefinementCase<dim>::cut_z)<<std::endl;
-    if(i == 0 || i == 1 )
+    if(i <= n_refine - refinement[0])
      cell->set_refine_flag();
     else
       cell->set_refine_flag(RefinementCase<dim>(6));//RefinementCase<dim>::cut_y | RefinementCase<dim>::cut_z
@@ -631,7 +631,7 @@ else
 }
  int level_max = n_refine;
  pcout<<"refined global level "<<triangulation.n_global_levels()-1<<std::endl;
- pcout<<"maximal_cell_diameter "<<  GridTools::maximal_cell_diameter(triangulation)<<" std::pow(maximal_cell_diameter,2) "<<std::pow(GridTools::maximal_cell_diameter(triangulation),2)<<std::endl;
+ pcout<<"3D maximal_cell_diameter "<<  GridTools::maximal_cell_diameter(triangulation)<<" std::pow(maximal_cell_diameter,2) "<<std::pow(GridTools::maximal_cell_diameter(triangulation),2)<<std::endl;
 
 #if GRADEDMESH
 #if ANISO
@@ -710,7 +710,7 @@ else
       triangulation.execute_coarsening_and_refinement();
     }
 
-//int level_min = std::numeric_limits<unsigned int >::max();
+unsigned int level_min = std::numeric_limits<unsigned int >::max();
 {
  typename Triangulation<dim>::active_cell_iterator
       cell = triangulation.begin_active(),
@@ -718,10 +718,10 @@ else
       for (; cell != endc; ++cell)
       {
         level_max = std::max(cell->level(), level_max);
-     //   level_min = std::min(cell->level(), level_min);
+        level_min = std::min((unsigned int)(cell->level()), level_min);
       }
        
-pcout<<"level_max "<<level_max<<std::endl;
+pcout<<"level_max "<<level_max<<" level_min "<<level_min<<std::endl;
 }
 #endif
 
@@ -733,7 +733,8 @@ pcout<<"level_max "<<level_max<<std::endl;
 double minimal_cell_diameter = GridTools::minimal_cell_diameter(triangulation);
  double maximal_cell_diameter = GridTools::maximal_cell_diameter(triangulation);
  h_min = minimal_cell_diameter;
- pcout<<"minimal_cell_diameter "<<minimal_cell_diameter<< " maximal_cell_diameter "<<maximal_cell_diameter<<" std::pow(maximal_cell_diameter,2) "<<std::pow(maximal_cell_diameter,2)<<std::endl;
+ pcout<<"2D minimal_cell_diameter "<<2 * half_length/std::pow(2,level_max)* std::sqrt(2)<< " maximal_cell_diameter "<<2 * half_length/std::pow(2,level_min)* std::sqrt(2)<<" std::pow(maximal_cell_diameter,2) "<<std::pow(2 * half_length/std::pow(2,level_min)* std::sqrt(2),2)<<std::endl;
+ pcout<<"3D minimal_cell_diameter "<<minimal_cell_diameter<< " maximal_cell_diameter "<<maximal_cell_diameter<<" std::pow(maximal_cell_diameter,2) "<<std::pow(maximal_cell_diameter,2)<<std::endl;
  #if MEMORY_CONSUMPTION
  pcout << "Memory consumption of triangulation: "
               << triangulation.memory_consumption() / (1024.0 * 1024.0) // Convert to MB
@@ -957,6 +958,8 @@ if(is_repartioned)
         cell_omega->face(face_no)->set_boundary_id(Dirichlet);
         else
         cell_omega->face(face_no)->set_boundary_id(NotDefined);
+
+        //cell_omega->face(face_no)->set_boundary_id(Dirichlet);
         //cell_omega->face(face_no)->set_boundary_id(Neumann);
       }
 
@@ -2285,13 +2288,15 @@ else
                     else
                       weight = weights_odd;
                   }
-                  weight = ((2.0 * numbers::PI * radius) / (nof_quad_points));
+                  //weight = ((2.0 * numbers::PI * radius) / (nof_quad_points));
                 } else {
-                  weight = 1;
-                  C_avag = 1;
+                  weight = 1.0;
+                  C_avag = 1.0;
                 }
-                //weight = 1.0 / nof_quad_points;
-                //C_avag = 1.0;
+                weight = 1.0;
+                C_avag = 1.0;
+               // weight = 1.0 / nof_quad_points;
+               // C_avag = 1.0;
                 unsigned int n_tr;
 #if TEST
               
