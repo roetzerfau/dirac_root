@@ -612,10 +612,20 @@ for (unsigned int i =0; i <n_refine; ++i)
   endc = triangulation.end();
   for (; cell != endc; ++cell)
   {
-    if(i == 0 )
+if(dim == 3)
+{
+ // pcout<<"dim == 3"<<std::endl;
+ // pcout<<int(RefinementCase<dim>::cut_y)<< " " <<int(RefinementCase<dim>::cut_z)<<" "<<int(RefinementCase<dim>::cut_y | RefinementCase<dim>::cut_z)<<std::endl;
+    if(i == 0 || i == 1 )
+     cell->set_refine_flag();
+    else
+      cell->set_refine_flag(RefinementCase<dim>(6));//RefinementCase<dim>::cut_y | RefinementCase<dim>::cut_z
+    
+     
+}
+else
       cell->set_refine_flag();
-      else
-     cell->set_refine_flag(RefinementCase<dim>::cut_yz);
+
   }
   triangulation.execute_coarsening_and_refinement();
 }
@@ -624,12 +634,16 @@ for (unsigned int i =0; i <n_refine; ++i)
  pcout<<"maximal_cell_diameter "<<  GridTools::maximal_cell_diameter(triangulation)<<" std::pow(maximal_cell_diameter,2) "<<std::pow(GridTools::maximal_cell_diameter(triangulation),2)<<std::endl;
 
 #if GRADEDMESH
+#if ANISO
  double h_max = 2 * half_length/std::pow(2,n_refine)* std::sqrt(2);
+#else
+double  h_max = GridTools::maximal_cell_diameter(triangulation);
+#endif 
  //h_max = dim == 3 ? h_max * std::sqrt(3) :  h_max  * std::sqrt(2);
 
- //double  h_max = GridTools::maximal_cell_diameter(triangulation);
+ //
  pcout<<"h_max "<<h_max<<" level_max "<<level_max<<std::endl;
- for (unsigned int i =n_refine; i <n_refine * 2; ++i)
+ for (unsigned int i =n_refine; i <n_refine * 3; ++i)
     {
       typename Triangulation<dim>::active_cell_iterator
       cell = triangulation.begin_active(),
@@ -646,38 +660,47 @@ for (unsigned int i =0; i <n_refine; ++i)
         }
           
         r = r_max;
-
+    
+    cell->clear_refine_flag();
+      
       //std::cout<<"level "<<cell->level()<<std::endl;
       //if(cell->point_inside(nearest_point_on_singularity(cell->center())))//dieser Zelle enthält singularität, aber falsch, da schräge linien nicht beachtet
-      
-      //if(r <  GridTools::minimal_cell_diameter(triangulation)* 1.1) //TODO eigentlich wenn innerhalb der singularität celle
+   
+      // //TODO eigentlich wenn innerhalb der singularität celle
+#if ANISO
       if(r < 2 * half_length/std::pow(2,triangulation.n_global_levels()-1)* std::sqrt(2)*1.1)
+#else
+      if(r <  GridTools::minimal_cell_diameter(triangulation)* 1.1)
+#endif
       {
+#if ANISO        
         if(2 * half_length/std::pow(2,cell->level())* std::sqrt(2) > std::pow(h_max,2))
-        //if(cell->diameter() >  std::pow(h_max,2))
+#else
+        if(cell->diameter() >  std::pow(h_max,2))
+#endif
         {
-/*#if (dim == 3)
-      pcout<<"RefinementCase<dim>::cut_yz"<<std::endl;*/
-       cell->set_refine_flag(RefinementCase<dim>::cut_yz);//
-/*#else
-       cell->set_refine_flag();
-#endif*/
+if(dim == 3)
+       cell->set_refine_flag(RefinementCase<dim>(RefinementCase<dim>::cut_y | RefinementCase<dim>::cut_z));
+else
+      cell->set_refine_flag();
+
 
         }
 
       }
       else 
       {
-       if(2 * half_length/std::pow(2,cell->level())* std::sqrt(2) > h_max * std::pow(r,0.5))
-        //if(cell->diameter() > h_max * std::pow(r,0.5) )// factor um relation * 1.5
+#if ANISO       
+        if(2 * half_length/std::pow(2,cell->level())* std::sqrt(2) > h_max * std::pow(r,0.5))
+#else
+        if(cell->diameter() > h_max * std::pow(r,0.5) )// factor um relation * 1.5
+#endif
         {
-        // std::cout<<"tst "<<(dim == 3)<<std::endl;
-/*#if dim == 3
-pcout<<"RefinementCase<dim>::cut_yz"<<std::endl;*/
-          cell->set_refine_flag(RefinementCase<dim>::cut_yz);//
-/*#else
-            cell->set_refine_flag();
-//#endif*/
+if(dim == 3)
+       cell->set_refine_flag(RefinementCase<dim>(RefinementCase<dim>::cut_y | RefinementCase<dim>::cut_z));
+else
+       cell->set_refine_flag();
+       
         }
       }
     //     else
@@ -3029,8 +3052,8 @@ const InverseMatrix A_inverse(system_matrix.block(1,1));
  SolverGMRES<TrilinosWrappers::MPI::Vector > solver(solver_control1);
 
 
-TrilinosWrappers::PreconditionAMG preconditioner;
-  TrilinosWrappers::PreconditionAMG::AdditionalData data;
+TrilinosWrappers::PreconditionILU preconditioner;
+  TrilinosWrappers::PreconditionILU::AdditionalData data;
   preconditioner.initialize(system_matrix.block(0, 0), data);
 
   solver.solve(schur_complement, completely_distributed_solution.block(0),schur_rhs, preconditioner);
@@ -3042,7 +3065,7 @@ TrilinosWrappers::PreconditionAMG preconditioner;
  //if(COUPLED)
   A_inverse.vmult(completely_distributed_solution.block(1), tmp);
 //else
- // A_inverse.vmult(completely_distributed_solution.block(0), system_rhs.block(0));//unkoppled
+  //A_inverse.vmult(completely_distributed_solution.block(0), system_rhs.block(0));//unkoppled
 pcout << "Number of iterations: " << solver_control1.last_step() << std::endl;
 #endif
 #else 

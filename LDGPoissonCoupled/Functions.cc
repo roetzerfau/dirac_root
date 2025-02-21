@@ -24,6 +24,8 @@
 #define CYLINDER 0
 #define A11SCHUR 0
 
+#define ANISO 1
+
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
 
@@ -43,7 +45,7 @@ constexpr unsigned int constructed_solution{2};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[4] = {2,3,4,5};//,7,8,9,10
+const unsigned int refinement[3] = {2,3,4};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
