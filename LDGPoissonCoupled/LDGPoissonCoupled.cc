@@ -680,7 +680,7 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
 #endif
         {
 if(dim == 3)
-       cell->set_refine_flag(RefinementCase<dim>(RefinementCase<dim>::cut_y | RefinementCase<dim>::cut_z));
+       cell->set_refine_flag(RefinementCase<dim>(6));//RefinementCase<dim>::cut_y | RefinementCase<dim>::cut_z
 else
       cell->set_refine_flag();
 
@@ -697,7 +697,7 @@ else
 #endif
         {
 if(dim == 3)
-       cell->set_refine_flag(RefinementCase<dim>(RefinementCase<dim>::cut_y | RefinementCase<dim>::cut_z));
+       cell->set_refine_flag(RefinementCase<dim>(6));//RefinementCase<dim>::cut_y | RefinementCase<dim>::cut_z
 else
        cell->set_refine_flag();
        
@@ -1910,8 +1910,32 @@ else
   
   if (geo_conf == GeometryConfiguration::TwoD_ZeroD) {
     pcout << "2D/0D" << std::endl;
-    Point<dim> quadrature_point_test(y_l, z_l);
+   
+
+    bool insideCell_test = true;
+    bool insideCell_trial = true;
+    
+    Point<dim> quadrature_point_trial;
+    Point<dim> quadrature_point_coupling(y_l, z_l);
+    Point<dim> normal_vector(0);
+
+    unsigned int nof_quad_points;
+    // weight
+    AVERAGE = true;
+    if (AVERAGE) {
+      nof_quad_points = N_quad_points;
+    } else {
+      nof_quad_points = 1;
+    }
+    std::vector<Point<dim>> quadrature_points_circle;
+    quadrature_points_circle = equidistant_points_on_circle<dim>(
+        quadrature_point_coupling, radius, normal_vector,
+        nof_quad_points);
+    Point<dim> quadrature_point_test = quadrature_point_coupling;
+
+
     std::vector<types::global_dof_index> local_dof_indices_test(dofs_per_cell);
+    std::vector<types::global_dof_index> local_dof_indices_trial(dofs_per_cell);
     // test function
     std::vector<double> my_quadrature_weights = {1};
     unsigned int n_te;
@@ -1940,7 +1964,6 @@ else
           
           cell_test->get_dof_indices(local_dof_indices_test);
 
-          //-------------face -----------------
           unsigned int n_ftest = 0;
           for (unsigned int face_no = 0;
                face_no < GeometryInfo<dim>::faces_per_cell; face_no++) {
@@ -1949,7 +1972,18 @@ else
             auto bounding_box = face_test->bounding_box();
             n_ftest += bounding_box.point_inside(quadrature_point_test) == true;
           }
-          if(n_ftest != 0)
+          if (n_ftest == 0) {
+            insideCell_test = true;
+            n_ftest = 1;
+          } else {
+            insideCell_test = false;
+              
+          }
+
+
+#if !COUPLED
+          //-------------face -----------------
+          if(!insideCell_test)
           {
             
           for (unsigned int face_no = 0;
@@ -1989,8 +2023,9 @@ else
             }
           }
           }
-          //-------------face ----------------- ende
-          if (n_ftest == 0) {
+          //-------------face ende----------------- 
+
+          if (insideCell_test) {
             std::cout<<"cell"<<std::endl;
             Point<dim> quadrature_point_test_mapped_cell =
                 mapping.transform_real_to_unit_cell(cell_test,
@@ -2019,8 +2054,116 @@ else
             constraints.distribute_local_to_global(
                 local_vector, local_dof_indices_test, system_rhs);
           }
+#endif
+#if COUPLED 
+      for (unsigned int q_avag = 0; q_avag < nof_quad_points;
+                   q_avag++) {
+       // Quadrature weights and points
+        quadrature_point_trial = quadrature_points_circle[q_avag];
+
+
+        double weight;
+        double C_avag;
+        if (AVERAGE) {
+          double perimeter = 2.0 * numbers::PI * radius;
+          double h_avag = perimeter / (nof_quad_points);
+
+          double weights_odd = 4.0 / 3.0 * h_avag;
+          double weights_even = 2.0 / 3.0 * h_avag;
+          double weights_first_last = h_avag / 3.0;
+
+          C_avag = 1.0 / (2.0 * numbers::PI);
+      
+          if (q_avag == 0)
+            weight = 2 * weights_first_last;
+          else {
+
+            if (q_avag % 2 == 0)
+              weight = weights_even;
+            else
+              weight = weights_odd;
+          }
+          //weight = ((2.0 * numbers::PI * radius) / (nof_quad_points));
+        } else {
+          weight = 1.0;
+          C_avag = 1.0;
+        }
+        weight = 1.0;
+        C_avag = 1.0;
+        // weight = 1.0 / nof_quad_points;
+        // C_avag = 1.0;
+        unsigned int n_tr;
+#if TEST
+    auto cell_trial_array = GridTools::find_all_active_cells_around_point(
+        mapping, dof_handler_Omega, quadrature_point_trial, 1e-10, marked_vertices);
+    n_te = cell_test_array.size();
+    std::cout << "cell_trial_array " << cell_trial_array.size() << std::endl;
+
+    for (auto cellpair : cell_trial_array)
+#else
+    auto cell_trial = GridTools::find_active_cell_around_point(
+        dof_handler_Omega, quadrature_point_trial);
+    n_te = 1;
+#endif
+   {
+#if TEST
+      auto cell_trial = cellpair.first;
+#endif
+
+
+      if (cell_trial != dof_handler_Omega.end())
+           if (cell_trial->is_locally_owned() &&
+                 cell_test->is_locally_owned()) 
+        {
+          
+          cell_trial->get_dof_indices(local_dof_indices_trial);
+           Point<dim> quadrature_point_trial_mapped_cell =
+            mapping.transform_real_to_unit_cell(
+                cell_trial, quadrature_point_trial);
+
+        std::vector<Point<dim>> my_quadrature_points_trial = {
+            quadrature_point_trial_mapped_cell};
+
+        const Quadrature<dim> my_quadrature_formula_trial(
+            my_quadrature_points_trial, my_quadrature_weights);
+
+        FEValues<dim> fe_values_coupling_trial(
+            fe_Omega, my_quadrature_formula_trial,
+            update_flags_coupling);
+        fe_values_coupling_trial.reinit(cell_trial);
+
+        unsigned int n_ftrial = 0;//wie viel faces der celle liegen am Punkt
+        std::vector<unsigned int> face_no_trial;
+        for (unsigned int face_no = 0;
+              face_no < GeometryInfo<dim>::faces_per_cell;
+              face_no++) {
+          typename DoFHandler<dim>::face_iterator face_trial =
+              cell_trial->face(face_no);
+          auto bounding_box = face_trial->bounding_box();
+          n_ftrial += bounding_box.point_inside(
+                          quadrature_point_trial,
+                          distance_tolerance) == true;
+          face_no_trial.push_back(face_no);
+        }
+        if (n_ftrial == 0) {
+          insideCell_trial = true;
+          n_ftrial = 1;
+
+        } else {
+          insideCell_trial = false;
+        }
+
+
+
+
+        
+
+        }
+   }
+#endif
         }
     }
+  }
   }
   if (geo_conf == GeometryConfiguration::TwoD_OneD || geo_conf == GeometryConfiguration::ThreeD_OneD) {
     pcout<<"2D/1D  3D/1D"<<std::endl;
@@ -3079,7 +3222,7 @@ pcout<<"solve full"<<std::endl;
 
 // Set up solver control
 //ReductionControl solver_control22(dof_handler_Omega.n_locally_owned_dofs(), tolerance * system_rhs.l2_norm(), reduction);
-SolverControl solver_control22(std::max((int)dof_handler_Omega.n_locally_owned_dofs(),1000), tolerance );
+SolverControl solver_control22(std::max((int)dof_handler_Omega.n_locally_owned_dofs(),1000), tolerance );//
 
 
 
@@ -3093,7 +3236,9 @@ preconditioner_block_0.initialize(system_matrix.block(0, 0));  // ILU for block 
 preconditioner_block_1.initialize(system_matrix.block(1, 1));  // ILU for block (1,1)
   SolverGMRES<TrilinosWrappers::MPI::Vector> solver(solver_control22);
   solver.solve(system_matrix.block(0,0), completely_distributed_solution.block(0), system_rhs.block(0),preconditioner_block_0);
-  solver.solve(system_matrix.block(1,1), completely_distributed_solution.block(1), system_rhs.block(1),preconditioner_block_1);
+  pcout<<"Solve Omega done"<<std::endl;
+  //solver.solve(system_matrix.block(1,1), completely_distributed_solution.block(1), system_rhs.block(1),preconditioner_block_1);
+  //pcout<<"Solve omega done"<<std::endl;
 }
 else
 {
@@ -3413,7 +3558,7 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   dimension_gap = dim - dim_omega;
   pcout << "geometric configuration "<<geo_conf <<"<< dim_Omega: "<< dim <<", dim_omega: "<<dim_omega<< " -> dimension_gap "<<dimension_gap<<std::endl; 
 rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
-  penalty =10;
+  penalty =5;
  // memory_consumption("start");
   make_grid();
  // memory_consumption("after  make_grid");
