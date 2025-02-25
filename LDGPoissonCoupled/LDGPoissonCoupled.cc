@@ -2037,7 +2037,8 @@ else
   
   if (geo_conf == GeometryConfiguration::TwoD_ZeroD) {
     pcout << "2D/0D" << std::endl;
-   
+    double beta = 2 * numbers::PI * radius;
+    //double beta = -(2 * numbers::PI)/(2 * numbers::PI + std::log( radius));
     FullMatrix<double> V_U_matrix_coupling(dofs_per_cell, dofs_per_cell);
     bool insideCell_test = true;
     bool insideCell_trial = true;
@@ -2154,7 +2155,7 @@ else
               for (unsigned int q = 0; q < n_face_points; ++q) {
                 for (unsigned int i = 0; i < dofs_this_cell; ++i) {
 #if COUPLED
-                  local_vector(i) += 2 * numbers::PI * radius *
+                  local_vector(i) += beta *
                       fe_values_coupling_test_face[Potential].value(i, q) * 1 /
                       (n_te * n_ftest);
 #else
@@ -2369,7 +2370,7 @@ else
                   psi_potential_trial =
                       fe_values_coupling_trial_face[Potential]
                           .value(j, 0);
-                V_U_matrix_coupling(i, j) +=  2 * numbers::PI * radius *
+                V_U_matrix_coupling(i, j) +=   beta *
                     psi_potential_test * psi_potential_trial *
                     C_avag * weight * 1 /
                     (n_tr * n_ftrial) * 1 / (n_te * n_ftest);
