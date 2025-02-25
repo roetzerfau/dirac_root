@@ -145,7 +145,7 @@ const FEValuesExtractors::Scalar Potential(dimension_Omega);
 const double extent = 1;
 const double half_length =  is_omega_on_face ? std::sqrt(0.5) : std::sqrt(0.5-0.1);//0.5
 const double distance_tolerance = 10;
-const unsigned int N_quad_points = 2;
+const unsigned int N_quad_points = 10;
 const double reduction = 1e-8;
 const double tolerance = 1e-10;
 
@@ -543,6 +543,7 @@ LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
   g = constructed_solution == 3 || constructed_solution == 2
           ? (2 * numbers::PI) / (2 * numbers::PI + std::log(radius))
           : 1;
+ // g = constructed_solution == 3 && COUPLED ?  g * radius : g; 
 }
 
 template <int dim, int dim_omega>
@@ -836,7 +837,7 @@ if( is_repartioned)
        
         if((p[0] == 0 || p[0] ==2 * half_length) && geo_conf == GeometryConfiguration::ThreeD_OneD && (constructed_solution == 3 || constructed_solution == 2)) {//
         cell->face(face_no)->set_boundary_id(Neumann);
-        // pcout<<"Neumann"<<std::endl;
+         //pcout<<"Neumann"<<std::endl;
         }
         else{
            cell->face(face_no)->set_boundary_id(Dirichlet);
@@ -1447,7 +1448,131 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
     }
     }
   }
+
+if(geo_conf == GeometryConfiguration::TwoD_ZeroD)  {
+  
+  pcout << "2D/0D" << std::endl;
+   
+  bool insideCell_test = true;
+  bool insideCell_trial = true;
+  
+  Point<dim> quadrature_point_trial;
+  Point<dim> quadrature_point_coupling(y_l, z_l);
+  Point<dim> normal_vector(0);
+
+  QGauss<dim> quadrature_formula(fe_Omega.degree + 1);
+  FEValues<dim> fe_values(fe_Omega, quadrature_formula, update_flags);
+  const Mapping<dim> &mapping = fe_values.get_mapping();
+
+  unsigned int nof_quad_points;
+  // weight
+  AVERAGE = true;
+  if (AVERAGE) {
+    nof_quad_points = N_quad_points;
+  } else {
+    nof_quad_points = 1;
+  }
+ // pcout<<"nof_quad_points "<<nof_quad_points<<std::endl;
+
+
+  std::vector<Point<dim>> quadrature_points_circle;
+  quadrature_points_circle = equidistant_points_on_circle<dim>(
+      quadrature_point_coupling, radius, normal_vector,
+      nof_quad_points);
+  Point<dim> quadrature_point_test = quadrature_point_coupling;
+
+
+  std::vector<types::global_dof_index> local_dof_indices_test(dofs_per_cell);
+  std::vector<types::global_dof_index> local_dof_indices_trial(dofs_per_cell);
+  // test function
+  std::vector<double> my_quadrature_weights = {1};
+  unsigned int n_te;
+#if TEST
+  auto cell_test_array = GridTools::find_all_active_cells_around_point(
+      mapping, dof_handler_Omega, quadrature_point_test, 1e-10, marked_vertices);
+  n_te = cell_test_array.size();
+  //std::cout << "cell_test_array " << cell_test_array.size() << std::endl;
+
+  for (auto cellpair : cell_test_array)
+#else
+  auto cell_test = GridTools::find_active_cell_around_point(
+      dof_handler_Omega, quadrature_point_test);
+  n_te = 1;
 #endif
+
+  {
+#if TEST
+    auto cell_test = cellpair.first;
+    //pcout<<cell_test<<std::endl;
+#endif
+
+
+    if (cell_test != dof_handler_Omega.end())
+      if (cell_test->is_locally_owned())
+      {
+        cell_test->get_dof_indices(local_dof_indices_test);
+
+    for (unsigned int q_avag = 0; q_avag < nof_quad_points;
+                 q_avag++) {
+     // Quadrature weights and points
+      quadrature_point_trial = quadrature_points_circle[q_avag];
+
+#if TEST
+  auto cell_trial_array = GridTools::find_all_active_cells_around_point(
+      mapping, dof_handler_Omega, quadrature_point_trial, 1e-10, marked_vertices);
+  n_te = cell_test_array.size();
+  //std::cout << "cell_trial_array " << cell_trial_array.size() << std::endl;
+
+  for (auto cellpair : cell_trial_array)
+#else
+  auto cell_trial = GridTools::find_active_cell_around_point(
+      dof_handler_Omega, quadrature_point_trial);
+  n_te = 1;
+#endif
+ {
+#if TEST
+    auto cell_trial = cellpair.first;
+  //  pcout<<"cell_trial " <<cell_trial<<std::endl;
+#endif
+
+
+    if (cell_trial != dof_handler_Omega.end())
+         if (cell_trial->is_locally_owned() &&
+               cell_test->is_locally_owned()) 
+      {
+        
+        cell_trial->get_dof_indices(local_dof_indices_trial);
+
+          // V_U_matrix_coupling
+          for (unsigned int i = 0; i < dofs_per_cell; i++) {
+            for (unsigned int j = 0; j < dofs_per_cell; j++) {
+              sp_block.add(local_dof_indices_test[i],
+                local_dof_indices_trial[j]);
+             
+            }
+          }
+
+        }//if cell_trial
+        else 
+        {
+          std::cout<<"düdüm1 - assem"<<std::endl;
+          error_flag = 1;
+        }
+      
+    }//cell_trial
+
+
+
+      
+
+      }//nof_quad_points
+ } //if cell_test
+//#endif
+      }// for cell_test_array
+  }
+
+
+  #endif
  MPI_Allreduce(&error_flag, &global_error_flag, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
 if (global_error_flag) {
        // printf("Process exiting function due to global error.\n");
@@ -1911,7 +2036,7 @@ else
   if (geo_conf == GeometryConfiguration::TwoD_ZeroD) {
     pcout << "2D/0D" << std::endl;
    
-
+    FullMatrix<double> V_U_matrix_coupling(dofs_per_cell, dofs_per_cell);
     bool insideCell_test = true;
     bool insideCell_trial = true;
     
@@ -1932,6 +2057,7 @@ else
         quadrature_point_coupling, radius, normal_vector,
         nof_quad_points);
     Point<dim> quadrature_point_test = quadrature_point_coupling;
+    //std::cout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
 
 
     std::vector<types::global_dof_index> local_dof_indices_test(dofs_per_cell);
@@ -1943,7 +2069,7 @@ else
     auto cell_test_array = GridTools::find_all_active_cells_around_point(
         mapping, dof_handler_Omega, quadrature_point_test, 1e-10, marked_vertices);
     n_te = cell_test_array.size();
-    std::cout << "cell_test_array " << cell_test_array.size() << std::endl;
+   // std::cout << "cell_test_array " << cell_test_array.size() << std::endl;
 
     for (auto cellpair : cell_test_array)
 #else
@@ -1955,13 +2081,14 @@ else
     {
 #if TEST
       auto cell_test = cellpair.first;
+    //  pcout<<"cell_test "<<cell_test<<std::endl;
 #endif
 
 
       if (cell_test != dof_handler_Omega.end())
         if (cell_test->is_locally_owned())
         {
-          
+          std::vector<unsigned int> face_no_test;
           cell_test->get_dof_indices(local_dof_indices_test);
 
           unsigned int n_ftest = 0;
@@ -1971,6 +2098,7 @@ else
                 cell_test->face(face_no);
             auto bounding_box = face_test->bounding_box();
             n_ftest += bounding_box.point_inside(quadrature_point_test) == true;
+            face_no_test.push_back(face_no);
           }
           if (n_ftest == 0) {
             insideCell_test = true;
@@ -1980,8 +2108,18 @@ else
               
           }
 
+          Point<dim> quadrature_point_test_mapped_cell =
+          mapping.transform_real_to_unit_cell(cell_test,
+                                              quadrature_point_test);
 
-#if !COUPLED
+      std::vector<Point<dim>> my_quadrature_points_test = {
+          quadrature_point_test_mapped_cell};
+      const Quadrature<dim> my_quadrature_formula_test(
+          my_quadrature_points_test, my_quadrature_weights);
+      FEValues<dim> fe_values_coupling_test(
+          fe_Omega, my_quadrature_formula_test, update_flags_coupling);
+      fe_values_coupling_test.reinit(cell_test);
+//#if !COUPLED
           //-------------face -----------------
           if(!insideCell_test)
           {
@@ -2013,9 +2151,15 @@ else
          
               for (unsigned int q = 0; q < n_face_points; ++q) {
                 for (unsigned int i = 0; i < dofs_this_cell; ++i) {
+#if COUPLED
+                  local_vector(i) += 2 * numbers::PI * radius *
+                      fe_values_coupling_test_face[Potential].value(i, q) * 1 /
+                      (n_te * n_ftest);
+#else
                   local_vector(i) +=
                       fe_values_coupling_test_face[Potential].value(i, q) * 1 /
                       (n_te * n_ftest);
+#endif
                 }
               }
               constraints.distribute_local_to_global(
@@ -2026,7 +2170,7 @@ else
           //-------------face ende----------------- 
 
           if (insideCell_test) {
-            std::cout<<"cell"<<std::endl;
+         //   std::cout<<"cell"<<std::endl;
             Point<dim> quadrature_point_test_mapped_cell =
                 mapping.transform_real_to_unit_cell(cell_test,
                                                     quadrature_point_test);
@@ -2054,12 +2198,14 @@ else
             constraints.distribute_local_to_global(
                 local_vector, local_dof_indices_test, system_rhs);
           }
-#endif
+//#endif
 #if COUPLED 
+// TODO right hand side
       for (unsigned int q_avag = 0; q_avag < nof_quad_points;
                    q_avag++) {
        // Quadrature weights and points
         quadrature_point_trial = quadrature_points_circle[q_avag];
+        //std::cout<<"quadrature_point_trial "<<quadrature_point_trial<<std::endl;
 
 
         double weight;
@@ -2088,26 +2234,28 @@ else
           weight = 1.0;
           C_avag = 1.0;
         }
-        weight = 1.0;
+        //weight = 1.0;
         C_avag = 1.0;
-        // weight = 1.0 / nof_quad_points;
+        weight = 1.0 / nof_quad_points;
         // C_avag = 1.0;
         unsigned int n_tr;
+        //std::cout<<"C_avag " << C_avag << " weight " <<weight <<std::endl;
 #if TEST
     auto cell_trial_array = GridTools::find_all_active_cells_around_point(
         mapping, dof_handler_Omega, quadrature_point_trial, 1e-10, marked_vertices);
-    n_te = cell_test_array.size();
-    std::cout << "cell_trial_array " << cell_trial_array.size() << std::endl;
+    n_tr= cell_trial_array.size();
+   // std::cout << "cell_trial_array " << cell_trial_array.size() << std::endl;
 
     for (auto cellpair : cell_trial_array)
 #else
     auto cell_trial = GridTools::find_active_cell_around_point(
         dof_handler_Omega, quadrature_point_trial);
-    n_te = 1;
+    n_tr = 1;
 #endif
    {
 #if TEST
       auto cell_trial = cellpair.first;
+   //  pcout<<"cell_trial " <<cell_trial<<std::endl;
 #endif
 
 
@@ -2115,18 +2263,18 @@ else
            if (cell_trial->is_locally_owned() &&
                  cell_test->is_locally_owned()) 
         {
-          
           cell_trial->get_dof_indices(local_dof_indices_trial);
+
            Point<dim> quadrature_point_trial_mapped_cell =
             mapping.transform_real_to_unit_cell(
                 cell_trial, quadrature_point_trial);
-
+               
         std::vector<Point<dim>> my_quadrature_points_trial = {
             quadrature_point_trial_mapped_cell};
-
+           
         const Quadrature<dim> my_quadrature_formula_trial(
             my_quadrature_points_trial, my_quadrature_weights);
-
+          
         FEValues<dim> fe_values_coupling_trial(
             fe_Omega, my_quadrature_formula_trial,
             update_flags_coupling);
@@ -2145,6 +2293,7 @@ else
                           distance_tolerance) == true;
           face_no_trial.push_back(face_no);
         }
+
         if (n_ftrial == 0) {
           insideCell_trial = true;
           n_ftrial = 1;
@@ -2153,6 +2302,85 @@ else
           insideCell_trial = false;
         }
 
+ //std::cout<<"n_tr "<<n_tr <<" n_ftrial "<<n_ftrial<<" n_te "<< n_te <<" n_ftest "<< n_ftest<<std::endl;
+        for (unsigned int ftest = 0; ftest < n_ftest; ftest++) {
+
+          //std::cout<<"face_no_test[ftest] "<<face_no_test[ftest] <<std::endl;
+          Point<dim - 1> quadrature_point_test_mapped_face =
+              mapping.project_real_point_to_unit_point_on_face(
+                  cell_test, face_no_test[ftest],
+                  quadrature_point_test);
+                  
+          std::vector<Point<dim - 1>> quadrature_point_test_face =
+              {quadrature_point_test_mapped_face};
+
+          const Quadrature<dim - 1> my_quadrature_formula_test(
+              quadrature_point_test_face, my_quadrature_weights);
+
+          FEFaceValues<dim> fe_values_coupling_test_face(
+              fe_Omega, my_quadrature_formula_test,
+              update_flags_coupling);
+          fe_values_coupling_test_face.reinit(
+              cell_test, face_no_test[ftest]);
+
+          for (unsigned int ftrial = 0; ftrial < n_ftrial;
+               ftrial++) {
+            Point<dim - 1> quadrature_point_trial_mapped_face =
+                mapping.project_real_point_to_unit_point_on_face(
+                    cell_trial, face_no_trial[ftrial],
+                    quadrature_point_trial);
+
+            std::vector<Point<dim - 1>>
+                quadrature_point_trial_face = {
+                    quadrature_point_trial_mapped_face};
+            const Quadrature<dim - 1> my_quadrature_formula_trial(
+                quadrature_point_trial_face,
+                my_quadrature_weights);
+            FEFaceValues<dim> fe_values_coupling_trial_face(
+                fe_Omega, my_quadrature_formula_trial,
+                update_flags_coupling);
+            fe_values_coupling_trial_face.reinit(
+                cell_trial, face_no_trial[ftest]);
+
+            V_U_matrix_coupling = 0;
+
+            double psi_potential_test;
+            double psi_potential_trial;
+           
+            // V_U_matrix_coupling
+            for (unsigned int i = 0; i < dofs_per_cell; i++) {
+              if (insideCell_test)
+                psi_potential_test =
+                    fe_values_coupling_test[Potential].value(i,
+                                                             0);
+              else
+                psi_potential_test =
+                    fe_values_coupling_test_face[Potential].value(
+                        i, 0);
+
+              for (unsigned int j = 0; j < dofs_per_cell; j++) {
+                if (insideCell_trial)
+                  psi_potential_trial =
+                      fe_values_coupling_trial[Potential].value(
+                          j, 0);
+                else
+                  psi_potential_trial =
+                      fe_values_coupling_trial_face[Potential]
+                          .value(j, 0);
+                V_U_matrix_coupling(i, j) +=  2 * numbers::PI * radius *
+                    psi_potential_test * psi_potential_trial *
+                    C_avag * weight * 1 /
+                    (n_tr * n_ftrial) * 1 / (n_te * n_ftest);
+              }
+            }
+            constraints.distribute_local_to_global(
+                V_U_matrix_coupling, local_dof_indices_test,
+                local_dof_indices_trial, system_matrix);
+
+          }
+        }
+      }else
+        std::cout<<"düdüm1 - assem"<<std::endl;
 
 
 
@@ -2164,7 +2392,7 @@ else
         }
     }
   }
-  }
+  
   if (geo_conf == GeometryConfiguration::TwoD_OneD || geo_conf == GeometryConfiguration::ThreeD_OneD) {
     pcout<<"2D/1D  3D/1D"<<std::endl;
     std::vector<types::global_dof_index> local_dof_indices_test(dofs_per_cell);

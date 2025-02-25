@@ -45,12 +45,13 @@ constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[5] = {1,2,3,4,5};//,7,8,9,10
+const unsigned int refinement[4] = {2,3,4,5};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
 const double radii[n_r] = {  0.01};
+
 const bool lumpedAverages[n_LA] = {false};//TODO bei punkt wuelle noch berücksichtnge
 
 template <int dim> double distance(Point<dim> point1, Point<dim> point2) {
@@ -453,6 +454,16 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
      {
       if(GeometryConfiguration::TwoD_ZeroD == geo_conf)
       {
+#if COUPLED
+    if(r!= 0)
+    {
+    values(0) =  radii[0]/(1- radii[0]*  std::log(radii[0])) * (x/std::pow(r,2)); //Q 
+    values(1) =  radii[0]/(1- radii[0]*  std::log(radii[0])) * (y/std::pow(r,2)); // Q   
+    values(2) = - radii[0]/(1- radii[0]*  std::log(radii[0])) *  std::log(r); // U   
+    }
+    else
+      values(2) = 1 ;
+#else
     if(r!= 0)
     {
     values(0) = 1/(2*numbers::PI) * (x/std::pow(r,2)); //Q 
@@ -461,8 +472,8 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     }
     else
       values(2) = 1 ;
-
-     }
+#endif
+  }
   }
     break;
   }
