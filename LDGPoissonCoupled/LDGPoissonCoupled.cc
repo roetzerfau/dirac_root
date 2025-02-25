@@ -142,8 +142,9 @@ const FEValuesExtractors::Vector VectorField(0);
 const FEValuesExtractors::Scalar Potential(dimension_Omega);
 
 
-const double extent = 1;
-const double half_length =  is_omega_on_face ? std::sqrt(0.5) : std::sqrt(0.5-0.1);//0.5
+const double extent = 1.0;
+const double alpha = 1.0;
+const double half_length =  is_omega_on_face ? std::sqrt(0.5)-0.00001 : std::sqrt(0.5-0.1);//0.5
 const double distance_tolerance = 10;
 const unsigned int N_quad_points = 10;
 const double reduction = 1e-8;
@@ -668,14 +669,15 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
       //if(cell->point_inside(nearest_point_on_singularity(cell->center())))//dieser Zelle enthält singularität, aber falsch, da schräge linien nicht beachtet
    
       // //TODO eigentlich wenn innerhalb der singularität celle
+    double mu = alpha/(degree + 1);
 #if ANISO
-      if(r < 2 * half_length/std::pow(2,triangulation.n_global_levels()-1)* std::sqrt(2)*1.1)
+      if(r < 2 * half_length/std::pow(2,triangulation.n_global_levels()-1)* std::sqrt(2)*1.1)//innere Bereich
 #else
       if(r <  GridTools::minimal_cell_diameter(triangulation)* 1.1)
 #endif
       {
 #if ANISO        
-        if(2 * half_length/std::pow(2,cell->level())* std::sqrt(2) > std::pow(h_max,2))
+        if(2 * half_length/std::pow(2,cell->level())* std::sqrt(2) > std::pow(h_max,1.0/mu))  
 #else
         if(cell->diameter() >  std::pow(h_max,2))
 #endif
@@ -689,10 +691,10 @@ else
         }
 
       }
-      else 
+      else  //äußerer Bereich
       {
 #if ANISO       
-        if(2 * half_length/std::pow(2,cell->level())* std::sqrt(2) > h_max * std::pow(r,0.5))
+        if(2 * half_length/std::pow(2,cell->level())* std::sqrt(2) > h_max * std::pow(r,1 - mu)) 
 #else
         if(cell->diameter() > h_max * std::pow(r,0.5) )// factor um relation * 1.5
 #endif
@@ -2664,9 +2666,9 @@ else
                   weight = 1.0;
                   C_avag = 1.0;
                 }
-                weight = 1.0;
+                //weight = 1.0;
                 C_avag = 1.0;
-               // weight = 1.0 / nof_quad_points;
+                weight = 1.0 / nof_quad_points;
                // C_avag = 1.0;
                 unsigned int n_tr;
 #if TEST
@@ -3200,7 +3202,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors(){
                                                       dim + 1);
     const ComponentSelectFunction<dim> vectorfield_mask(std::make_pair(0, dim),
                                                         dim + 1);
-    double alpha = 1;
+    
     const DistanceWeight<dim> distance_weight(alpha, radius, h_min); //, radius
 
     const ProductFunction<dim> connected_function_potential(potential_mask,
@@ -4016,7 +4018,6 @@ int main(int argc, char *argv[]) {
               if (r != 0) {
                 const double rate =
                     std::log2(results[p][r - 1][f] / results[p][r][f]);
-                myfile << " (" << rate << ")";
                 myfile << " (" << rate << ")";
                 csvfile << " (" << rate << ")";
                 std::cout << " (" << rate << ")";
