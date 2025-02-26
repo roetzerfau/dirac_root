@@ -144,7 +144,7 @@ const FEValuesExtractors::Scalar Potential(dimension_Omega);
 
 const double extent = 1.0;
 const double alpha = 1.0;
-const double half_length =  is_omega_on_face ? std::sqrt(0.5)-0.00001 : std::sqrt(0.5-0.1);//0.5
+const double half_length =  is_omega_on_face ? std::sqrt(0.5): std::sqrt(0.5-0.1);//0.5
 const double distance_tolerance = 10;
 const unsigned int N_quad_points = 10;
 const double reduction = 1e-8;
@@ -544,7 +544,7 @@ LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
   g = constructed_solution == 3 || constructed_solution == 2
           ? (2 * numbers::PI) / (2 * numbers::PI + std::log(radius))
           : 1;
- // g = constructed_solution == 3 && COUPLED ?  g * radius : g; 
+  g =  (2 * numbers::PI) * radius; 
 }
 
 template <int dim, int dim_omega>
@@ -2037,8 +2037,11 @@ else
   
   if (geo_conf == GeometryConfiguration::TwoD_ZeroD) {
     pcout << "2D/0D" << std::endl;
+#if PAPER 
     double beta = 2 * numbers::PI * radius;
-    //double beta = -(2 * numbers::PI)/(2 * numbers::PI + std::log( radius));
+#else
+    double beta = (-2 * numbers::PI)/(2 * numbers::PI + std::log( radius));
+#endif
     FullMatrix<double> V_U_matrix_coupling(dofs_per_cell, dofs_per_cell);
     bool insideCell_test = true;
     bool insideCell_trial = true;
@@ -2376,7 +2379,7 @@ else
                     (n_tr * n_ftrial) * 1 / (n_te * n_ftest);
               }
             }
-            constraints.distribute_local_to_global(
+           constraints.distribute_local_to_global(
                 V_U_matrix_coupling, local_dof_indices_test,
                 local_dof_indices_trial, system_matrix);
 

@@ -13,9 +13,9 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 1
+#define COUPLED 0
 #define TEST 1
-#define SOLVE_BLOCKWISE 0
+#define SOLVE_BLOCKWISE 1
 #define GRADEDMESH 1
 #define MEMORY_CONSUMPTION 0
 
@@ -25,6 +25,7 @@
 #define A11SCHUR 0
 
 #define ANISO 1
+#define PAPER 0
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
@@ -39,18 +40,18 @@ enum GeometryConfiguration
 const bool is_omega_on_face = true;
 constexpr double y_l = is_omega_on_face ? 0.0 : 0.01;
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.01;
-constexpr unsigned int geo_conf{0};
+constexpr unsigned int geo_conf{2};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
-constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
+constexpr unsigned int constructed_solution{2};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
 
 
 
-const unsigned int refinement[6] = {2,3,4,5,6,7};//,7,8,9,10
-const unsigned int p_degree[2] = {1,2};
+const unsigned int refinement[3] = {2,3,4};//,7,8,9,10
+const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
-const double radii[n_r] = {  0.01};
+const double radii[n_r] = {0.01};
 
 const bool lumpedAverages[n_LA] = {false};//TODO bei punkt wuelle noch berücksichtnge
 
@@ -403,6 +404,11 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
 
   values = 0;
   double r =  distance_to_singularity<dim>(p);
+#if PAPER
+double beta = radii[0]/(1- radii[0]*  std::log(radii[0])) ;
+#else
+ double beta = 1.0/(2*numbers::PI) ;
+#endif
   if(r > (1 + 0.01))
   std::cout<<"FALSCH!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!   "<<r<<std::endl;
   switch (constructed_solution) {
@@ -427,6 +433,16 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
   {
     if(dim==3)
     {
+#if COUPLED
+  if (r != 0) {
+    values(0) =0; //Q 
+    values(1) = beta * (y/std::pow(r,2)); // Q
+    values(2) = beta * (z/std::pow(r,2)); //Q
+    values(3) = - beta * std::log(r); // U  
+  } else {
+    values(3) = 1  ; // U
+  }
+#else
     if (r != 0) {
       values(0) =0; //Q 
        values(1) = 1/(2*numbers::PI) * (y/std::pow(r,2)); // Q
@@ -435,6 +451,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     } else {
       values(3) = 1  ; // U
     }
+#endif
      }
      break;
   }
@@ -442,10 +459,10 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     if(dim==3)//
     {
     if (r != 0) {
-      values(0) = 1/(2*numbers::PI) * std::log(r); //Q 
-       values(1) = (1+x)/(2*numbers::PI) * (y/std::pow(r,2)); // Q
-      values(2) = (1+x)/(2*numbers::PI) * (z/std::pow(r,2)); //Q
-      values(3) = -(1+x) / (2 * numbers::PI) * std::log(r); // U  
+      values(0) = beta * std::log(r); //Q 
+       values(1) = (1+x) * beta * (y/std::pow(r,2)); // Q
+      values(2) = (1+x)* beta * (z/std::pow(r,2)); //Q
+      values(3) = -(1+x) *beta* std::log(r); // U  
     } else {
       values(3) = 1 + x ; // U
     }
@@ -457,8 +474,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
 #if COUPLED
     if(r!= 0)
     {
-      double beta = radii[0]/(1- radii[0]*  std::log(radii[0])) ;
-      //double beta = 1/(2*numbers::PI) ;
+
     values(0) = beta * (x/std::pow(r,2)); //Q 
     values(1) =  beta * (y/std::pow(r,2)); // Q   
     values(2) = - beta *  std::log(r); // U   
