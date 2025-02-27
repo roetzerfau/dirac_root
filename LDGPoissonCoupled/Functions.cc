@@ -13,9 +13,9 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 1
+#define COUPLED 0
 #define TEST 1
-#define SOLVE_BLOCKWISE 1
+#define SOLVE_BLOCKWISE 0
 #define GRADEDMESH 1
 #define MEMORY_CONSUMPTION 0
 
@@ -429,9 +429,9 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     {
     if (r != 0) {
       values(0) =0; //Q 
-       values(1) = 1/(2*numbers::PI) * (y/std::pow(r,2)); // Q
-      values(2) = 1/(2*numbers::PI) * (z/std::pow(r,2)); //Q
-      values(3) = -1 / (2 * numbers::PI) * std::log(r); // U  
+       values(1) = 1.0/(2*numbers::PI) * (y/std::pow(r,2)); // Q
+      values(2) = 1.0/(2*numbers::PI) * (z/std::pow(r,2)); //Q
+      values(3) = -1.0 / (2 * numbers::PI) * std::log(r); // U  
     } else {
       values(3) = 1  ; // U
     }
@@ -442,10 +442,10 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     if(dim==3)//
     {
     if (r != 0) {
-      values(0) = 1/(2*numbers::PI) * std::log(r); //Q 
-       values(1) = (1+x) * 1/(2*numbers::PI) * (y/std::pow(r,2)); // Q
-      values(2) = (1+x)* 1/(2*numbers::PI) * (z/std::pow(r,2)); //Q
-      values(3) = -(1+x) * 1/(2*numbers::PI) * std::log(r); // U  
+      values(0) = 1.0/(2*numbers::PI) * std::log(r); //Q 
+       values(1) = (1.0+x) /(2*numbers::PI) * (y/std::pow(r,2)); // Q
+      values(2) = (1.0+x)/(2*numbers::PI) * (z/std::pow(r,2)); //Q
+      values(3) = -(1.0+x)/(2*numbers::PI) * std::log(r); // U  
     } else {
       values(3) = 1 + x ; // U
     }
