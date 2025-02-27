@@ -13,9 +13,9 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 0
+#define COUPLED 1
 #define TEST 1
-#define SOLVE_BLOCKWISE 0
+#define SOLVE_BLOCKWISE 1
 #define GRADEDMESH 1
 #define MEMORY_CONSUMPTION 0
 
@@ -41,11 +41,11 @@ constexpr double y_l = is_omega_on_face ? 0.0 : 0.01;
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.01;
 constexpr unsigned int geo_conf{2};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
-constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
+constexpr unsigned int constructed_solution{2};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
 
 
 
-const unsigned int refinement[4] = {1,2,3,4};//,7,8,9,10
+const unsigned int refinement[6] = {1,2,3,4,5,6};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;

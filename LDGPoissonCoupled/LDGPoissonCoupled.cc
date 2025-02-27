@@ -604,9 +604,9 @@ GridGenerator::subdivided_hyper_rectangle(triangulation,repetitions,  p1, p2);//
  //GridGenerator::hyper_rectangle(triangulation,  p1, p2);
  
 #endif
-pcout<<"refined++++++"<<std::endl;
-//triangulation.refine_global(n_refine);
-for (unsigned int i =0; i <n_refine; ++i)
+pcout<<"refined++++++ "<<n_refine <<std::endl;
+triangulation.refine_global(n_refine);
+/*for (unsigned int i =0; i <n_refine; ++i)
 {
   typename Triangulation<dim>::active_cell_iterator
   cell = triangulation.begin_active(),
@@ -629,11 +629,11 @@ else
 
   }
   triangulation.execute_coarsening_and_refinement();
-}
+}*/
  int level_max = n_refine;
  pcout<<"refined global level "<<triangulation.n_global_levels()-1<<std::endl;
  pcout<<"3D maximal_cell_diameter "<<  GridTools::maximal_cell_diameter(triangulation)<<" std::pow(maximal_cell_diameter,2) "<<std::pow(GridTools::maximal_cell_diameter(triangulation),2)<<std::endl;
-
+unsigned int refine_omega =  n_refine;//n_refine - refinement[0] + 1;
 #if GRADEDMESH
 #if ANISO
  double h_max = 2 * half_length/std::pow(2,n_refine)* std::sqrt(2);
@@ -712,6 +712,9 @@ else
       triangulation.execute_coarsening_and_refinement();
     }
 
+
+#endif
+
 unsigned int level_min = std::numeric_limits<unsigned int >::max();
 {
  typename Triangulation<dim>::active_cell_iterator
@@ -725,9 +728,6 @@ unsigned int level_min = std::numeric_limits<unsigned int >::max();
        
 pcout<<"level_max "<<level_max<<" level_min "<<level_min<<std::endl;
 }
-#endif
-
-
 
 
 
@@ -945,7 +945,7 @@ if(is_repartioned)
     if(dim == 3)
     GridGenerator::hyper_cube(triangulation_omega,0 ,  2*half_length);
 
-  triangulation_omega.refine_global(level_max);
+  triangulation_omega.refine_global(refine_omega);//level_max
 
  typename DoFHandler<dim_omega>::active_cell_iterator
         cell_omega = dof_handler_omega.begin_active(),
@@ -3663,7 +3663,7 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 
    //-----omega-----------
  // std::cout << "omega solution" << std::endl;
- /*
+
   std::vector<std::string> solution_names_omega;
   solution_names_omega.emplace_back("q");
   solution_names_omega.emplace_back("u");
@@ -3699,7 +3699,7 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
         std::ofstream master_output(folder_name +"solution_omega.pvtu");
         data_out_omega.write_pvtu_record(master_output, filenames);
       }
-*/
+
 
 
 
