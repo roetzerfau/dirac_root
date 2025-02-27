@@ -2041,9 +2041,9 @@ else
   if (geo_conf == GeometryConfiguration::TwoD_ZeroD) {
     pcout << "2D/0D" << std::endl;
 #if COUPLED 
-    double beta = 2 * numbers::PI * radius;
+    double beta =(2 * numbers::PI)/(2 * numbers::PI + std::log( radius));// 2 * numbers::PI * radius;
 #else
-    double beta = (-2 * numbers::PI)/(2 * numbers::PI + std::log( radius));
+   // double beta = 
 #endif
     FullMatrix<double> V_U_matrix_coupling(dofs_per_cell, dofs_per_cell);
     bool insideCell_test = true;
