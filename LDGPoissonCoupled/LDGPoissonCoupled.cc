@@ -544,7 +544,6 @@ LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
   g = constructed_solution == 3 || constructed_solution == 2
           ? (2 * numbers::PI) / (2 * numbers::PI + std::log(radius))
           : 1;
-  g =  (2 * numbers::PI) * radius; 
 }
 
 template <int dim, int dim_omega>
@@ -2037,7 +2036,7 @@ else
   
   if (geo_conf == GeometryConfiguration::TwoD_ZeroD) {
     pcout << "2D/0D" << std::endl;
-#if PAPER 
+#if COUPLED 
     double beta = 2 * numbers::PI * radius;
 #else
     double beta = (-2 * numbers::PI)/(2 * numbers::PI + std::log( radius));

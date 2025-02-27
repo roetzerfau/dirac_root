@@ -13,7 +13,7 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 0
+#define COUPLED 1
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
 #define GRADEDMESH 1
@@ -25,7 +25,6 @@
 #define A11SCHUR 0
 
 #define ANISO 1
-#define PAPER 0
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
@@ -42,11 +41,11 @@ constexpr double y_l = is_omega_on_face ? 0.0 : 0.01;
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.01;
 constexpr unsigned int geo_conf{2};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
-constexpr unsigned int constructed_solution{2};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
+constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
 
 
 
-const unsigned int refinement[3] = {2,3,4};//,7,8,9,10
+const unsigned int refinement[4] = {1,2,3,4};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
@@ -401,14 +400,9 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
   y = p[1];
   if(dim ==3)
     z = p[2];
-
   values = 0;
   double r =  distance_to_singularity<dim>(p);
-#if PAPER
-double beta = radii[0]/(1- radii[0]*  std::log(radii[0])) ;
-#else
- double beta = 1.0/(2*numbers::PI) ;
-#endif
+
   if(r > (1 + 0.01))
   std::cout<<"FALSCH!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!   "<<r<<std::endl;
   switch (constructed_solution) {
@@ -433,16 +427,6 @@ double beta = radii[0]/(1- radii[0]*  std::log(radii[0])) ;
   {
     if(dim==3)
     {
-#if COUPLED
-  if (r != 0) {
-    values(0) =0; //Q 
-    values(1) = beta * (y/std::pow(r,2)); // Q
-    values(2) = beta * (z/std::pow(r,2)); //Q
-    values(3) = - beta * std::log(r); // U  
-  } else {
-    values(3) = 1  ; // U
-  }
-#else
     if (r != 0) {
       values(0) =0; //Q 
        values(1) = 1/(2*numbers::PI) * (y/std::pow(r,2)); // Q
@@ -451,7 +435,6 @@ double beta = radii[0]/(1- radii[0]*  std::log(radii[0])) ;
     } else {
       values(3) = 1  ; // U
     }
-#endif
      }
      break;
   }
@@ -459,10 +442,10 @@ double beta = radii[0]/(1- radii[0]*  std::log(radii[0])) ;
     if(dim==3)//
     {
     if (r != 0) {
-      values(0) = beta * std::log(r); //Q 
-       values(1) = (1+x) * beta * (y/std::pow(r,2)); // Q
-      values(2) = (1+x)* beta * (z/std::pow(r,2)); //Q
-      values(3) = -(1+x) *beta* std::log(r); // U  
+      values(0) = 1/(2*numbers::PI) * std::log(r); //Q 
+       values(1) = (1+x) * 1/(2*numbers::PI) * (y/std::pow(r,2)); // Q
+      values(2) = (1+x)* 1/(2*numbers::PI) * (z/std::pow(r,2)); //Q
+      values(3) = -(1+x) * 1/(2*numbers::PI) * std::log(r); // U  
     } else {
       values(3) = 1 + x ; // U
     }
@@ -475,9 +458,9 @@ double beta = radii[0]/(1- radii[0]*  std::log(radii[0])) ;
     if(r!= 0)
     {
 
-    values(0) = beta * (x/std::pow(r,2)); //Q 
-    values(1) =  beta * (y/std::pow(r,2)); // Q   
-    values(2) = - beta *  std::log(r); // U   
+    values(0) = radii[0]/(1- radii[0]*  std::log(radii[0])) * (x/std::pow(r,2)); //Q 
+    values(1) =  radii[0]/(1- radii[0]*  std::log(radii[0]))* (y/std::pow(r,2)); // Q   
+    values(2) = -  radii[0]/(1- radii[0]*  std::log(radii[0])) *  std::log(r); // U   
     }
     else
       values(2) = 1 ;
