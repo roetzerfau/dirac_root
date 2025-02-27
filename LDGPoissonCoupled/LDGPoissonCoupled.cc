@@ -423,10 +423,17 @@ private:
   double h_max;
   double h_min;
   
+  double minimal_cell_diameter;
+  double maximal_cell_diameter;
+  double minimal_cell_diameter_2D;
+  double maximal_cell_diameter_2D;
+
+  
+
   //unsigned int nof_degrees;
   unsigned int dimension_gap;
   bool AVERAGE;
-
+  unsigned int nof_quad_points = 1;
 
   int rank_mpi;
   enum { NotDefined, Dirichlet, Neumann };
@@ -604,7 +611,7 @@ GridGenerator::subdivided_hyper_rectangle(triangulation,repetitions,  p1, p2);//
  //GridGenerator::hyper_rectangle(triangulation,  p1, p2);
  
 #endif
-pcout<<"refined++++++ "<<n_refine <<std::endl;
+pcout<<"refined++++++ "<<n_refine<<" refined global level "<<triangulation.n_global_levels()-1<<std::endl;
 triangulation.refine_global(n_refine);
 /*for (unsigned int i =0; i <n_refine; ++i)
 {
@@ -631,8 +638,8 @@ else
   triangulation.execute_coarsening_and_refinement();
 }*/
  int level_max = n_refine;
- pcout<<"refined global level "<<triangulation.n_global_levels()-1<<std::endl;
- pcout<<"3D maximal_cell_diameter "<<  GridTools::maximal_cell_diameter(triangulation)<<" std::pow(maximal_cell_diameter,2) "<<std::pow(GridTools::maximal_cell_diameter(triangulation),2)<<std::endl;
+
+ //pcout<<"3D maximal_cell_diameter "<<  GridTools::maximal_cell_diameter(triangulation)<<" std::pow(maximal_cell_diameter,2) "<<std::pow(GridTools::maximal_cell_diameter(triangulation),2)<<std::endl;
 unsigned int refine_omega =  n_refine;//n_refine - refinement[0] + 1;
 #if GRADEDMESH
 #if ANISO
@@ -644,6 +651,8 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
 
  //
  pcout<<"h_max "<<h_max<<" level_max "<<level_max<<std::endl;
+ double mu = alpha/(degree + 1);
+ pcout<<"mu "<<mu<<std::endl;
  for (unsigned int i =n_refine; i <n_refine * 3; ++i)
     {
       typename Triangulation<dim>::active_cell_iterator
@@ -668,7 +677,7 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
       //if(cell->point_inside(nearest_point_on_singularity(cell->center())))//dieser Zelle enthält singularität, aber falsch, da schräge linien nicht beachtet
    
       // //TODO eigentlich wenn innerhalb der singularität celle
-    double mu = alpha/(degree + 1);
+
 #if ANISO
       if(r < 2 * half_length/std::pow(2,triangulation.n_global_levels()-1)* std::sqrt(2)*1.1)//innere Bereich
 #else
@@ -678,7 +687,7 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
 #if ANISO        
         if(2 * half_length/std::pow(2,cell->level())* std::sqrt(2) > std::pow(h_max,1.0/mu))  
 #else
-        if(cell->diameter() >  std::pow(h_max,2))
+        if(cell->diameter() >  std::pow(h_max,1.0/mu))
 #endif
         {
 if(dim == 3)
@@ -695,7 +704,7 @@ else
 #if ANISO       
         if(2 * half_length/std::pow(2,cell->level())* std::sqrt(2) > h_max * std::pow(r,1 - mu)) 
 #else
-        if(cell->diameter() > h_max * std::pow(r,0.5) )// factor um relation * 1.5
+        if(cell->diameter() > h_max * std::pow(r,1 - mu) )// factor um relation * 1.5
 #endif
         {
 if(dim == 3)
@@ -732,11 +741,13 @@ pcout<<"level_max "<<level_max<<" level_min "<<level_min<<std::endl;
 
 
 
-double minimal_cell_diameter = GridTools::minimal_cell_diameter(triangulation);
- double maximal_cell_diameter = GridTools::maximal_cell_diameter(triangulation);
+ minimal_cell_diameter = GridTools::minimal_cell_diameter(triangulation);
+ maximal_cell_diameter = GridTools::maximal_cell_diameter(triangulation);
  h_min = minimal_cell_diameter;
- pcout<<"2D minimal_cell_diameter "<<2 * half_length/std::pow(2,level_max)* std::sqrt(2)<< " maximal_cell_diameter "<<2 * half_length/std::pow(2,level_min)* std::sqrt(2)<<" std::pow(maximal_cell_diameter,2) "<<std::pow(2 * half_length/std::pow(2,level_min)* std::sqrt(2),2)<<std::endl;
- pcout<<"3D minimal_cell_diameter "<<minimal_cell_diameter<< " maximal_cell_diameter "<<maximal_cell_diameter<<" std::pow(maximal_cell_diameter,2) "<<std::pow(maximal_cell_diameter,2)<<std::endl;
+ minimal_cell_diameter_2D = 2 * half_length/std::pow(2,level_max)* std::sqrt(2);
+ maximal_cell_diameter_2D = 2 * half_length/std::pow(2,level_min)* std::sqrt(2);
+ pcout<<"2D minimal_cell_diameter "<<minimal_cell_diameter_2D<< " maximal_cell_diameter "<< maximal_cell_diameter_2D<<" std::pow(maximal_cell_diameter,1/mu) "<<std::pow(maximal_cell_diameter_2D,1.0/mu)<<std::endl;
+ pcout<<"3D minimal_cell_diameter "<<minimal_cell_diameter<< " maximal_cell_diameter "<<maximal_cell_diameter<<" std::pow(maximal_cell_diameter,1.0/mu) "<<std::pow(maximal_cell_diameter,1.0/mu)<<std::endl;
  #if MEMORY_CONSUMPTION
  pcout << "Memory consumption of triangulation: "
               << triangulation.memory_consumption() / (1024.0 * 1024.0) // Convert to MB
@@ -1209,6 +1220,17 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
 
   int error_flag = 0, global_error_flag = 0;
 #if COUPLED
+AVERAGE = radius != 0 && !lumpedAverage;// && (constructed_solution == 3 || constructed_solution == 2) && geo_conf == GeometryConfiguration::ThreeD_OneD;//||constructed_solution == 2
+pcout << "AVERAGE (use circel) " << AVERAGE << " radius "<<radius << " lumpedAverage "<<lumpedAverage<<std::endl;
+// weight
+if (AVERAGE) {
+  unsigned int n = std::ceil(radius/(pow(2,minimal_cell_diameter_2D/std::sqrt(2)))) + 1;
+  std::cout<<"n "<<n <<" "<< minimal_cell_diameter_2D<<" "<<minimal_cell_diameter_2D/std::sqrt(2)<<std::endl;
+  nof_quad_points = 25;// std::pow(2,n);
+} else {
+  nof_quad_points = 1;
+}
+pcout<<"nof_quad_points "<<nof_quad_points<<std::endl;
 if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
     // coupling
   pcout<<"Sparsity Coupling "<<std::endl;
@@ -1228,16 +1250,8 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
     std::vector<types::global_dof_index> local_dof_indices_trial(dofs_per_cell);
     std::vector<types::global_dof_index> local_dof_indices_omega(
         dofs_per_cell_omega);
-    unsigned int nof_quad_points;
-     AVERAGE = radius != 0 && !lumpedAverage && (constructed_solution == 3 || constructed_solution == 2) && geo_conf == GeometryConfiguration::ThreeD_OneD;//||constructed_solution == 2
-    pcout << "AVERAGE (use circel) " << AVERAGE << " radius "<<radius << " lumpedAverage "<<lumpedAverage<<std::endl;
-    // weight
-    if (AVERAGE) {
-      nof_quad_points = N_quad_points;
-    } else {
-      nof_quad_points = 1;
-    }
-    pcout<<"nof_quad_points "<<nof_quad_points<<std::endl;
+   
+
     typename DoFHandler<dim_omega>::active_cell_iterator
         cell_omega = dof_handler_omega.begin_active(),
         endc_omega = dof_handler_omega.end();
@@ -1464,16 +1478,6 @@ if(geo_conf == GeometryConfiguration::TwoD_ZeroD)  {
   QGauss<dim> quadrature_formula(fe_Omega.degree + 1);
   FEValues<dim> fe_values(fe_Omega, quadrature_formula, update_flags);
   const Mapping<dim> &mapping = fe_values.get_mapping();
-
-  unsigned int nof_quad_points;
-  // weight
-  AVERAGE = true;
-  if (AVERAGE) {
-    nof_quad_points = N_quad_points;
-  } else {
-    nof_quad_points = 1;
-  }
- // pcout<<"nof_quad_points "<<nof_quad_points<<std::endl;
 
 
   std::vector<Point<dim>> quadrature_points_circle;
@@ -2049,14 +2053,6 @@ else
     Point<dim> quadrature_point_coupling(y_l, z_l);
     Point<dim> normal_vector(0);
 
-    unsigned int nof_quad_points;
-    // weight
-    AVERAGE = true;
-    if (AVERAGE) {
-      nof_quad_points = N_quad_points;
-    } else {
-      nof_quad_points = 1;
-    }
     std::vector<Point<dim>> quadrature_points_circle;
     quadrature_points_circle = equidistant_points_on_circle<dim>(
         quadrature_point_coupling, radius, normal_vector,
@@ -2411,15 +2407,8 @@ else
 
     bool insideCell_test = true;
     bool insideCell_trial = true;
-    unsigned int nof_quad_points;
 
 
-    // weight
-    if (AVERAGE) {
-      nof_quad_points = N_quad_points;
-    } else {
-      nof_quad_points = 1;
-    }
 
     cell_omega = dof_handler_omega.begin_active();
     endc_omega = dof_handler_omega.end();
