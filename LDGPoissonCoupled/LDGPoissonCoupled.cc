@@ -846,8 +846,8 @@ if( is_repartioned)
          face_no++) {
       Point<dim> p = cell->face(face_no)->center();
       if (cell->face(face_no)->at_boundary()) {
-       
-        if((p[0] == 0 || p[0] ==2 * half_length) && geo_conf == GeometryConfiguration::ThreeD_OneD && (constructed_solution == 3 || constructed_solution == 2)) {//
+       double error = 0.000001;
+        if((std::abs(p[0] - 0)< error || std::abs(p[0] - 2 * half_length)<error) && geo_conf == GeometryConfiguration::ThreeD_OneD && (constructed_solution == 3 || constructed_solution == 2)) {//
         cell->face(face_no)->set_boundary_id(Neumann);
          //pcout<<"Neumann"<<std::endl;
         }
@@ -2982,8 +2982,8 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_cell_terms(
         const double psi_j_potential = cell_fe[Potential].value(j, q);
         if(no_gradient)
         {
-        //  pcout<<"no gradient" <<std::endl;
-         cell_matrix(i, j) += (psi_i_field * K_inverse_values[q] * psi_j_field)  + (psi_j_potential* psi_i_potential ) * cell_fe.JxW(q);
+        //  pcout<<"no gradient" <<std::endl;* K_inverse_values[q]
+         cell_matrix(i, j) += (psi_i_field  * psi_j_field)  + (psi_j_potential* psi_i_potential ) * cell_fe.JxW(q);
          }
         else{
         cell_matrix(i, j) +=
@@ -3780,7 +3780,7 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   dimension_gap = dim - dim_omega;
   pcout << "geometric configuration "<<geo_conf <<"<< dim_Omega: "<< dim <<", dim_omega: "<<dim_omega<< " -> dimension_gap "<<dimension_gap<<std::endl; 
 rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
-  penalty =5;
+  penalty =50;
  // memory_consumption("start");
   make_grid();
  // memory_consumption("after  make_grid");
