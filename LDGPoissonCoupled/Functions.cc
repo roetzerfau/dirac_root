@@ -45,7 +45,7 @@ constexpr unsigned int constructed_solution{2};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[5] = {1,2,3,4,5};//,7,8,9,10
+const unsigned int refinement[6] = {1,2,3,4,5,6};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
@@ -458,9 +458,9 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     if(r!= 0)
     {
 
-    values(0) = 1/(2*numbers::PI)* (x/std::pow(r,2)); //Q 
-    values(1) = 1/(2*numbers::PI)* (y/std::pow(r,2)); // Q   
-    values(2) = -1/(2*numbers::PI) *  std::log(r); // U   
+    values(0) = radii[0]/(1- radii[0]*  std::log(radii[0])) * (x/std::pow(r,2)); //Q 
+    values(1) =radii[0]/(1- radii[0]*  std::log(radii[0])) * (y/std::pow(r,2)); // Q   
+    values(2) = -radii[0]/(1- radii[0]*  std::log(radii[0]))  *  std::log(r); // U   
     }
     else
       values(2) = 1 ;

@@ -144,7 +144,7 @@ const FEValuesExtractors::Scalar Potential(dimension_Omega);
 
 const double extent = 1.0;
 const double alpha = 1.0;
-const double half_length =  is_omega_on_face ? std::sqrt(0.5): std::sqrt(0.5-0.1);//0.5
+const double half_length =  is_omega_on_face ? std::sqrt(0.49): std::sqrt(0.5-0.1);//0.5
 const double distance_tolerance = 10;
 const unsigned int N_quad_points = 10;
 const double reduction = 1e-8;
@@ -743,9 +743,11 @@ pcout<<"level_max "<<level_max<<" level_min "<<level_min<<std::endl;
 
  minimal_cell_diameter = GridTools::minimal_cell_diameter(triangulation);
  maximal_cell_diameter = GridTools::maximal_cell_diameter(triangulation);
- h_min = minimal_cell_diameter;
+ 
  minimal_cell_diameter_2D = 2 * half_length/std::pow(2,level_max)* std::sqrt(2);
  maximal_cell_diameter_2D = 2 * half_length/std::pow(2,level_min)* std::sqrt(2);
+
+ h_min = minimal_cell_diameter_2D;
  pcout<<"2D minimal_cell_diameter "<<minimal_cell_diameter_2D<< " maximal_cell_diameter "<< maximal_cell_diameter_2D<<" std::pow(maximal_cell_diameter,1/mu) "<<std::pow(maximal_cell_diameter_2D,1.0/mu)<<std::endl;
  pcout<<"3D minimal_cell_diameter "<<minimal_cell_diameter<< " maximal_cell_diameter "<<maximal_cell_diameter<<" std::pow(maximal_cell_diameter,1.0/mu) "<<std::pow(maximal_cell_diameter,1.0/mu)<<std::endl;
  #if MEMORY_CONSUMPTION
@@ -2041,9 +2043,9 @@ else
   if (geo_conf == GeometryConfiguration::TwoD_ZeroD) {
     pcout << "2D/0D" << std::endl;
 #if COUPLED 
-    double beta =(2 * numbers::PI)/(2 * numbers::PI + std::log( radius));// 2 * numbers::PI * radius;
+    double beta = 2 * numbers::PI * radius;
 #else
-   // double beta = 
+    double beta = (2 * numbers::PI)/(2 * numbers::PI + std::log( radius));
 #endif
     FullMatrix<double> V_U_matrix_coupling(dofs_per_cell, dofs_per_cell);
     bool insideCell_test = true;
@@ -2659,9 +2661,9 @@ else
                   C_avag = 1.0;
                 }
                 //weight = 1.0;
-                C_avag = 1.0;
+                //C_avag = 1.0;
                 weight = 1.0 / nof_quad_points;
-               // C_avag = 1.0;
+                C_avag = 1.0;
                 unsigned int n_tr;
 #if TEST
               
@@ -3194,7 +3196,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors(){
                                                       dim + 1);
     const ComponentSelectFunction<dim> vectorfield_mask(std::make_pair(0, dim),
                                                         dim + 1);
-    
+    std::cout<<"h_min "<<h_min<<std::endl;
     const DistanceWeight<dim> distance_weight(alpha, radius, h_min); //, radius
 
     const ProductFunction<dim> connected_function_potential(potential_mask,
