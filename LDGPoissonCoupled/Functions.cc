@@ -15,7 +15,7 @@
 
 #define COUPLED 1
 #define TEST 1
-#define SOLVE_BLOCKWISE 0
+#define SOLVE_BLOCKWISE 1
 #define GRADEDMESH 1
 #define MEMORY_CONSUMPTION 0
 
@@ -217,10 +217,15 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
   }
   case 2:
   {
-    if(COUPLED == 1)
-    return 2;
-    else 
-    return 1;
+#if PAPER_SOLUTION
+return 2 * numbers::PI * radii[0]/(1- radii[0]*  std::log(radii[0]))+1;
+#else 
+if(COUPLED == 1)
+return 2;
+else 
+return 1;
+#endif
+
     break;
   }
   case 3: {
@@ -446,14 +451,20 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
   case 3: {
     if(dim==3)//
     {
+#if PAPER_SOLUTION
+    double beta = radii[0]/(1- radii[0]*  std::log(radii[0])); 
+#else
+   double beta = 1.0/(2*numbers::PI);
+#endif
     if (r != 0) {
-      values(0) = 1.0/(2*numbers::PI) * std::log(r); //Q 
-       values(1) = (1.0+x) /(2*numbers::PI) * (y/std::pow(r,2)); // Q
-      values(2) = (1.0+x)/(2*numbers::PI) * (z/std::pow(r,2)); //Q
-      values(3) = -(1.0+x)/(2*numbers::PI) * std::log(r); // U  
+      values(0) = beta * std::log(r); //Q 
+       values(1) = (1.0+x) *beta* (y/std::pow(r,2)); // Q
+      values(2) = (1.0+x)*beta * (z/std::pow(r,2)); //Q
+      values(3) = -(1.0+x)*beta* std::log(r); // U  
     } else {
       values(3) = 1 + x ; // U
     }
+
      }
      if(dim == 2)//
      {

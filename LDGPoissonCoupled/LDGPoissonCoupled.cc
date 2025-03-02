@@ -2412,6 +2412,7 @@ else
 
 #if PAPER_SOLUTION
     double beta = 2 * numbers::PI * radius;
+    g = beta;
 #else
 double beta = g;
 #endif
@@ -2544,7 +2545,7 @@ double beta = g;
                   fe_Omega, my_quadrature_formula_test, update_flags_coupling);
               fe_values_coupling_test.reinit(cell_test);
 
-//#if !COUPLED
+#if !COUPLED
             //  std::cout << "not coupled" << std::endl;
               //-------------face -----------------
            
@@ -2628,7 +2629,7 @@ double beta = g;
                     local_vector, local_dof_indices_test, system_rhs);
               }
               }
-//#endif
+#endif
 
 #if COUPLED
               // std::cout << "coupled " << std::endl;
@@ -2822,7 +2823,7 @@ double beta = g;
                                         .value(j, 0);
                              
                               V_U_matrix_coupling(i, j) +=
-                                  beta * psi_potential_test * psi_potential_trial *
+                                  g * psi_potential_test * psi_potential_trial *
                                   C_avag * weight * fe_values_omega.JxW(p) * 1 /
                                   (n_tr * n_ftrial) * 1 / (n_te * n_ftest);
                             }
@@ -2830,7 +2831,7 @@ double beta = g;
                           constraints.distribute_local_to_global(
                               V_U_matrix_coupling, local_dof_indices_test,
                               local_dof_indices_trial, system_matrix);
-/*
+
                           //v_U_matrix_coupling
                           for (unsigned int i = 0; i < dofs_per_cell_omega;
                                i++) {
@@ -2900,7 +2901,7 @@ double beta = g;
                           constraints.distribute_local_to_global(
                               v_u_matrix_coupling, local_dof_indices_omega,
                               local_dof_indices_omega, system_matrix);
-*/
+
                           // --------------------------cell ende
                           // --------------------
                         }
@@ -3453,8 +3454,8 @@ SolverControl solver_control22(std::max((int)dof_handler_Omega.n_locally_owned_d
 
 
 
-//if(geo_conf == GeometryConfiguration::TwoD_ZeroD || COUPLED==0)
-if(true)
+if(geo_conf == GeometryConfiguration::TwoD_ZeroD || COUPLED==0)
+//if(true)
 {
   pcout<<"GeometryConfiguration::TwoD_ZeroD || COUPLED==0"<<std::endl;
 TrilinosWrappers::PreconditionILU preconditioner_block_0;
@@ -3786,7 +3787,7 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   dimension_gap = dim - dim_omega;
   pcout << "geometric configuration "<<geo_conf <<"<< dim_Omega: "<< dim <<", dim_omega: "<<dim_omega<< " -> dimension_gap "<<dimension_gap<<std::endl; 
 rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
-  penalty =50;
+  penalty =5;
  // memory_consumption("start");
   make_grid();
  // memory_consumption("after  make_grid");
