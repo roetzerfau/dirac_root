@@ -15,7 +15,7 @@
 
 #define COUPLED 1
 #define TEST 1
-#define SOLVE_BLOCKWISE 1
+#define SOLVE_BLOCKWISE 0
 #define GRADEDMESH 1
 #define MEMORY_CONSUMPTION 0
 
@@ -25,7 +25,7 @@
 #define A11SCHUR 0
 
 #define ANISO 1
-
+#define PAPER_SOLUTION 1
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
 
@@ -427,11 +427,16 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
   {
     if(dim==3)
     {
+#if PAPER_SOLUTION
+      double beta =  radii[0]/(1- radii[0]*  std::log(radii[0]));
+#else
+    double beta =  1/(2*numbers::PI);
+#endif
     if (r != 0) {
       values(0) =0; //Q 
-       values(1) = 1.0/(2*numbers::PI) * (y/std::pow(r,2)); // Q
-      values(2) = 1.0/(2*numbers::PI) * (z/std::pow(r,2)); //Q
-      values(3) = -1.0 / (2 * numbers::PI) * std::log(r); // U  
+       values(1) = beta * (y/std::pow(r,2)); // Q
+      values(2) =  beta * (z/std::pow(r,2)); //Q
+      values(3) = - beta * std::log(r); // U  
     } else {
       values(3) = 1  ; // U
     }

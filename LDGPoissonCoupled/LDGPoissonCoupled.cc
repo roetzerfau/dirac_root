@@ -144,7 +144,7 @@ const FEValuesExtractors::Scalar Potential(dimension_Omega);
 
 const double extent = 1.0;
 const double alpha = 1.0;
-const double half_length =  is_omega_on_face ? std::sqrt(0.49): std::sqrt(0.5-0.1);//0.5
+const double half_length =  is_omega_on_face ? std::sqrt(0.5): std::sqrt(0.5-0.1);//0.5
 const double distance_tolerance = 10;
 const unsigned int N_quad_points = 10;
 const double reduction = 1e-8;
@@ -1032,8 +1032,8 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
   pcout << "dofs_per_cell_omega " << dofs_per_cell_omega << std::endl;
 
 #if !COUPLED
-  DoFRenumbering::component_wise(dof_handler_Omega); //uncomment for unput result
-  DoFRenumbering::component_wise(dof_handler_omega); //TODO nochmal kontrollieren
+ // DoFRenumbering::component_wise(dof_handler_Omega); //uncomment for unput result
+ // DoFRenumbering::component_wise(dof_handler_omega); //TODO nochmal kontrollieren
 #endif
 
   const std::vector<types::global_dof_index> dofs_per_component_Omega =
@@ -2410,8 +2410,11 @@ else
     bool insideCell_test = true;
     bool insideCell_trial = true;
 
-
-
+#if PAPER_SOLUTION
+    double beta = 2 * numbers::PI * radius;
+#else
+double beta = g;
+#endif
     cell_omega = dof_handler_omega.begin_active();
     endc_omega = dof_handler_omega.end();
 
@@ -2541,7 +2544,7 @@ else
                   fe_Omega, my_quadrature_formula_test, update_flags_coupling);
               fe_values_coupling_test.reinit(cell_test);
 
-#if !COUPLED
+//#if !COUPLED
             //  std::cout << "not coupled" << std::endl;
               //-------------face -----------------
            
@@ -2585,7 +2588,7 @@ else
                         else
                           z = 0;
                         local_vector(i) +=
-                            fe_values_coupling_test_face[Potential].value(i,
+                            beta * fe_values_coupling_test_face[Potential].value(i,
                                                                           q) *
                             1 / (n_te * n_ftest) *
                             z *
@@ -2617,7 +2620,7 @@ else
                   else 
                     z = 0;
                   local_vector(i) +=
-                      fe_values_coupling_test[Potential].value(i, 0) * z
+                  beta *  fe_values_coupling_test[Potential].value(i, 0) * z
                         *
                       fe_values_omega.JxW(p);
                 }
@@ -2625,7 +2628,7 @@ else
                     local_vector, local_dof_indices_test, system_rhs);
               }
               }
-#endif
+//#endif
 
 #if COUPLED
               // std::cout << "coupled " << std::endl;
@@ -2819,7 +2822,7 @@ else
                                         .value(j, 0);
                              
                               V_U_matrix_coupling(i, j) +=
-                                  g * psi_potential_test * psi_potential_trial *
+                                  beta * psi_potential_test * psi_potential_trial *
                                   C_avag * weight * fe_values_omega.JxW(p) * 1 /
                                   (n_tr * n_ftrial) * 1 / (n_te * n_ftest);
                             }
@@ -2827,7 +2830,7 @@ else
                           constraints.distribute_local_to_global(
                               V_U_matrix_coupling, local_dof_indices_test,
                               local_dof_indices_trial, system_matrix);
-
+/*
                           //v_U_matrix_coupling
                           for (unsigned int i = 0; i < dofs_per_cell_omega;
                                i++) {
@@ -2897,7 +2900,7 @@ else
                           constraints.distribute_local_to_global(
                               v_u_matrix_coupling, local_dof_indices_omega,
                               local_dof_indices_omega, system_matrix);
-
+*/
                           // --------------------------cell ende
                           // --------------------
                         }
@@ -3450,11 +3453,12 @@ SolverControl solver_control22(std::max((int)dof_handler_Omega.n_locally_owned_d
 
 
 
-if(geo_conf == GeometryConfiguration::TwoD_ZeroD || COUPLED==0)
+//if(geo_conf == GeometryConfiguration::TwoD_ZeroD || COUPLED==0)
+if(true)
 {
   pcout<<"GeometryConfiguration::TwoD_ZeroD || COUPLED==0"<<std::endl;
-TrilinosWrappers::PreconditionILUT preconditioner_block_0;
-TrilinosWrappers::PreconditionILUT preconditioner_block_1;//PreconditionILU  PreconditionBlockJacobi
+TrilinosWrappers::PreconditionILU preconditioner_block_0;
+TrilinosWrappers::PreconditionILU preconditioner_block_1;//PreconditionILU  PreconditionBlockJacobi
 // Initialize the preconditioners with the appropriate blocks of the matrix
 preconditioner_block_0.initialize(system_matrix.block(0, 0));  // ILU for block (0,0)
 preconditioner_block_1.initialize(system_matrix.block(1, 1));  // ILU for block (1,1)
@@ -3859,7 +3863,7 @@ int main(int argc, char *argv[]) {
       std::string omega_on_face_string = is_omega_on_face ? "true" : "false";
       std::string coupled_string = COUPLED==1 ? "true" : "false";
       std::string gradedMesh_string = GRADEDMESH ==1 ? "true" : "false";
-      std::string name = "_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string;
+      std::string name =  "_test1_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string ;
       
       std::string folderName =name +"/";
      std::cout<<folderName<<std::endl;
