@@ -15,7 +15,7 @@
 
 #define COUPLED 1
 #define TEST 1
-#define SOLVE_BLOCKWISE 1
+#define SOLVE_BLOCKWISE 0
 #define GRADEDMESH 1
 #define MEMORY_CONSUMPTION 0
 
@@ -26,6 +26,7 @@
 
 #define ANISO 1
 #define PAPER_SOLUTION 1
+#define VESSEL 1
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
 

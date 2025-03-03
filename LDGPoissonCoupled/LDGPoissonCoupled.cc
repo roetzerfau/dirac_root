@@ -2413,6 +2413,7 @@ else
 #if PAPER_SOLUTION
     double beta = 2 * numbers::PI * radius;
     g = beta;
+#endif
 #else
 double beta = g;
 #endif
@@ -2545,7 +2546,7 @@ double beta = g;
                   fe_Omega, my_quadrature_formula_test, update_flags_coupling);
               fe_values_coupling_test.reinit(cell_test);
 
-#if !COUPLED
+#if !COUPLED || VESSEL
             //  std::cout << "not coupled" << std::endl;
               //-------------face -----------------
            
@@ -2631,7 +2632,7 @@ double beta = g;
               }
 #endif
 
-#if COUPLED
+#if COUPLED ||VESSEL
               // std::cout << "coupled " << std::endl;
               for (unsigned int q_avag = 0; q_avag < nof_quad_points;
                    q_avag++) {
@@ -2831,7 +2832,7 @@ double beta = g;
                           constraints.distribute_local_to_global(
                               V_U_matrix_coupling, local_dof_indices_test,
                               local_dof_indices_trial, system_matrix);
-
+#if !VESSEL
                           //v_U_matrix_coupling
                           for (unsigned int i = 0; i < dofs_per_cell_omega;
                                i++) {
@@ -2901,7 +2902,7 @@ double beta = g;
                           constraints.distribute_local_to_global(
                               v_u_matrix_coupling, local_dof_indices_omega,
                               local_dof_indices_omega, system_matrix);
-
+#endif
                           // --------------------------cell ende
                           // --------------------
                         }
@@ -2911,7 +2912,7 @@ double beta = g;
                 }
                    }
              
-#endif
+//#endif
  }
             }
         }
@@ -3864,7 +3865,7 @@ int main(int argc, char *argv[]) {
       std::string omega_on_face_string = is_omega_on_face ? "true" : "false";
       std::string coupled_string = COUPLED==1 ? "true" : "false";
       std::string gradedMesh_string = GRADEDMESH ==1 ? "true" : "false";
-      std::string name =  "_test1_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string ;
+      std::string name =  "_test_3Dcoupled_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string ;
       
       std::string folderName =name +"/";
      std::cout<<folderName<<std::endl;
