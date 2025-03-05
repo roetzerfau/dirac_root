@@ -1228,7 +1228,7 @@ pcout << "AVERAGE (use circel) " << AVERAGE << " radius "<<radius << " lumpedAve
 if (AVERAGE) {
   unsigned int n = std::ceil(radius/(pow(2,minimal_cell_diameter_2D/std::sqrt(2)))) + 1;
   std::cout<<"n "<<n <<" "<< minimal_cell_diameter_2D<<" "<<minimal_cell_diameter_2D/std::sqrt(2)<<std::endl;
-  nof_quad_points = 25;// std::pow(2,n);
+  nof_quad_points = 25 * n_refine;// std::pow(2,n);
 } else {
   nof_quad_points = 1;
 }
@@ -2410,13 +2410,15 @@ else
     bool insideCell_test = true;
     bool insideCell_trial = true;
 
+
 #if PAPER_SOLUTION
     double beta = 2 * numbers::PI * radius;
     g = beta;
 #endif
 #else
-double beta = g;
+double beta =1;//g
 #endif
+double beta =1;//g
     cell_omega = dof_handler_omega.begin_active();
     endc_omega = dof_handler_omega.end();
 
@@ -2913,16 +2915,17 @@ double beta = g;
                    }
              
 //#endif
- }
-            }
-        }
-        // std::cout<<std::endl;
-      }
-    }
-  }
+               
+#endif
+}
+}
+}
+// std::cout<<std::endl;
+}
+}
+}
 
 }
-#endif
   // std::cout << "ende coupling loop" << std::endl;
 
 
@@ -3789,6 +3792,7 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   pcout << "geometric configuration "<<geo_conf <<"<< dim_Omega: "<< dim <<", dim_omega: "<<dim_omega<< " -> dimension_gap "<<dimension_gap<<std::endl; 
 rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
   penalty =5;
+  pcout<<"penalty "<<penalty<<std::endl;
  // memory_consumption("start");
   make_grid();
  // memory_consumption("after  make_grid");
@@ -3865,7 +3869,7 @@ int main(int argc, char *argv[]) {
       std::string omega_on_face_string = is_omega_on_face ? "true" : "false";
       std::string coupled_string = COUPLED==1 ? "true" : "false";
       std::string gradedMesh_string = GRADEDMESH ==1 ? "true" : "false";
-      std::string name =  "_test_3Dcoupled_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string ;
+      std::string name =  "_test05_03_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string ;
       
       std::string folderName =name +"/";
      std::cout<<folderName<<std::endl;
