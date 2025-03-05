@@ -15,7 +15,7 @@
 
 #define COUPLED 1
 #define TEST 1
-#define SOLVE_BLOCKWISE 0
+#define SOLVE_BLOCKWISE 1
 #define GRADEDMESH 1
 #define MEMORY_CONSUMPTION 0
 
@@ -26,7 +26,7 @@
 
 #define ANISO 1
 #define PAPER_SOLUTION 1
-#define VESSEL 1
+#define VESSEL 0
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
 
@@ -42,7 +42,7 @@ constexpr double y_l = is_omega_on_face ? 0.0 : 0.01;
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.01;
 constexpr unsigned int geo_conf{2};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
-constexpr unsigned int constructed_solution{2};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
+constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
 
 
 
@@ -219,6 +219,7 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
   case 2:
   {
 #if PAPER_SOLUTION
+if(COUPLED == 1)
 return 2 * numbers::PI * radii[0]/(1- radii[0]*  std::log(radii[0]))+1;
 #else 
 if(COUPLED == 1)
@@ -235,7 +236,7 @@ return 1;
     else
     {
     if(COUPLED == 1)
-      return 0;
+      return (1 + p[0]) * 2 * numbers::PI*radii[0]/(1- radii[0]*  std::log(radii[0])) - (1 + p[0]);
     else
       return -(1 + p[0]);
     }
@@ -286,7 +287,11 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
   double x;//, y, z;
   x = p[0];
   //y = p[1];
- 
+ #if PAPER_SOLUTION
+      double beta =  radii[0]/(1- radii[0]*  std::log(radii[0]));
+#else
+    double beta =  1/(2*numbers::PI);
+#endif
   double r = distance_to_singularity<dim>(p);
 
   switch (constructed_solution) {
@@ -296,12 +301,12 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
     if (p[0] > 1)
     {
     //  std::cout<<"neum1 "<<p[0]<<std::endl;
-      return 1 / (2 * numbers::PI) * std::log(r);///-
+      return  beta  * std::log(r);///-
     }
     if (p[0] < 1)
     {
       //std::cout<<"neum0 "<<p[0]<<std::endl;
-      return -1 / (2 * numbers::PI) * std::log(r);
+      return - beta  * std::log(r);
     }
     break;
   }
@@ -389,6 +394,7 @@ void KInverse<dim>::value_list(const std::vector<Point<dim>> &points,
         Point<dim> p = points[i];
       // value[i][i]  = p[0] + 1;//
       value[i][i]  = 1/(1 + p[0] + 0.5 * std::pow(p[0], 2));
+     //value[i][i]  = 1/(2 * numbers::PI*radii[0]/(1- radii[0]*  std::log(radii[0]))* p[0]) ;
       //value[i][i] = -std::pow(numbers::PI *2,2);
            
       }

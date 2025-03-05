@@ -849,7 +849,7 @@ if( is_repartioned)
       Point<dim> p = cell->face(face_no)->center();
       if (cell->face(face_no)->at_boundary()) {
        double error = 0.000001;
-        if((std::abs(p[0] - 0)< error || std::abs(p[0] - 2 * half_length)<error) && geo_conf == GeometryConfiguration::ThreeD_OneD && (constructed_solution == 3 || constructed_solution == 2)) {//
+        if((std::abs(p[0] - 0)< error || std::abs(p[0] - 2 * half_length)<error) && geo_conf == GeometryConfiguration::ThreeD_OneD && (constructed_solution >= 2)) {//
         cell->face(face_no)->set_boundary_id(Neumann);
          //pcout<<"Neumann"<<std::endl;
         }
