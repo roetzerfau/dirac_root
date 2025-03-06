@@ -1,0 +1,134 @@
+### Starting TaskPrologue of job 7153935 on w2511 at Thu Dec 19 14:19:58 CET 2024
+#   SLURM_JOB_NODELIST=w2511
+#   SLURM_JOB_NUM_NODES=1
+#   SLURM_NTASKS=
+#   SLURM_NPROCS=
+#   SLURM_TASKS_PER_NODE=31
+#   SLURM_JOB_CPUS_PER_NODE=31
+#   SLURM_EXPORT_ENV=NONE
+Running on cores 0-30 with govenor powersave
+### Finished TaskPrologue
+Number of MPI processes: 1
+_cons_sol_2_geoconfig_2_gradedMesh_true_coupled_true_omegaonface_true_LA_false_rad_0.010000/
+Folder created successfully.
+******************* REFINE 6  DEGREE  1 ***********************
+geometric configuration 2<< dim_Omega: 3, dim_omega: 1 -> dimension_gap 2
+---------------------------------------------------
+| start Rank 0
+| VmPeak: 2588.66 MB, VmSize: 2588.66 MB, VmHWM: 146.02 MB, VmRSS: 146.02 MB
+| Peak Memory Usage: 146.02 MB, Peak Memory Usage Across All Ranks: 146.02 MB
+memoryUsed: 2588 MB
+-------------------------------------------------------------
+make grid
+grid extent, p1:  1.41421 -0.707107 -0.707107 p2: 0 0.707107 0.707107
+refined++++++
+refined
+h_max 0.0382733
+level_max 12
+minimal_cell_diameter 0.00059802 maximal_cell_diameter 0.0191366
+Total number of active cells (global): 4806656
+is_shared_triangulation 0 is_repartioned 0
+ is_cell_inside_box 0
+max_diameter 0.0191366 radius 0.01
+---------------------------------------------------
+| after  make_grid Rank 0
+| VmPeak: 6011.46 MB, VmSize: 6011.46 MB, VmHWM: 3571.99 MB, VmRSS: 3571.99 MB
+| Peak Memory Usage: 3571.99 MB, Peak Memory Usage Across All Ranks: 3571.99 MB
+memoryUsed: 6011 MB
+-------------------------------------------------------------
+dofs_per_cell 16
+dofs_per_cell_omega 4
+dofs_per_component_Omega 19226624
+dofs_per_component_Omega 19226624
+dofs_per_component_Omega 19226624
+dofs_per_component_Omega 19226624
+Omega ----------------------------
+Number of global active cells: 4806656
+Number of degrees of freedom: 76906496 (57679872 + 19226624)
+ triangulation.n_vertices() 5034109
+0 Number of locally owned active cells: 4806656 Number of locally owned DoF: 76906496
+omega ----------------------------
+Number of global active cells: 4096
+Number of degrees of freedom: 16384 (8192 + 8192)
+ start_VectorField_omega 76906496 start_Potential_Omega 57679872 start_Potential_omega 76914688
+BlockSparsityPattern
+Sparsity Coupling 
+setup dofs Coupling
+AVERAGE (use circel) 1 radius 0.01 lumpedAverage 0
+nof_quad_points 3
+start to compress
+
+--------------------------------------------------------
+An error occurred in line <779> of file <./source/lac/trilinos_sparsity_pattern.cc> in function
+    void dealii::TrilinosWrappers::SparsityPattern::compress()
+The violated condition was: 
+    false
+Additional information: 
+    The Epetra_CrsGraph::OptimizeStorage() function has thrown an error
+    with code -99. You will have to look up the exact meaning of this
+    error in the Trilinos source code, but oftentimes, this function
+    throwing an error indicates that you are trying to allocate more than
+    2,147,483,647 nonzero entries in the sparsity pattern on the local
+    process; this will not work because Epetra indexes entries with a
+    simple 'signed int'.
+
+Stacktrace:
+-----------
+#0  /lib/x86_64-linux-gnu/libdeal.ii.so.9.5.1: 
+#1  /lib/x86_64-linux-gnu/libdeal.ii.so.9.5.1: dealii::BlockSparsityPatternBase<dealii::TrilinosWrappers::SparsityPattern>::compress()
+#2  /build/LDGPoissonCoupled: LDGPoissonProblem<3, 1>::make_dofs()
+#3  /build/LDGPoissonCoupled: LDGPoissonProblem<3, 1>::run()
+#4  /build/LDGPoissonCoupled: main
+--------------------------------------------------------
+
+0 Result_ende: U 42 Q 42 u 42 q 42
+
+
++---------------------------------------------+------------+------------+
+| Total wallclock time elapsed since start    |  1.38e+03s |            |
+|                                             |            |            |
+| Section                         | no. calls |  wall time | % of total |
++---------------------------------+-----------+------------+------------+
+| make grid                       |         1 |      31.7s |       2.3% |
+| setup                           |         1 |  1.35e+03s |        98% |
++---------------------------------+-----------+------------+------------+
+
+U_Omega
+refinement/p_degree;diameter h;#cells;1;
+6;0.0191366;4.80666e+06;42;
+
+
+Q_Omega
+refinement/p_degree;diameter h;#cells;1;
+6;0.0191366;4.80666e+06;42;
+
+
+u_omega
+refinement/p_degree;diameter h;#cells;1;
+6;0.0191366;4.80666e+06;42;
+
+
+q_omega
+refinement/p_degree;diameter h;#cells;1;
+6;0.0191366;4.80666e+06;42;
+
+
+=== JOB_STATISTICS ===
+=== current date     : Thu Dec 19 14:43:15 CET 2024
+= Job-ID             : 7153935 on woody
+= Job-Name           : testjob
+= Job-Command        : /home/hpc/mpm1/mpm1001h/dirac_root/LDGPoissonCoupled/script.sh
+= Initial workdir    : /home/hpc/mpm1/mpm1001h/dirac_root/LDGPoissonCoupled
+= Queue/Partition    : work
+= Slurm account      : mpm1 with QOS=normal
+= Requested resources:  for 1-00:00:00
+= Elapsed runtime    : 00:23:32
+= Total RAM usage    : 38.2 GiB of requested  GiB (%)   
+= Node list          : w2511
+= Subm/Elig/Start/End: 2024-12-19T14:19:43 / 2024-12-19T14:19:43 / 2024-12-19T14:19:43 / 2024-12-19T14:43:15
+======================
+=== Quota infos ======
+    Path              Used     SoftQ    HardQ    Gracetime  Filec    FileQ    FiHaQ    FileGrace    
+    /home/woody         46.6G  1000.0G  1500.0G        N/A     463K   5,000K   7,500K        N/A    
+    /home/hpc           93.3G   104.9G   209.7G        N/A     257K     500K   1,000K        N/A    
+    /home/vault         16.3G  1048.6G  2097.2G        N/A  46,939      200K     400K        N/A    

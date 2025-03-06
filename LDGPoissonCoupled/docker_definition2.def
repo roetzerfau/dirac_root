@@ -1,0 +1,79 @@
+Bootstrap: docker
+From: ubuntu:latest
+
+%post
+    # Update and install basic dependencies
+apt-get dist-upgrade
+  apt-get update && apt-get upgrade -y
+    apt-get install -y \
+        build-essential \
+        cmake \
+        g++ \
+        gcc \
+        git \
+        libboost-all-dev \
+        libgmp-dev \
+        libmpfr-dev \
+        libopenmpi-dev \
+        mpi-default-bin \
+        ninja-build \
+        python3 \
+        python3-pip \
+        wget \
+        zlib1g-dev
+
+    # Install Trilinos with Tpetra
+    git clone https://github.com/trilinos/Trilinos.git opt/trilinos
+    cd opt/trilinos
+    mkdir build && cd build
+    cmake \
+        -D CMAKE_BUILD_TYPE=Release \
+        -D TPL_ENABLE_MPI=ON \
+        -D Trilinos_ENABLE_Tpetra=ON \
+        -D Trilinos_ENABLE_Teuchos=ON \
+        -D Trilinos_ENABLE_ALL_PACKAGES=OFF \
+        -D Trilinos_ENABLE_ALL_OPTIONAL_PACKAGES=OFF \
+        -D Trilinos_ENABLE_Epetra=ON \
+        -D Trilinos_ENABLE_Amesos=ON \
+        -D Trilinos_ENABLE_AztecOO=ON \
+        -D Trilinos_ENABLE_Ifpack=ON \
+        -D Trilinos_ENABLE_MPI=ON \
+        -D Tpetra_ENABLE_INST_INT_LONG_LONG=ON \
+        -D Tpetra_ENABLE_EXPLICIT_INSTANTIATION=ON \
+        -D Trilinos_ENABLE_Kokkos=ON \        
+        -D Trilinos_ENABLE_ML=ON \ 
+        -D Trilinos_ENABLE_Ifpack2=ON \
+        -D Trilinos_ENABLE_Zoltan=ON \
+        -D CMAKE_INSTALL_PREFIX=/usr/local/trilinos \
+        .. && \
+    make -j$(nproc) && make install
+
+    # Install deal.II
+    cd /opt && git clone https://github.com/dealii/dealii.git
+    cd dealii
+    mkdir build && cd build
+    cmake \
+        -D CMAKE_BUILD_TYPE=Release \
+        -D DEAL_II_WITH_MPI=ON \
+        -D DEAL_II_WITH_PETSC=OFF \
+        -D DEAL_II_WITH_TRILINOS=ON \
+        -D TRILINOS_DIR=/opt/trilinos \
+        -D CMAKE_INSTALL_PREFIX=/opt/dealii \
+        ..
+    make -j$(nproc) && make install
+
+    # Cleanup
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+%environment
+    export PATH=/opt/dealii/bin:$PATH
+    export LD_LIBRARY_PATH=/opt/dealii/lib:/opt/trilinos/lib:$LD_LIBRARY_PATH
+
+%labels
+    Maintainer "Your Name <your.email@example.com>"
+    Version "1.0"
+    Description "Apptainer container for deal.II with Trilinos and Tpetra support"
+
+%runscript
+    echo "This container provides deal.II with Trilinos (including Tpetra support)."
+    exec "$@"
