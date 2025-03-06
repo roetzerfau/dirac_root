@@ -640,7 +640,7 @@ else
  int level_max = n_refine;
 
  //pcout<<"3D maximal_cell_diameter "<<  GridTools::maximal_cell_diameter(triangulation)<<" std::pow(maximal_cell_diameter,2) "<<std::pow(GridTools::maximal_cell_diameter(triangulation),2)<<std::endl;
-unsigned int refine_omega =  n_refine;//n_refine - refinement[0] + 1;
+unsigned int refine_omega =  n_refine + 1;//n_refine - refinement[0] + 1;
 #if GRADEDMESH
 #if ANISO
  double h_max = 2 * half_length/std::pow(2,n_refine)* std::sqrt(2);
@@ -2414,11 +2414,12 @@ else
 #if PAPER_SOLUTION
     double beta = 2 * numbers::PI * radius;
     g = beta;
-#endif
 #else
-double beta =1;//g
+double beta =g;
 #endif
-double beta =1;//g
+#if !COUPLED
+  beta =1;//g
+#endif
     cell_omega = dof_handler_omega.begin_active();
     endc_omega = dof_handler_omega.end();
 
@@ -2926,6 +2927,7 @@ double beta =1;//g
 }
 
 }
+#endif
   // std::cout << "ende coupling loop" << std::endl;
 
 
@@ -3869,7 +3871,7 @@ int main(int argc, char *argv[]) {
       std::string omega_on_face_string = is_omega_on_face ? "true" : "false";
       std::string coupled_string = COUPLED==1 ? "true" : "false";
       std::string gradedMesh_string = GRADEDMESH ==1 ? "true" : "false";
-      std::string name =  "_test05_03_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string ;
+      std::string name =  "_test06_03_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string ;
       
       std::string folderName =name +"/";
      std::cout<<folderName<<std::endl;
