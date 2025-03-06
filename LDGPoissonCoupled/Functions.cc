@@ -52,6 +52,13 @@ const unsigned int p_degree[1] = {1};
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
 const double radii[n_r] = {0.01};
+const double D = 0.01;
+
+#if PAPER_SOLUTION
+const double sol_factor = D * radii[0]/(1- D * radii[0]*  std::log(radii[0]));
+#else
+const double sol_factor =  1/(2*numbers::PI);
+#endif
 
 const bool lumpedAverages[n_LA] = {false};//TODO bei punkt wuelle noch berücksichtnge
 
@@ -220,7 +227,7 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
   {
 #if PAPER_SOLUTION
 if(COUPLED == 1)
-return 2 * numbers::PI * radii[0]/(1- radii[0]*  std::log(radii[0]))+1;
+return 2 * numbers::PI *sol_factor+1;
 #else 
 if(COUPLED == 1)
 return 2;
@@ -236,7 +243,7 @@ return 1;
     else
     {
     if(COUPLED == 1)
-      return (1 + p[0]) * 2 * numbers::PI*radii[0]/(1- radii[0]*  std::log(radii[0])) - (1 + p[0]);
+      return (1 + p[0]) * 2 * numbers::PI* sol_factor - (1 + p[0]);
     else
       return -(1 + p[0]);
     }
@@ -287,11 +294,6 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
   double x;//, y, z;
   x = p[0];
   //y = p[1];
- #if PAPER_SOLUTION
-      double beta =  radii[0]/(1- radii[0]*  std::log(radii[0]));
-#else
-    double beta =  1/(2*numbers::PI);
-#endif
   double r = distance_to_singularity<dim>(p);
 
   switch (constructed_solution) {
@@ -301,12 +303,12 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
     if (p[0] > 1)
     {
     //  std::cout<<"neum1 "<<p[0]<<std::endl;
-      return  beta  * std::log(r);///-
+      return  sol_factor  * std::log(r);///-
     }
     if (p[0] < 1)
     {
       //std::cout<<"neum0 "<<p[0]<<std::endl;
-      return - beta  * std::log(r);
+      return - sol_factor  * std::log(r);
     }
     break;
   }
@@ -439,16 +441,11 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
   {
     if(dim==3)
     {
-#if PAPER_SOLUTION
-      double beta =  radii[0]/(1- radii[0]*  std::log(radii[0]));
-#else
-    double beta =  1/(2*numbers::PI);
-#endif
     if (r != 0) {
       values(0) =0; //Q 
-       values(1) = beta * (y/std::pow(r,2)); // Q
-      values(2) =  beta * (z/std::pow(r,2)); //Q
-      values(3) = - beta * std::log(r); // U  
+       values(1) = sol_factor * (y/std::pow(r,2)); // Q
+      values(2) =  sol_factor * (z/std::pow(r,2)); //Q
+      values(3) = - sol_factor * std::log(r); // U  
     } else {
       values(3) = 1  ; // U
     }
@@ -458,16 +455,11 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
   case 3: {
     if(dim==3)//
     {
-#if PAPER_SOLUTION
-    double beta = radii[0]/(1- radii[0]*  std::log(radii[0])); 
-#else
-   double beta = 1.0/(2*numbers::PI);
-#endif
     if (r != 0) {
-      values(0) = beta * std::log(r); //Q 
-       values(1) = (1.0+x) *beta* (y/std::pow(r,2)); // Q
-      values(2) = (1.0+x)*beta * (z/std::pow(r,2)); //Q
-      values(3) = -(1.0+x)*beta* std::log(r); // U  
+      values(0) = sol_factor * std::log(r); //Q 
+       values(1) = (1.0+x) *sol_factor* (y/std::pow(r,2)); // Q
+      values(2) = (1.0+x)*sol_factor * (z/std::pow(r,2)); //Q
+      values(3) = -(1.0+x)*sol_factor* std::log(r); // U  
     } else {
       values(3) = 1 + x ; // U
     }

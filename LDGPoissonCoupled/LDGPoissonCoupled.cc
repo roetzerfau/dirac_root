@@ -653,7 +653,7 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
  pcout<<"h_max "<<h_max<<" level_max "<<level_max<<std::endl;
  double mu = alpha/(degree + 1);
  pcout<<"mu "<<mu<<std::endl;
- for (unsigned int i =n_refine; i <n_refine * 3; ++i)
+ for (unsigned int i =n_refine; i <n_refine * 2; ++i)
     {
       typename Triangulation<dim>::active_cell_iterator
       cell = triangulation.begin_active(),
@@ -690,7 +690,7 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
         if(cell->diameter() >  std::pow(h_max,1.0/mu))
 #endif
         {
-if(dim == 3)
+if(dim == 3 && ANISO)
        cell->set_refine_flag(RefinementCase<dim>(6));//RefinementCase<dim>::cut_y | RefinementCase<dim>::cut_z
 else
       cell->set_refine_flag();
@@ -707,7 +707,7 @@ else
         if(cell->diameter() > h_max * std::pow(r,1 - mu) )// factor um relation * 1.5
 #endif
         {
-if(dim == 3)
+if(dim == 3 &&  ANISO)
        cell->set_refine_flag(RefinementCase<dim>(6));//RefinementCase<dim>::cut_y | RefinementCase<dim>::cut_z
 else
        cell->set_refine_flag();
@@ -2043,7 +2043,7 @@ else
   if (geo_conf == GeometryConfiguration::TwoD_ZeroD) {
     pcout << "2D/0D" << std::endl;
 #if COUPLED 
-    double beta = 2 * numbers::PI * radius;
+    double beta = 2 * numbers::PI * D * radius;
 #else
     double beta = (2 * numbers::PI)/(2 * numbers::PI + std::log( radius));
 #endif
@@ -2412,7 +2412,7 @@ else
 
 
 #if PAPER_SOLUTION
-    double beta = 2 * numbers::PI * radius;
+    double beta = 2 * numbers::PI * D * radius;
     g = beta;
 #else
 double beta =g;
@@ -3868,15 +3868,15 @@ int main(int argc, char *argv[]) {
 
       std::string LA_string = lumpedAverages[LA] ? "true" : "false";
       std::string radius_string = std::to_string(radii[rad]);
+      std::string D_string = std::to_string(D);
       std::string omega_on_face_string = is_omega_on_face ? "true" : "false";
       std::string coupled_string = COUPLED==1 ? "true" : "false";
       std::string gradedMesh_string = GRADEDMESH ==1 ? "true" : "false";
-      std::string name =  "_test06_03_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string ;
+      std::string name =  "_test06_03_constcoupled_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string + "_D_" + D_string;
       
       std::string folderName =name +"/";
      std::cout<<folderName<<std::endl;
       std::string command = "mkdir -p " + folderName;
-
       if (system(command.c_str()) == 0) {
         if(rank_mpi == 0)
         std::cout << "Folder created successfully." << std::endl;
