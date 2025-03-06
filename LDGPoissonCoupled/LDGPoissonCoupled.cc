@@ -1894,7 +1894,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 
 // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 
-  #if 1
+  #if COUPLED
   {
     TimerOutput::Scope t(computing_timer, "assembly - omega");
     pcout << "assemly - omega" << std::endl;
@@ -3872,7 +3872,7 @@ int main(int argc, char *argv[]) {
       std::string omega_on_face_string = is_omega_on_face ? "true" : "false";
       std::string coupled_string = COUPLED==1 ? "true" : "false";
       std::string gradedMesh_string = GRADEDMESH ==1 ? "true" : "false";
-      std::string name =  "_test06_03_constcoupled_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string + "_D_" + D_string;
+      std::string name =  "_test06_03_constUncoupled_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string + "_D_" + D_string;
       
       std::string folderName =name +"/";
      std::cout<<folderName<<std::endl;

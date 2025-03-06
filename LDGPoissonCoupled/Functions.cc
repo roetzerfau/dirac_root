@@ -13,7 +13,7 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 1
+#define COUPLED 0
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
 #define GRADEDMESH 1
@@ -25,7 +25,7 @@
 #define A11SCHUR 0
 
 #define ANISO 1
-#define PAPER_SOLUTION 1
+#define PAPER_SOLUTION 0
 #define VESSEL 0
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
@@ -52,7 +52,7 @@ const unsigned int p_degree[1] = {1};
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
 const double radii[n_r] = {0.01};
-const double D = 0.01;
+const double D = 1;
 
 #if PAPER_SOLUTION
 const double sol_factor = D * radii[0]/(1- D * radii[0]*  std::log(radii[0]));
