@@ -46,13 +46,14 @@ constexpr unsigned int constructed_solution{2};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[6] = {1,2,3,4,5,6};//,7,8,9,10
+const unsigned int refinement[4] = {1,2,3,4};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
 const double radii[n_r] = {0.01};
 const double D = 1;
+const double penalty_sigma = 20;
 
 #if PAPER_SOLUTION && COUPLED
 const double sol_factor = D * radii[0]/(1- D * radii[0]*  std::log(radii[0]));

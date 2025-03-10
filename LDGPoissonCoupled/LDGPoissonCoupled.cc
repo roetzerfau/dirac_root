@@ -3793,7 +3793,7 @@ std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   dimension_gap = dim - dim_omega;
   pcout << "geometric configuration "<<geo_conf <<"<< dim_Omega: "<< dim <<", dim_omega: "<<dim_omega<< " -> dimension_gap "<<dimension_gap<<std::endl; 
 rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
-  penalty =5;
+  penalty =penalty_sigma ;
   pcout<<"penalty "<<penalty<<std::endl;
  // memory_consumption("start");
   make_grid();
@@ -3877,7 +3877,7 @@ int main(int argc, char *argv[]) {
 
       std::string name =  "_test10_03_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
       "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_paper_solution_" + paperSolution_string + "_vessel_" + vessel_string + 
-      "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string + "_D_" + D_string;
+      "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string + "_D_" + D_string + "_penalty_" + penalty_sigma;
       
       std::string folderName =name +"/";
      std::cout<<folderName<<std::endl;
