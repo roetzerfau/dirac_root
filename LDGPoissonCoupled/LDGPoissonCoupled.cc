@@ -3877,7 +3877,7 @@ int main(int argc, char *argv[]) {
 
       std::string name =  "_test10_03_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
       "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_paper_solution_" + paperSolution_string + "_vessel_" + vessel_string + 
-      "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string + "_D_" + D_string + "_penalty_" + penalty_sigma;
+      "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string + "_D_" + D_string + "_penalty_" + std::to_string(penalty_sigma);
       
       std::string folderName =name +"/";
      std::cout<<folderName<<std::endl;
