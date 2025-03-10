@@ -2550,11 +2550,11 @@ double beta =g;
               fe_values_coupling_test.reinit(cell_test);
 
 #if !COUPLED || VESSEL
-            //  std::cout << "not coupled" << std::endl;
+              //pcout << "not coupled" << std::endl;
               //-------------face -----------------
            
               if (!insideCell_test) {
-               //pcout << "Omega rhs face " << std::endl;
+              // pcout << "Omega rhs face " << std::endl;
                 for (unsigned int face_no = 0;
                      face_no < GeometryInfo<dim>::faces_per_cell; face_no++) {
                   typename DoFHandler<dim>::face_iterator face_test =
@@ -2611,9 +2611,9 @@ double beta =g;
 
               if (insideCell_test) {
 
-                pcout << "Omega rhs insideCell" << std::endl;
+               // pcout << "Omega rhs insideCell" << std::endl;
                 local_vector = 0;
-                const unsigned int n_q_points = fe_values.n_quadrature_points;
+                const unsigned int n_q_points = fe_values_coupling_test.n_quadrature_points;
                  for (unsigned int q = 0; q < n_q_points; ++q) {
                 for (unsigned int i = 0; i < dofs_per_cell; i++) {
                   
@@ -2625,7 +2625,7 @@ double beta =g;
                   else 
                     z = 0;
                   local_vector(i) +=
-                  beta *  fe_values_coupling_test[Potential].value(i, 0) * z
+                  beta *  fe_values_coupling_test[Potential].value(i, q) * z
                         *
                       fe_values_omega.JxW(p);
                 }
@@ -2636,7 +2636,7 @@ double beta =g;
 #endif
 
 #if COUPLED ||VESSEL
-              // std::cout << "coupled " << std::endl;
+              // pcout << "coupled " << std::endl;
               for (unsigned int q_avag = 0; q_avag < nof_quad_points;
                    q_avag++) {
                 // Quadrature weights and points
@@ -3472,8 +3472,8 @@ preconditioner_block_1.initialize(system_matrix.block(1, 1));  // ILU for block 
   SolverGMRES<TrilinosWrappers::MPI::Vector> solver(solver_control22);
   solver.solve(system_matrix.block(0,0), completely_distributed_solution.block(0), system_rhs.block(0),preconditioner_block_0);
   pcout<<"Solve Omega done"<<std::endl;
- // solver.solve(system_matrix.block(1,1), completely_distributed_solution.block(1), system_rhs.block(1),preconditioner_block_1);
- // pcout<<"Solve omega done"<<std::endl;
+  solver.solve(system_matrix.block(1,1), completely_distributed_solution.block(1), system_rhs.block(1),preconditioner_block_1);
+ pcout<<"Solve omega done"<<std::endl;
 }
 else
 {
@@ -3578,7 +3578,7 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
       }
 
  // ------analytical solution--------
- /*
+/*
 pcout << "analytical solution" << std::endl;
  DoFHandler<dim_omega> dof_handler_Lag(triangulation_omega);
   FESystem<dim_omega> fe_Lag(FESystem<dim_omega>(FE_DGQ<dim_omega>(degree), dim_omega),
@@ -3590,9 +3590,9 @@ pcout << "analytical solution" << std::endl;
   VectorTools::interpolate(dof_handler_Lag, true_solution_omega, solution_const);
  solution_const.print(std::cout);
 std::cout << "solution_const l2 " << solution_const.l2_norm()<<" "<< solution_const.l1_norm()<<std::endl;
+*/
 
-{
-
+ {
   DoFHandler<dim> dof_handler_Lag(triangulation);
   FESystem<dim> fe_Lag(FESystem<dim>(FE_DGQ<dim>(degree), dim),
                        FE_DGQ<dim>(degree));
@@ -3602,7 +3602,7 @@ std::cout << "solution_const l2 " << solution_const.l2_norm()<<" "<< solution_co
 
   VectorTools::interpolate(dof_handler_Lag, true_solution, solution_const);
   //solution_const.print(std::cout);
-  }
+ 
 
   DataOut<dim> data_out_const;
   data_out_const.attach_dof_handler(dof_handler_Lag);
@@ -3630,7 +3630,7 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
         std::ofstream master_output(folder_name + "solution_const.pvtu");
         data_out_const.write_pvtu_record(master_output, filenames);
       }
-*/
+ }
 //----------cell_wise error ---------------
 
 
@@ -3872,7 +3872,12 @@ int main(int argc, char *argv[]) {
       std::string omega_on_face_string = is_omega_on_face ? "true" : "false";
       std::string coupled_string = COUPLED==1 ? "true" : "false";
       std::string gradedMesh_string = GRADEDMESH ==1 ? "true" : "false";
-      std::string name =  "_test06_03_constUncoupled_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string + "_D_" + D_string;
+      std::string paperSolution_string = PAPER_SOLUTION ==1 ? "true" : "false";
+      std::string vessel_string = VESSEL ==1 ? "true" : "false";
+
+      std::string name =  "_test10_03_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
+      "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_paper_solution_" + paperSolution_string + "_vessel_" + vessel_string + 
+      "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string + "_D_" + D_string;
       
       std::string folderName =name +"/";
      std::cout<<folderName<<std::endl;
