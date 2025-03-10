@@ -2425,7 +2425,7 @@ double beta =g;
 
     for (; cell_omega != endc_omega; ++cell_omega) {
       //if (cell_omega->is_locally_owned())
-      {
+ //     {
       fe_values_omega.reinit(cell_omega);
       cell_omega->get_dof_indices(local_dof_indices_omega);
       dof_omega_local_2_global(dof_handler_omega, local_dof_indices_omega);
@@ -2503,7 +2503,12 @@ double beta =g;
         break;
       }
     }
-              cell_start = cell_test;
+    if (cell_test == dof_handler_Omega.end())
+    {
+      pcout<<"cell_test nicht gefunden "<<cell_test_tri<<" : "<<cell_test<<std::endl;
+    }
+    
+    cell_start = cell_test;
     //pcout<<"cellcomp " <<cell_test_tri->index()<<" " <<cell_test_tri<<" : "<<cell_test<<std::endl;
 #endif
 
@@ -2712,6 +2717,10 @@ double beta =g;
                   break;
                 }
               }
+                if (cell_trial == dof_handler_Omega.end())
+                {
+                  pcout<<"cell_trial nicht gefunden "<<cell_trial_tri<<" : "<<cell_trial<<std::endl;
+                }
                 //pcout<<"cellcomp trial " <<cell_trial_tri<<" : "<<cell_trial<<std::endl;
 #endif
                  if (cell_trial != dof_handler_Omega.end())
@@ -2908,23 +2917,22 @@ double beta =g;
 #endif
                           // --------------------------cell ende
                           // --------------------
-                        }
-                      }
-                    }else
+                        }//for n_ftrial
+                      } //for n_ftest
+                    }else //if cell_trial->is_locally_owned()
                       std::cout<<"düdüm1 - assem"<<std::endl;
-                }
-                   }
+                } //for cellpair_trial : cell_trial_array
+                   }//for nof_quad_points circle
              
 //#endif
                
 #endif
-}
-}
-}
-// std::cout<<std::endl;
-}
-}
-}
+}//if cell_test->is_locally_owned()
+}//for cellpair : cell_test_array
+}//for quadrature_points_omega
+//}//if (cell_omega->is_locally_owned())
+}//for cell_omega
+}//if geoconfig 1D/3D
 
 }
 #endif
@@ -3807,7 +3815,7 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
 
    malloc_trim(0);
-  solve();
+  //solve();
  // memory_consumption("after solve()");
 
 
@@ -3815,9 +3823,9 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
 
 
-  std::array<double, 4> results_array = compute_errors();
-  output_results();
-  //std::array<double, 4> results_array;
+  //std::array<double, 4> results_array = compute_errors();
+  //output_results();
+  std::array<double, 4> results_array;
   return results_array;
 }
 
