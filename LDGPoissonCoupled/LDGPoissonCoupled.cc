@@ -145,7 +145,7 @@ const FEValuesExtractors::Scalar Potential(dimension_Omega);
 const double extent = 1.0;
 const double alpha = 1.0;
 const double half_length =  is_omega_on_face ? std::sqrt(0.5): std::sqrt(0.5);//0.5  -sqrt(2)* 0.001
-const double distance_tolerance = 10;
+const double distance_tolerance = 100;
 const unsigned int N_quad_points = 10;
 const double reduction = 1e-8;
 const double tolerance = 1e-10;
@@ -3899,7 +3899,7 @@ int main(int argc, char *argv[]) {
       std::string paperSolution_string = PAPER_SOLUTION ==1 ? "true" : "false";
       std::string vessel_string = VESSEL ==1 ? "true" : "false";
 
-      std::string name =  "_test11_03_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
+      std::string name =  "_testpaper_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
       "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_paper_solution_" + paperSolution_string + "_vessel_" + vessel_string + 
       "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string + "_D_" + D_string + "_penalty_" + std::to_string(penalty_sigma);
       
