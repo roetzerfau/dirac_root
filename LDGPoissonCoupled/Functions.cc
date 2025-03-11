@@ -37,23 +37,23 @@ enum GeometryConfiguration
   ThreeD_OneD = 2 ////constructed solution 1, 2, 3
 
 };
-const bool is_omega_on_face = false;
-constexpr double y_l = is_omega_on_face ? 0.0 : 0.01;
-constexpr double z_l =  is_omega_on_face ? 0.0 : 0.01;
+const bool is_omega_on_face = true;
+constexpr double y_l = is_omega_on_face ? 0.0 : 0.0001;
+constexpr double z_l =  is_omega_on_face ? 0.0 : 0.0001;
 constexpr unsigned int geo_conf{2};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
-constexpr unsigned int constructed_solution{2};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
+constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
 
 
 
-const unsigned int refinement[1 ] = {5};//,7,8,9,10
+const unsigned int refinement[4] = {1,2,3,4};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
 const double radii[n_r] = {0.01};
 const double D = 1;
-const double penalty_sigma = 20;
+const double penalty_sigma = 10;
 
 #if PAPER_SOLUTION && COUPLED
 const double sol_factor = D * radii[0]/(1- D * radii[0]*  std::log(radii[0]));

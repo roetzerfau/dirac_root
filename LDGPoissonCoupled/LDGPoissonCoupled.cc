@@ -144,7 +144,7 @@ const FEValuesExtractors::Scalar Potential(dimension_Omega);
 
 const double extent = 1.0;
 const double alpha = 1.0;
-const double half_length =  is_omega_on_face ? std::sqrt(0.5): std::sqrt(0.5-0.1);//0.5
+const double half_length =  is_omega_on_face ? std::sqrt(0.5): std::sqrt(0.5);//0.5  -sqrt(2)* 0.001
 const double distance_tolerance = 10;
 const unsigned int N_quad_points = 10;
 const double reduction = 1e-8;
@@ -360,7 +360,10 @@ public:
 
   std::array<double, 4> run();
   double max_diameter;
+  double max_diameter_omega;
   unsigned int nof_cells;
+  unsigned int nof_cells_omega;
+
 private:
   void make_grid();
 
@@ -611,8 +614,9 @@ GridGenerator::subdivided_hyper_rectangle(triangulation,repetitions,  p1, p2);//
  //GridGenerator::hyper_rectangle(triangulation,  p1, p2);
  
 #endif
-pcout<<"refined++++++ "<<n_refine<<" refined global level "<<triangulation.n_global_levels()-1<<std::endl;
 triangulation.refine_global(n_refine);
+pcout<<"refined++++++ "<<n_refine<<" refined global level "<<triangulation.n_global_levels()-1<<std::endl;
+
 /*for (unsigned int i =0; i <n_refine; ++i)
 {
   typename Triangulation<dim>::active_cell_iterator
@@ -679,7 +683,7 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
       // //TODO eigentlich wenn innerhalb der singularität celle
 
 #if ANISO
-      if(r < 2 * half_length/std::pow(2,triangulation.n_global_levels()-1)* std::sqrt(2)*1.1)//innere Bereich
+      if(r < 2 * half_length/std::pow(2,triangulation.n_global_levels()-1) * 1.1 * std::sqrt(2))//innere Bereich
 #else
       if(r <  GridTools::minimal_cell_diameter(triangulation)* 1.1)
 #endif
@@ -959,12 +963,22 @@ if(is_repartioned)
     GridGenerator::hyper_cube(triangulation_omega,0 ,  2*half_length);
 
   triangulation_omega.refine_global(refine_omega);//level_max
-
+  nof_cells_omega = triangulation_omega.n_global_active_cells();
  typename DoFHandler<dim_omega>::active_cell_iterator
         cell_omega = dof_handler_omega.begin_active(),
         endc_omega = dof_handler_omega.end();
+  max_diameter_omega = 0.0;
   for (; cell_omega != endc_omega; ++cell_omega) {
+
     if (cell_omega->is_locally_owned())
+    {
+
+      double cell_diameter = cell_omega->diameter(); 
+          
+      if (cell_diameter > max_diameter_omega) {
+        max_diameter_omega = cell_diameter;
+      }
+
     for (unsigned int face_no = 0;
          face_no < GeometryInfo<dim_omega>::faces_per_cell; face_no++) {
       if (cell_omega->face(face_no)->at_boundary())
@@ -978,6 +992,7 @@ if(is_repartioned)
         //cell_omega->face(face_no)->set_boundary_id(Neumann);
       }
 
+    }
     }
   }
 /*
@@ -3599,7 +3614,7 @@ pcout << "analytical solution" << std::endl;
  solution_const.print(std::cout);
 std::cout << "solution_const l2 " << solution_const.l2_norm()<<" "<< solution_const.l1_norm()<<std::endl;
 */
-
+/*
  {
   DoFHandler<dim> dof_handler_Lag(triangulation);
   FESystem<dim> fe_Lag(FESystem<dim>(FE_DGQ<dim>(degree), dim),
@@ -3639,6 +3654,7 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
         data_out_const.write_pvtu_record(master_output, filenames);
       }
  }
+ */
 //----------cell_wise error ---------------
 
 
@@ -3815,7 +3831,7 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
 
    malloc_trim(0);
-  //solve();
+  solve();
  // memory_consumption("after solve()");
 
 
@@ -3823,9 +3839,9 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
 
 
-  //std::array<double, 4> results_array = compute_errors();
-  //output_results();
-  std::array<double, 4> results_array;
+  std::array<double, 4> results_array = compute_errors();
+  output_results();
+  //std::array<double, 4> results_array;
   return results_array;
 }
 
@@ -3883,7 +3899,7 @@ int main(int argc, char *argv[]) {
       std::string paperSolution_string = PAPER_SOLUTION ==1 ? "true" : "false";
       std::string vessel_string = VESSEL ==1 ? "true" : "false";
 
-      std::string name =  "_test10_03_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
+      std::string name =  "_test11_03_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
       "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_paper_solution_" + paperSolution_string + "_vessel_" + vessel_string + 
       "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string + "_D_" + D_string + "_penalty_" + std::to_string(penalty_sigma);
       
@@ -3918,7 +3934,9 @@ int main(int argc, char *argv[]) {
 
       std::array<double, 4> results[p_degree_size][refinement_size];
       double max_diameter[refinement_size];
+      double max_diameter_omega[refinement_size];
       double nof_cells[refinement_size];
+      double nof_cells_omega[refinement_size];
 
       std::vector<std::string> solution_names = {"U_Omega", "Q_Omega",
                                                  "u_omega", "q_omega"};
@@ -3966,6 +3984,8 @@ int main(int argc, char *argv[]) {
           results[p][r] = arr;
           max_diameter[r] = LDGPoissonCoupled.max_diameter;
           nof_cells[r] = LDGPoissonCoupled.nof_cells;
+          max_diameter_omega[r] = LDGPoissonCoupled.max_diameter_omega;
+          nof_cells_omega[r] = LDGPoissonCoupled.nof_cells_omega;
         
 
          if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 && is_not_failed) {
@@ -4025,9 +4045,19 @@ int main(int argc, char *argv[]) {
           csvfile << "\n";
           std::cout << "\n";
           for (unsigned int r = 0; r < refinement_size; r++) {
+            if(f < 2 )
+            {
             myfile << refinement[r] << ";" << max_diameter[r] << ";" <<nof_cells[r]<< ";";
             csvfile << refinement[r] << ";" << max_diameter[r]  << ";" <<nof_cells[r]<< ";";
             std::cout << refinement[r] <<";" << max_diameter[r] << ";" <<nof_cells[r]<< ";";
+            }
+            else
+            {
+            myfile << refinement[r] << ";" << max_diameter_omega[r] << ";" <<nof_cells_omega[r]<< ";";
+            csvfile << refinement[r] << ";" << max_diameter_omega[r]  << ";" <<nof_cells_omega[r]<< ";";
+            std::cout << refinement[r] <<";" << max_diameter_omega[r] << ";" <<nof_cells_omega[r]<< ";";
+            }
+            
             for (unsigned int p = 0; p < p_degree_size; p++) {
               const double error = results[p][r][f];
 
