@@ -644,7 +644,7 @@ else
  int level_max = n_refine;
 
  //pcout<<"3D maximal_cell_diameter "<<  GridTools::maximal_cell_diameter(triangulation)<<" std::pow(maximal_cell_diameter,2) "<<std::pow(GridTools::maximal_cell_diameter(triangulation),2)<<std::endl;
-unsigned int refine_omega =  n_refine;//n_refine - refinement[0] + 1;
+unsigned int refine_omega =  n_refine + 1;//n_refine - refinement[0] + 1;
 #if GRADEDMESH
 #if ANISO
  double h_max = 2 * half_length/std::pow(2,n_refine)* std::sqrt(2);
@@ -2115,12 +2115,16 @@ else
             typename DoFHandler<dim>::face_iterator face_test =
                 cell_test->face(face_no);
             auto bounding_box = face_test->bounding_box();
-            n_ftest += bounding_box.point_inside(quadrature_point_test) == true;
+           if(bounding_box.point_inside(quadrature_point_test) == true)
+           {
+           n_ftest += 1;
             face_no_test.push_back(face_no);
+          }
           }
           if (n_ftest == 0) {
             insideCell_test = true;
             n_ftest = 1;
+            face_no_test.push_back(0);
           } else {
             insideCell_test = false;
               
@@ -2306,15 +2310,20 @@ else
           typename DoFHandler<dim>::face_iterator face_trial =
               cell_trial->face(face_no);
           auto bounding_box = face_trial->bounding_box();
-          n_ftrial += bounding_box.point_inside(
+          if(bounding_box.point_inside(
                           quadrature_point_trial,
-                          distance_tolerance) == true;
-          face_no_trial.push_back(face_no);
+                          distance_tolerance) == true)
+          {
+            n_ftrial += 1;
+            face_no_trial.push_back(face_no);
+          }
+          
         }
 
         if (n_ftrial == 0) {
           insideCell_trial = true;
           n_ftrial = 1;
+          face_no_trial.push_back(0);
 
         } else {
           insideCell_trial = false;
@@ -2358,7 +2367,7 @@ else
                 fe_Omega, my_quadrature_formula_trial,
                 update_flags_coupling);
             fe_values_coupling_trial_face.reinit(
-                cell_trial, face_no_trial[ftest]);
+                cell_trial, face_no_trial[ftrial]);
 
             V_U_matrix_coupling = 0;
 
@@ -2496,7 +2505,7 @@ double beta =g;
 
 
         n_te = cell_test_array.size();    
-        pcout << "quadrature_point_omega "<<quadrature_point_omega<<" cell_test_array " << cell_test_array.size() << std::endl;
+       // pcout << "quadrature_point_omega "<<quadrature_point_omega<<" cell_test_array " << cell_test_array.size() << std::endl;
         for (auto cellpair : cell_test_array)
 #else
         auto cell_test = GridTools::find_active_cell_around_point(
@@ -2532,7 +2541,7 @@ double beta =g;
             if (cell_test->is_locally_owned())
 #endif
             {
-              std::cout<<"cell_test "<<cell_test->center() <<std::endl;
+              //std::cout<<"cell_test "<<cell_test->center() <<std::endl;
               cell_test->get_dof_indices(local_dof_indices_test);
 
               std::vector<unsigned int> face_no_test;
@@ -2547,9 +2556,13 @@ double beta =g;
                  <<bounding_box.get_boundary_points().first<<" | " <<bounding_box.get_boundary_points().second<<
                 " length "<<bounding_box.side_length(0)<<" "<<bounding_box.side_length(1)<<" "<<bounding_box.side_length(2)<<std::endl;
                */
-                 n_ftest +=
-                    bounding_box.point_inside(quadrature_point_test,
-                                              distance_tolerance) == true;
+                
+                    if(bounding_box.point_inside(quadrature_point_test,
+                                              distance_tolerance) == true)
+                                              {
+                                                n_ftest += 1;
+                                                face_no_test.push_back(face_no);
+                                              }
                  //  n_ftest += bounding_box.signed_distance (quadrature_point_test) <= 0.0000001;
                 
                 /*if(bounding_box.point_inside(quadrature_point_test,
@@ -2557,11 +2570,12 @@ double beta =g;
                 std::cout<<"pointinside " <<(bounding_box.point_inside(quadrature_point_test,
                                               distance_tolerance) == true) << " | "<< (bounding_box.signed_distance (quadrature_point_test) <= 0.00001)<<std::endl;
                 */            
-                face_no_test.push_back(face_no);
+                
               }
               if (n_ftest == 0) {
                 insideCell_test = true;
                 n_ftest = 1;
+                face_no_test.push_back(0);
               } else {
                 insideCell_test = false;
               
@@ -2785,14 +2799,19 @@ pcout <<bounding_box.get_boundary_points().first<<" | " <<bounding_box.get_bound
                         typename DoFHandler<dim>::face_iterator face_trial =
                             cell_trial->face(face_no);
                         auto bounding_box = face_trial->bounding_box();
-                        n_ftrial += bounding_box.point_inside(
+                        if(bounding_box.point_inside(
                                         quadrature_point_trial,
-                                        distance_tolerance) == true;
-                        face_no_trial.push_back(face_no);
+                                        distance_tolerance) == true)
+                        {
+                          n_ftrial += 1;
+                          face_no_trial.push_back(face_no);
+                        }
+        
                       }
                       if (n_ftrial == 0) {
                         insideCell_trial = true;
                         n_ftrial = 1;
+                        face_no_trial.push_back(0);
 
                       } else {
                         insideCell_trial = false;
@@ -2800,8 +2819,10 @@ pcout <<bounding_box.get_boundary_points().first<<" | " <<bounding_box.get_bound
                       }
 
                      
-
+                      
                       for (unsigned int ftest = 0; ftest < n_ftest; ftest++) {
+                        //std::cout<<"ftest "<<ftest<<std::endl; 
+                        //std::cout<<" face_no_test[ftest] "<< face_no_test[ftest]<<std::endl; 
                         Point<dim - 1> quadrature_point_test_mapped_face =
                             mapping.project_real_point_to_unit_point_on_face(
                                 cell_test, face_no_test[ftest],
@@ -2834,9 +2855,10 @@ pcout <<bounding_box.get_boundary_points().first<<" | " <<bounding_box.get_bound
                           FEFaceValues<dim> fe_values_coupling_trial_face(
                               fe_Omega, my_quadrature_formula_trial,
                               update_flags_coupling);
+                             // std::cout<<"ftrial "<<ftrial<<std::endl; 
+                             // std::cout<<" face_no_trial[ftrial] "<< face_no_trial[ftrial]<<std::endl; 
                           fe_values_coupling_trial_face.reinit(
-                              cell_trial, face_no_trial[ftest]);
-
+                              cell_trial, face_no_trial[ftrial]);
                           V_U_matrix_coupling = 0;
                           v_U_matrix_coupling = 0;
                           V_u_matrix_coupling = 0;
@@ -3510,8 +3532,8 @@ preconditioner_block_1.initialize(system_matrix.block(1, 1));  // ILU for block 
   SolverGMRES<TrilinosWrappers::MPI::Vector> solver(solver_control22);
   solver.solve(system_matrix.block(0,0), completely_distributed_solution.block(0), system_rhs.block(0),preconditioner_block_0);
   pcout<<"Solve Omega done"<<std::endl;
-  solver.solve(system_matrix.block(1,1), completely_distributed_solution.block(1), system_rhs.block(1),preconditioner_block_1);
- pcout<<"Solve omega done"<<std::endl;
+  //solver.solve(system_matrix.block(1,1), completely_distributed_solution.block(1), system_rhs.block(1),preconditioner_block_1);
+ //pcout<<"Solve omega done"<<std::endl;
 }
 else
 {
@@ -3948,10 +3970,10 @@ int main(int argc, char *argv[]) {
           sizeof(refinement) / sizeof(refinement[0]);
 
       std::array<double, 4> results[p_degree_size][refinement_size];
-      double max_diameter[refinement_size];
-      double max_diameter_omega[refinement_size];
-      double nof_cells[refinement_size];
-      double nof_cells_omega[refinement_size];
+      double max_diameter[p_degree_size][refinement_size];
+      double max_diameter_omega[p_degree_size][refinement_size];
+      double nof_cells[p_degree_size][refinement_size];
+      double nof_cells_omega[p_degree_size][refinement_size];
 
       std::vector<std::string> solution_names = {"U_Omega", "Q_Omega",
                                                  "u_omega", "q_omega"};
@@ -3997,10 +4019,10 @@ int main(int argc, char *argv[]) {
                     << " u " << arr[2] << " q " << arr[3] << std::endl;
 
           results[p][r] = arr;
-          max_diameter[r] = LDGPoissonCoupled.max_diameter;
-          nof_cells[r] = LDGPoissonCoupled.nof_cells;
-          max_diameter_omega[r] = LDGPoissonCoupled.max_diameter_omega;
-          nof_cells_omega[r] = LDGPoissonCoupled.nof_cells_omega;
+          max_diameter[p][r] = LDGPoissonCoupled.max_diameter;
+          nof_cells[p][r] = LDGPoissonCoupled.nof_cells;
+          max_diameter_omega[p][r] = LDGPoissonCoupled.max_diameter_omega;
+          nof_cells_omega[p][r] = LDGPoissonCoupled.nof_cells_omega;
         
 
          if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 && is_not_failed) {
@@ -4034,47 +4056,37 @@ int main(int argc, char *argv[]) {
 #endif
         for (unsigned int f = 0; f < solution_names.size(); f++) {
           myfile << solution_names[f] << "\n";
-          myfile << "refinement; ";
-          myfile << "diameter h;";
-          myfile << "#cells;";
-          //myfile << "error;";
-
           csvfile << solution_names[f] << "\n";
-          csvfile << "refinement;";
-          csvfile << "diameter h;";
-          csvfile << "#cells;";
-         // csvfile << "error;";
-
-          std::cout << solution_names[f] << "\n";
-          std::cout << "refinement;";
-          std::cout << "diameter h;";
-          std::cout << "#cells;";
-          //std::cout << "error;";
-
+          myfile <<"refinement;";
+          csvfile <<"refinement;";
+           std::cout <<"refinement;";
           for (unsigned int p = 0; p < p_degree_size; p++) {
-            myfile <<"error p="<< p_degree[p] << ";";
-            csvfile <<"error p="<< p_degree[p] << ";";
-            std::cout <<"error p="<< p_degree[p] << ";";
+            myfile <<"error p="<< p_degree[p] << ";"<<  "diameter h;"<< "#cells;"<<"error;"<<"convergence_rate;";
+            csvfile <<"error p="<< p_degree[p] << ";"<< "diameter h;"<< "#cells;"<<"error;"<<"convergence_rate;";
+            std::cout <<"error p="<< p_degree[p] << ";"<< "diameter h;"<< "#cells;"<<"error;"<<"convergence_rate;";
           }
           myfile << "\n";
           csvfile << "\n";
           std::cout << "\n";
-          for (unsigned int r = 0; r < refinement_size; r++) {
-            if(f < 2 )
-            {
-            myfile << refinement[r] << ";" << max_diameter[r] << ";" <<nof_cells[r]<< ";";
-            csvfile << refinement[r] << ";" << max_diameter[r]  << ";" <<nof_cells[r]<< ";";
-            std::cout << refinement[r] <<";" << max_diameter[r] << ";" <<nof_cells[r]<< ";";
-            }
-            else
-            {
-            myfile << refinement[r] << ";" << max_diameter_omega[r] << ";" <<nof_cells_omega[r]<< ";";
-            csvfile << refinement[r] << ";" << max_diameter_omega[r]  << ";" <<nof_cells_omega[r]<< ";";
-            std::cout << refinement[r] <<";" << max_diameter_omega[r] << ";" <<nof_cells_omega[r]<< ";";
-            }
-            
+          for (unsigned int r = 0; r < refinement_size; r++) {    
+              myfile << refinement[r] << ";";
+              csvfile << refinement[r] << ";";
+              std::cout << refinement[r] <<";";        
             for (unsigned int p = 0; p < p_degree_size; p++) {
               const double error = results[p][r][f];
+
+              if(f < 2 )
+              {
+              myfile  << max_diameter[p][r] << ";" <<nof_cells[p][r]<< ";";
+              csvfile << max_diameter[p][r]  << ";" <<nof_cells[p][r]<< ";";
+              std::cout << max_diameter[p][r] << ";" <<nof_cells[p][r]<< ";";
+              }
+              else
+              {
+              myfile  << max_diameter_omega[p][r] << ";" <<nof_cells_omega[p][r]<< ";";
+              csvfile << max_diameter_omega[p][r]  << ";" <<nof_cells_omega[p][r]<< ";";
+              std::cout << max_diameter_omega[p][r] << ";" <<nof_cells_omega[p][r]<< ";";
+              }
 
               myfile << error;
               csvfile << error;
