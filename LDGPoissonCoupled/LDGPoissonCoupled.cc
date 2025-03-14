@@ -647,7 +647,7 @@ else
 unsigned int refine_omega =  n_refine + 1;//n_refine - refinement[0] + 1;
 #if GRADEDMESH
 #if ANISO
- double h_max = 2 * half_length/std::pow(2,n_refine)* std::sqrt(2);
+ double h_max = (2 * half_length)/std::pow(2,n_refine)* std::sqrt(2);
 #else
 double  h_max = GridTools::maximal_cell_diameter(triangulation);
 #endif 
@@ -657,23 +657,25 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
  pcout<<"h_max "<<h_max<<" level_max "<<level_max<<std::endl;
  double mu = alpha/(degree + 1);
  pcout<<"mu "<<mu<<std::endl;
- for (unsigned int i =n_refine; i <n_refine * 2; ++i)
+ for (unsigned int i =n_refine; i <n_refine * 5; ++i)
     {
       typename Triangulation<dim>::active_cell_iterator
       cell = triangulation.begin_active(),
       endc = triangulation.end();
    for (; cell != endc; ++cell)
         {
-        double r = 0, r_max = 0;
+        double r = 0, r_max = 0, r_min = 10000;
         for(unsigned int i = 0; i < cell->n_vertices();i++)  
         {
           double r = distance_to_singularity<dim>(cell->vertex(i));//TODO nicht center, sondern inf or sup
           if(r_max < r)
             r_max = r;
+          if(r_min > r)
+          r_min = r;
           
         }
           
-        r = r_max;
+        r = r_min;
     
     cell->clear_refine_flag();
       
@@ -683,21 +685,28 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
       // //TODO eigentlich wenn innerhalb der singularität celle
 
 #if ANISO
-      if(r < 2 * half_length/std::pow(2,triangulation.n_global_levels()-1) * 1.1 * std::sqrt(2))//innere Bereich
+     // if(r < 2 * half_length/std::pow(2,triangulation.n_global_levels()-1) * 1.1 * std::sqrt(2))//innere Bereich
+     if(r <  (2 * half_length)/std::pow(2,cell->level()) *  std::sqrt(2))//innere Bereich
+     //if(r <  0.00001)
 #else
-      if(r <  GridTools::minimal_cell_diameter(triangulation)* 1.1)
+      //if(r <  GridTools::minimal_cell_diameter(triangulation)* 1.1)
+      if(r < 0.5 * cell->diameter())
 #endif
       {
+        //if(r <= 0.0)
+        //std::cout<<"aaaaa "<<cell->level()<<" " <<2 * half_length/std::pow(2,cell->level())* std::sqrt(2)<< " " << std::pow(h_max,1.0/mu)<<std::endl;
 #if ANISO        
         if(2 * half_length/std::pow(2,cell->level())* std::sqrt(2) > std::pow(h_max,1.0/mu))  
 #else
         if(cell->diameter() >  std::pow(h_max,1.0/mu))
 #endif
         {
+         //std::cout<<"refine"<<std::endl;
 if(dim == 3 && ANISO)
        cell->set_refine_flag(RefinementCase<dim>(6));//RefinementCase<dim>::cut_y | RefinementCase<dim>::cut_z
 else
       cell->set_refine_flag();
+
 
 
         }
@@ -749,7 +758,7 @@ pcout<<"level_max "<<level_max<<" level_min "<<level_min<<std::endl;
  maximal_cell_diameter = GridTools::maximal_cell_diameter(triangulation);
  
  minimal_cell_diameter_2D = 2 * half_length/std::pow(2,level_max)* std::sqrt(2);
- maximal_cell_diameter_2D = 2 * half_length/std::pow(2,level_min)* std::sqrt(2);
+ maximal_cell_diameter_2D = 2 * half_length/std::pow(2,n_refine)* std::sqrt(2);
 
  h_min = minimal_cell_diameter_2D;
  pcout<<"2D minimal_cell_diameter "<<minimal_cell_diameter_2D<< " maximal_cell_diameter "<< maximal_cell_diameter_2D<<" std::pow(maximal_cell_diameter,1/mu) "<<std::pow(maximal_cell_diameter_2D,1.0/mu)<<std::endl;
@@ -766,7 +775,7 @@ nof_cells = global_active_cells;
 
 GridOut grid_out;
 std::string gradedMesh_string = GRADEDMESH ==1 ? "true" : "false";
-std::ofstream out("grid_Omega_gradedMesh_"+ gradedMesh_string +"_n_refine_"+std::to_string(n_refine)+ ".vtk"); // Choose your preferred filename and format
+std::ofstream out("grid_Omega_gradedMesh_"+ gradedMesh_string +"_n_refine_"+std::to_string(n_refine)+"_degree_"+std::to_string(degree)+ ".vtk"); // Choose your preferred filename and format
 grid_out.write_vtk(triangulation, out);
 
 
@@ -2617,7 +2626,7 @@ pcout <<bounding_box.get_boundary_points().first<<" | " <<bounding_box.get_bound
                                                distance_tolerance) == true) {
                   // if(bounding_box.signed_distance (quadrature_point_test) <= 0.0000001){
                  
-                    std::cout<<" n_te "<< n_te<<" n_ftest "<<n_ftest<<std::endl;
+                    //std::cout<<" n_te "<< n_te<<" n_ftest "<<n_ftest<<std::endl;
                     std::vector<Point<dim - 1>> quadrature_point_test_face = {
                         quadrature_point_test_mapped_face};
                     const Quadrature<dim - 1> my_quadrature_formula_test(
@@ -2631,7 +2640,7 @@ pcout <<bounding_box.get_boundary_points().first<<" | " <<bounding_box.get_bound
                         fe_values_coupling_test_face.dofs_per_cell;
                     
                     local_vector = 0;
-                    std::cout<<"n_face_points "<<n_face_points <<" dofs_this_cell "<<dofs_this_cell<<std::endl;
+                    //std::cout<<"n_face_points "<<n_face_points <<" dofs_this_cell "<<dofs_this_cell<<std::endl;
                     for (unsigned int q = 0; q < n_face_points; ++q) {
                       for (unsigned int i = 0; i < dofs_this_cell; ++i) {
                         double z;
@@ -4057,9 +4066,12 @@ int main(int argc, char *argv[]) {
         for (unsigned int f = 0; f < solution_names.size(); f++) {
           myfile << solution_names[f] << "\n";
           csvfile << solution_names[f] << "\n";
+          std::cout <<solution_names[f] << "\n";
+
           myfile <<"refinement;";
           csvfile <<"refinement;";
            std::cout <<"refinement;";
+
           for (unsigned int p = 0; p < p_degree_size; p++) {
             myfile <<"error p="<< p_degree[p] << ";"<<  "diameter h;"<< "#cells;"<<"error;"<<"convergence_rate;";
             csvfile <<"error p="<< p_degree[p] << ";"<< "diameter h;"<< "#cells;"<<"error;"<<"convergence_rate;";
