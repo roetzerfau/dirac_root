@@ -474,6 +474,8 @@ private:
   Vector<double> solution_omega;
   Vector<double> cellwise_errors_U;
   Vector<double> cellwise_errors_Q;
+  Vector<double> cellwise_errors_u;
+  Vector<double> cellwise_errors_q;
 
 /*
   IndexSet locally_owned_dofs_Omega;
@@ -761,8 +763,21 @@ pcout<<"level_max "<<level_max<<" level_min "<<level_min<<std::endl;
  maximal_cell_diameter_2D = 2 * half_length/std::pow(2,n_refine)* std::sqrt(2);
 
  h_min = minimal_cell_diameter_2D;
- pcout<<"2D minimal_cell_diameter "<<minimal_cell_diameter_2D<< " maximal_cell_diameter "<< maximal_cell_diameter_2D<<" std::pow(maximal_cell_diameter,1/mu) "<<std::pow(maximal_cell_diameter_2D,1.0/mu)<<std::endl;
- pcout<<"3D minimal_cell_diameter "<<minimal_cell_diameter<< " maximal_cell_diameter "<<maximal_cell_diameter<<" std::pow(maximal_cell_diameter,1.0/mu) "<<std::pow(maximal_cell_diameter,1.0/mu)<<std::endl;
+ pcout<<"2D minimal_cell_diameter "<<minimal_cell_diameter_2D<< " maximal_cell_diameter "<< maximal_cell_diameter_2D;
+ #if GRADEDMESH
+ pcout<<" std::pow(maximal_cell_diameter,1/mu) "<<std::pow(maximal_cell_diameter_2D,1.0/mu)<<std::endl;
+ #else
+ pcout<<std::endl;
+ #endif
+
+ pcout<<"3D minimal_cell_diameter "<<minimal_cell_diameter<< " maximal_cell_diameter ";
+ #if GRADEDMESH
+ pcout<<maximal_cell_diameter<<" std::pow(maximal_cell_diameter,1.0/mu) "<<std::pow(maximal_cell_diameter,1.0/mu)<<std::endl;
+ #else
+ pcout<<std::endl;
+ #endif
+ 
+ 
  #if MEMORY_CONSUMPTION
  pcout << "Memory consumption of triangulation: "
               << triangulation.memory_consumption() / (1024.0 * 1024.0) // Convert to MB
@@ -1245,7 +1260,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
   //malloc_trim(0);  // Force memory release
 
   int error_flag = 0, global_error_flag = 0;
-  AVERAGE = radius != 0 && !lumpedAverage && (COUPLED || VESSEL);// && (constructed_solution == 3 || constructed_solution == 2) && geo_conf == GeometryConfiguration::ThreeD_OneD;//||constructed_solution == 2
+  AVERAGE = radius != 0 && !lumpedAverage && (COUPLED || VESSEL) && (constructed_solution == 3 || constructed_solution == 2) && geo_conf == GeometryConfiguration::ThreeD_OneD;//||constructed_solution == 2
 pcout << "AVERAGE (use circel) " << AVERAGE << " radius "<<radius << " lumpedAverage "<<lumpedAverage<<std::endl;
 // weight
 if (AVERAGE) {
@@ -2826,7 +2841,7 @@ pcout <<bounding_box.get_boundary_points().first<<" | " <<bounding_box.get_bound
                         insideCell_trial = false;
 
                       }
-
+                     // std::cout<<"insideCell_test " <<insideCell_test <<" insideCell_trial " << insideCell_trial<<std::endl;
                      
                       
                       for (unsigned int ftest = 0; ftest < n_ftest; ftest++) {
@@ -3287,6 +3302,8 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors(){
 /*std::cout<<"grow< "<< triangulation.n_active_cells()<<std::endl;*/
     cellwise_errors_Q.grow_or_shrink(triangulation.n_active_cells());
    cellwise_errors_U.grow_or_shrink(triangulation.n_active_cells());
+   cellwise_errors_q.grow_or_shrink(triangulation_omega.n_active_cells());
+   cellwise_errors_u.grow_or_shrink(triangulation_omega.n_active_cells());
 
 /*
   Vector<double> cellwise_errors_U(
@@ -3322,10 +3339,10 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors(){
 
 //cellwise_errors_Q.print(std::cout);
 
-  Vector<double> cellwise_errors_u(
+ /* Vector<double> cellwise_errors_u(
       triangulation_omega.n_active_cells());
   Vector<double> cellwise_errors_q(
-      triangulation_omega.n_active_cells());
+      triangulation_omega.n_active_cells());*/
 
       const ComponentSelectFunction<dim_omega> potential_mask_omega(
           dim_omega, dim_omega + 1);
@@ -3660,7 +3677,7 @@ pcout << "analytical solution" << std::endl;
  solution_const.print(std::cout);
 std::cout << "solution_const l2 " << solution_const.l2_norm()<<" "<< solution_const.l1_norm()<<std::endl;
 */
-/*
+
  {
   DoFHandler<dim> dof_handler_Lag(triangulation);
   FESystem<dim> fe_Lag(FESystem<dim>(FE_DGQ<dim>(degree), dim),
@@ -3700,10 +3717,52 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
         data_out_const.write_pvtu_record(master_output, filenames);
       }
  }
- */
+ //omega
+ {
+  DoFHandler<dim_omega> dof_handler_Lag(triangulation_omega);
+  FESystem<dim_omega> fe_Lag(FESystem<dim_omega>(FE_DGQ<dim_omega>(degree), dim_omega),FE_DGQ<dim_omega>(degree));
+  dof_handler_Lag.distribute_dofs(fe_Lag);
+  TrilinosWrappers::MPI::Vector solution_const;
+  solution_const.reinit(dof_handler_Lag.locally_owned_dofs(), MPI_COMM_WORLD);
+
+  VectorTools::interpolate(dof_handler_Lag, true_solution_omega, solution_const);
+  //solution_const.print(std::cout);
+ 
+
+  DataOut<dim_omega> data_out_const;
+  data_out_const.attach_dof_handler(dof_handler_Lag);
+  std::vector<std::string> solution_names_omega;
+  solution_names_omega.push_back("u");
+  solution_names_omega.push_back("q");
+  data_out_const.add_data_vector(solution_const, solution_names_omega); //
+
+  data_out_const.build_patches(degree);
+  const std::string filename_const = ("solution_omega_const"    + ref_p_array  +"."+
+                                  Utilities::int_to_string(
+                                    triangulation_omega.locally_owned_subdomain(),4));
+  std::ofstream output_const((folder_name+ filename_const + ".vtu").c_str());
+  data_out_const.write_vtu(output_const);
+
+
+if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
+      {
+        std::vector<std::string>    filenames;
+        for (unsigned int i=0;
+             i < Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
+             i++)
+          {
+            filenames.push_back("solution_omega_const"  + ref_p_array  +"."+
+                                Utilities::int_to_string(i,4) +
+                                ".vtu");
+          }
+        std::ofstream master_output(folder_name + "solution_omega_const.pvtu");
+        data_out_const.write_pvtu_record(master_output, filenames);
+      }
+ }
+ 
 //----------cell_wise error ---------------
 
-
+{
     DataOut<dim> data_out_error;
     data_out_error.attach_triangulation(triangulation);
     data_out_error.add_data_vector(cellwise_errors_Q, "Q");
@@ -3730,9 +3789,36 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
         std::ofstream master_output(folder_name + "error"  + ref_p_array  + "."  +"pvtu");
         data_out_error.write_pvtu_record(master_output, filenames);
       }
+ }
+// omega error
+{
+  DataOut<dim_omega> data_out_error;
+    data_out_error.attach_triangulation(triangulation_omega);
+    data_out_error.add_data_vector(cellwise_errors_q, "q");
+    data_out_error.add_data_vector(cellwise_errors_u, "u");
+    data_out_error.build_patches();
 
 
-
+  const std::string filename_error = ("error_omega" +  ref_p_array + "."  +
+                                  Utilities::int_to_string(
+                                    triangulation_omega.locally_owned_subdomain(),4));
+  std::ofstream output_error((folder_name + filename_error + ".vtu").c_str());
+  data_out_error.write_vtu(output_error);
+    if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
+      {
+        std::vector<std::string>    filenames;
+        for (unsigned int i=0;
+             i < Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
+             i++)
+          {
+            filenames.push_back("error_omega"  + ref_p_array  +"."+
+                                Utilities::int_to_string(i,4) +
+                                ".vtu");
+          }
+        std::ofstream master_output(folder_name + "error_omega"  + ref_p_array  + "."  +"pvtu");
+        data_out_error.write_pvtu_record(master_output, filenames);
+      }
+}
    //-----omega-----------
  // std::cout << "omega solution" << std::endl;
 
@@ -4127,11 +4213,19 @@ int main(int argc, char *argv[]) {
 
         myfile.close();
         csvfile.close();
+        command = "cp -r " + folderName + " /mnt/c/Users/maxro/Downloads/";
+        std::cout << command << std::endl;
+        if (system(command.c_str()) == 0) {
+          if(rank_mpi == 0)
+          std::cout << "Folder copy successfully." << std::endl;
+      } else {
+          std::cerr << "Error: Could not copy folder." << std::endl;
+      }
       }
     }
   }
 
-   
+
   return 0;
 }
 

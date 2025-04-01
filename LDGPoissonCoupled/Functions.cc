@@ -16,7 +16,7 @@
 #define COUPLED 1
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
-#define GRADEDMESH 1
+#define GRADEDMESH 0
 #define MEMORY_CONSUMPTION 0
 
 #define USE_MPI_ASSEMBLE 1
@@ -24,9 +24,10 @@
 #define CYLINDER 0
 #define A11SCHUR 0
 
-#define ANISO 1
+#define ANISO 0
 #define PAPER_SOLUTION 1
 #define VESSEL 0
+#define SOLUTION1_LINEAR 1
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
 
@@ -42,12 +43,12 @@ constexpr double y_l = is_omega_on_face ? 0.0 : 0.0001;
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.0001;
 constexpr unsigned int geo_conf{2};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
-constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
+constexpr unsigned int constructed_solution{1};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
 
 
 
-const unsigned int refinement[5] = {1,2,3,4,5};//,7,8,9,10
-const unsigned int p_degree[2] = {1,2};
+const unsigned int refinement[4] = {1,2,3,4};//,7,8,9,10
+const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
@@ -194,6 +195,11 @@ double RightHandSide<dim>::value(const Point<dim> &p,
                                  const unsigned int) const {
   switch (constructed_solution) {
   case 1: {
+   #if SOLUTION1_LINEAR
+     return 0;
+   #else
+   return -2;
+    #endif
     if (dim == 2)
       return (2 * std::pow(w, 2)) * std::cos(w * p[0]) * std::cos(w * p[1]);
     if (dim == 3)
@@ -220,6 +226,11 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
   /* if (dim == 2)
       return std::pow(w, 2) * std::cos(w * p[0]) * std::cos(w * y_l);
     if (dim == 3)*/
+    #if SOLUTION1_LINEAR
+      return 0;
+    #else
+      return -2;
+    #endif
       return std::pow(w, 2) * std::cos(w * p[0]) * std::cos(w * y_l) *
              std::cos(w * z_l);
     break;
@@ -267,10 +278,16 @@ double DirichletBoundaryValues<dim>::value(const Point<dim> &p,
   z= p[2];
   switch (constructed_solution) {
   case 1: {
+
+    #if SOLUTION1_LINEAR
+    return x;
+    #else
+    return std::pow(x,2);
+    #endif
+
     if (dim == 2)
       return std::cos(w * x) * std::cos(w * y);
     if (dim == 3) {
-      
       return std::cos(w * x) * std::cos(w * y) * std::cos(w * z);
     }
     break;
@@ -352,6 +369,11 @@ double DirichletBoundaryValues_omega<dim>::value(
     /*if (dim == 2)
       return std::cos(w * p[0]) * std::cos(w * y_l);
     if (dim == 3)*/
+    #if SOLUTION1_LINEAR
+       return p[0];
+  #else
+       return std::pow(p[0],2);
+  #endif
       return std::cos(w * p[0]) * std::cos(w * y_l) * std::cos(w * z_l);
     break;
   }
@@ -435,6 +457,20 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
       values(1) = w * std::cos(w * x) * std::sin(w * y) * std::cos(w * z);
       values(2) = w * std::cos(w * x) * std::cos(w * y) * std::sin(w * z);
       values(3) = std::cos(w * x) * std::cos(w * y) * std::cos(w * z);     // U
+
+      #if SOLUTION1_LINEAR
+      values(0) = -1; // Q
+      values(1) = 0;
+      values(2) = 0;
+      values(3) = x;     // U
+      #else
+      values(0) = - 2 * x; // Q
+      values(1) = 0;
+      values(2) = 0;
+      values(3) = std::pow(x,2);     // U
+      #endif
+
+
     }
     break;
   }
@@ -516,11 +552,22 @@ void TrueSolution_omega<dim>::vector_value(const Point<dim> &p,
       values(1) = std::cos(w * x) * std::cos(w * y_l);
     }
     if (dim == 3) */
-    {
+    //{
      
       values(0) = w * std::sin(w * x) * std::cos(w * y_l) * std::cos(w * z_l);
       values(1) = std::cos(w * x) * std::cos(w * y_l) * std::cos(w * z_l);
-    }
+
+      #if SOLUTION1_LINEAR
+        values(0) = -1;
+        values(1) = x;
+      #else
+        values(0) = -2 * x;
+        values(1) = std::pow(x,2);
+      #endif
+
+
+     //std::cout<<x<<" "<< values(0) <<" "<< values(1) <<std::endl;
+    //}
     break;
   }
   case 2:
@@ -593,7 +640,7 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
     else
       values(i) = std::pow(r,2*alpha);
     //else  
-   //  values(i) = 1;
+    values(i) = 1;
 // values(i) = 1;
   //values(i) = values(i) * std::pow(r,2*alpha);
   }
