@@ -26,7 +26,7 @@
 
 #define ANISO 0
 #define PAPER_SOLUTION 1
-#define VESSEL 0
+#define VESSEL 1
 #define SOLUTION1_LINEAR 1
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
@@ -278,7 +278,11 @@ double DirichletBoundaryValues<dim>::value(const Point<dim> &p,
   z= p[2];
   switch (constructed_solution) {
   case 1: {
-
+    Vector<double> values(dim + 1);
+    TrueSolution<dim> solution;
+    solution.vector_value(p, values);
+    return values[dim];
+   
     #if SOLUTION1_LINEAR
     return x;
     #else
@@ -366,6 +370,11 @@ double DirichletBoundaryValues_omega<dim>::value(
     const Point<dim> &p, const unsigned int /*component*/) const {
   switch (constructed_solution) {
   case 1: {
+    Vector<double> values(dim + 1);
+    TrueSolution_omega<dim> solution;
+    solution.vector_value(p, values);
+    return values[dim];
+
     /*if (dim == 2)
       return std::cos(w * p[0]) * std::cos(w * y_l);
     if (dim == 3)*/
@@ -449,6 +458,17 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
       values(0) = w * std::sin(w * x) * std::cos(w * y); // Q
       values(1) = w * std::cos(w * x) * std::sin(w * y);
       values(2) = std::cos(w * x) * std::cos(w * y);       // U
+
+      #if SOLUTION1_LINEAR
+      values(0) = -1; // Q
+      values(1) = 0;
+      values(2) = x + 1;     // U
+      #else
+      values(0) = - 2 * x; // Q
+      values(1) = 0;
+      values(2) = std::pow(x,2);     // U
+      #endif
+
     }
     if (dim == 3) 
     {
@@ -462,7 +482,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
       values(0) = -1; // Q
       values(1) = 0;
       values(2) = 0;
-      values(3) = x;     // U
+      values(3) = x + 1;     // U
       #else
       values(0) = - 2 * x; // Q
       values(1) = 0;
@@ -559,7 +579,8 @@ void TrueSolution_omega<dim>::vector_value(const Point<dim> &p,
 
       #if SOLUTION1_LINEAR
         values(0) = -1;
-        values(1) = x;
+        values(1) = x+1;
+        
       #else
         values(0) = -2 * x;
         values(1) = std::pow(x,2);
@@ -640,7 +661,7 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
     else
       values(i) = std::pow(r,2*alpha);
     //else  
-    values(i) = 1;
+   values(i) = 1;
 // values(i) = 1;
   //values(i) = values(i) * std::pow(r,2*alpha);
   }
