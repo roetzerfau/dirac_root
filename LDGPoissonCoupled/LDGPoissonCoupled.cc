@@ -520,7 +520,7 @@ private:
 
   const UpdateFlags update_flags = update_values | update_gradients |
                                    update_quadrature_points | update_JxW_values;
-  const UpdateFlags update_flags_coupling = update_values | update_JxW_values| update_quadrature_points;
+  const UpdateFlags update_flags_coupling = update_values | update_JxW_values| update_quadrature_points | update_normal_vectors ;//|update_gradients
 
   const UpdateFlags face_update_flags = update_values | update_normal_vectors |
                                         update_quadrature_points |
@@ -647,7 +647,7 @@ else
  int level_max = n_refine;
 
  //pcout<<"3D maximal_cell_diameter "<<  GridTools::maximal_cell_diameter(triangulation)<<" std::pow(maximal_cell_diameter,2) "<<std::pow(GridTools::maximal_cell_diameter(triangulation),2)<<std::endl;
-unsigned int refine_omega =  n_refine + 1;//n_refine - refinement[0] + 1;
+unsigned int refine_omega =  n_refine;//n_refine - refinement[0] + 1;
 #if GRADEDMESH
 #if ANISO
  double h_max = (2 * half_length)/std::pow(2,n_refine)* std::sqrt(2);
@@ -762,7 +762,7 @@ pcout<<"level_max "<<level_max<<" level_min "<<level_min<<std::endl;
  
  minimal_cell_diameter_2D = 2 * half_length/std::pow(2,level_max)* std::sqrt(2);
  maximal_cell_diameter_2D = 2 * half_length/std::pow(2,n_refine)* std::sqrt(2);
-//arrr =  half_length/std::pow(2,n_refine);
+arrr =  0.0;//half_length/std::pow(2,n_refine)/2;
 pcout<<"arrr "<<arrr<<std::endl;
  h_min = minimal_cell_diameter_2D;
  pcout<<"2D minimal_cell_diameter "<<minimal_cell_diameter_2D<< " maximal_cell_diameter "<< maximal_cell_diameter_2D;
@@ -1262,7 +1262,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
   //malloc_trim(0);  // Force memory release
 
   int error_flag = 0, global_error_flag = 0;
-  AVERAGE = radius != 0 && !lumpedAverage && (COUPLED || VESSEL) && (constructed_solution == 3 || constructed_solution == 2) && geo_conf == GeometryConfiguration::ThreeD_OneD;//||constructed_solution == 2
+  AVERAGE = radius != 0 && !lumpedAverage && (COUPLED || VESSEL);// && (constructed_solution == 3 || constructed_solution == 2) && geo_conf == GeometryConfiguration::ThreeD_OneD;//||constructed_solution == 2
 pcout << "AVERAGE (use circel) " << AVERAGE << " radius "<<radius << " lumpedAverage "<<lumpedAverage<<std::endl;
 // weight
 if (AVERAGE) {
@@ -1300,16 +1300,16 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
         cell_omega = dof_handler_omega.begin_active(),
         endc_omega = dof_handler_omega.end();
 
-    //for (; cell_omega != endc_omega; ++cell_omega) 
+    for (; cell_omega != endc_omega; ++cell_omega) 
     {
       //if (cell_omega->is_locally_owned())
       {
-     /* fe_values_omega.reinit(cell_omega);
+      fe_values_omega.reinit(cell_omega);
       cell_omega->get_dof_indices(local_dof_indices_omega);
-      dof_omega_local_2_global(dof_handler_omega, local_dof_indices_omega);*/
+      dof_omega_local_2_global(dof_handler_omega, local_dof_indices_omega);
 
-      std::vector<Point<dim_omega>> quadrature_points_omega ={Point<dim_omega>(std::sqrt(2)/2.0 + arrr)};
-         // fe_values_omega.get_quadrature_points();
+      std::vector<Point<dim_omega>> quadrature_points_omega =  fe_values_omega.get_quadrature_points();//{Point<dim_omega>(std::sqrt(2)/2.0 + arrr)};
+         //
 
       for (unsigned int p = 0; p < quadrature_points_omega.size(); p++) {
         Point<dim_omega> quadrature_point_omega = quadrature_points_omega[p];
@@ -2497,9 +2497,9 @@ if(constructed_solution == 1){
     bool insideCell_test = true;
     bool insideCell_trial = true;
 
-
+MappingCartesian<dim> mymapping;
 #if PAPER_SOLUTION
-    double beta = 1;//2 * numbers::PI * D * radius;
+    double beta = 2 * numbers::PI * D * radius;
     g = beta;
 #else
 double beta =g;
@@ -2510,17 +2510,17 @@ double beta =g;
     cell_omega = dof_handler_omega.begin_active();
     endc_omega = dof_handler_omega.end();
 
-    //for (; cell_omega != endc_omega; ++cell_omega) 
+    for (; cell_omega != endc_omega; ++cell_omega) 
     {
       //if (cell_omega->is_locally_owned())
  //     {
-      /*fe_values_omega.reinit(cell_omega);
+     fe_values_omega.reinit(cell_omega);
       cell_omega->get_dof_indices(local_dof_indices_omega);
-      dof_omega_local_2_global(dof_handler_omega, local_dof_indices_omega);*/
+      dof_omega_local_2_global(dof_handler_omega, local_dof_indices_omega);
 
-      std::vector<Point<dim_omega>> quadrature_points_omega = {Point<dim_omega>(std::sqrt(2)/2.0 + arrr)};//
-          //fe_values_omega.get_quadrature_points();
-
+      std::vector<Point<dim_omega>> quadrature_points_omega = fe_values_omega.get_quadrature_points();
+//{Point<dim_omega>(std::sqrt(2)/2.0 + arrr)};
+          //
       for (unsigned int p = 0; p < quadrature_points_omega.size(); p++)
        {
         Point<dim_omega> quadrature_point_omega = quadrature_points_omega[p];
@@ -2552,7 +2552,7 @@ double beta =g;
         // test function
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
-        pcout<<"quadrature_point_coupling "<<quadrature_point_coupling<<std::endl;
+       //pcout<<"quadrature_point_coupling "<<quadrature_point_coupling<<std::endl;
    
     
         unsigned int n_te;
@@ -2667,42 +2667,66 @@ double beta =g;
            
               if (!insideCell_test) {
               // pcout << "Omega rhs face " << std::endl;
+             /* Point<dim - 1> quadrature_point_test_mapped_face =
+                      mapping.project_real_point_to_unit_point_on_face(
+                          cell_test, 0, quadrature_point_test);*/
+               // pcout<<"cell "<<cell_test<<std::endl;
                 for (unsigned int face_no = 0;
                      face_no < GeometryInfo<dim>::faces_per_cell; face_no++) {
                   typename DoFHandler<dim>::face_iterator face_test =
                       cell_test->face(face_no);
 
-                  Point<dim - 1> quadrature_point_test_mapped_face =
-                      mapping.project_real_point_to_unit_point_on_face(
-                          cell_test, face_no, quadrature_point_test);
+                  
+                  Point<dim - 1> quadrature_point_test_mapped_face = 
+                      mapping.project_real_point_to_unit_point_on_face(//das ist nicht reference Face, sondern face in eigenen Koordinatensystem, wird nochmal gedreht 
+                          cell_test, face_no, quadrature_point_test);// für jedes Face braucht man eigenes Referenzface, welche dann gedreht wird und dann zu richtigen quadrature point wird
+                  
+                  if(face_no == 2 || face_no ==3)//TODO checken warum man das machen muss
+                  quadrature_point_test_mapped_face = {quadrature_point_test_mapped_face[1],quadrature_point_test_mapped_face[0] };
+                  
+                //  std::cout<<"face_no "<<face_no<<" ----quadrature_point_test "<<quadrature_point_test<<" quadrature_point_test_mapped_face "<<quadrature_point_test_mapped_face<<std::endl;
                   for(unsigned int tf = 0; tf < dim -1; tf++)
                   quadrature_point_test_mapped_face[tf] = std::max(0.0,quadrature_point_test_mapped_face[tf]);
                   
                   auto bounding_box = face_test->bounding_box();
-                 /* std::cout<<"quadrature_point_test "<<quadrature_point_test<<" quadrature_point_test_mapped_face "<<quadrature_point_test_mapped_face<<std::endl;
-pcout <<bounding_box.get_boundary_points().first<<" | " <<bounding_box.get_boundary_points().second<<
-                " length "<<bounding_box.side_length(0)<<" "<<bounding_box.side_length(1)<<" "<<bounding_box.side_length(2)<<std::endl;*/
+                  //std::cout<<"quadrature_point_test "<<quadrature_point_test<<" quadrature_point_test_mapped_face "<<quadrature_point_test_mapped_face<<std::endl;
+
                   if (bounding_box.point_inside(quadrature_point_test,
                                                distance_tolerance) == true) {
-                 std::cout<<"TEST cell_trial "<< cell_test <<" insideCell_test "<<insideCell_test <<" n_ftest "<<n_ftest<<" n_te "<<n_te<<" face_no_test ";
+                 /*std::cout<<"TEST cell_trial "<< cell_test <<" insideCell_test "<<insideCell_test <<" n_ftest "<<n_ftest<<" n_te "<<n_te<<" face_no_test ";
                  for(const auto& kk : face_no_test)
                  std::cout<<kk<<" ";
-                 std::cout<<std::endl; 
-                 std::cout<<"quadrature_point_test "<<quadrature_point_test<<" quadrature_point_test_mapped_face "<<quadrature_point_test_mapped_face<<std::endl;
+                 std::cout<<std::endl;*/
+                 
                   // if(bounding_box.signed_distance (quadrature_point_test) <= 0.0000001){
                  
                     //std::cout<<" n_te "<< n_te<<" n_ftest "<<n_ftest<<std::endl;
-                    std::vector<Point<dim - 1>> quadrature_point_test_face = {
-                        quadrature_point_test_mapped_face};
+                    
+                   
+                 /*   if(std::abs(fe_values_coupling_test_face.normal_vector(0)[1])> 0.000001)
+                        std::vector<Point<dim - 1>> quadrature_point_test_face = {
+                          Point<dim-1>({quadrature_point_test_mapped_face[1],quadrature_point_test_mapped_face[0]})};
+                    else*/
+
+                  std::vector<Point<dim - 1>> quadrature_point_test_face = {
+                          quadrature_point_test_mapped_face};
+
                     const Quadrature<dim - 1> my_quadrature_formula_test(
                         quadrature_point_test_face, my_quadrature_weights);
+
                     FEFaceValues<dim> fe_values_coupling_test_face(
-                        fe_Omega, my_quadrature_formula_test, update_flags_coupling);
+                        mapping, fe_Omega, my_quadrature_formula_test, update_flags_coupling);
+
                     fe_values_coupling_test_face.reinit(cell_test, face_no);
                    
                     unsigned int n_face_points =
                         fe_values_coupling_test_face.n_quadrature_points;
-                        std::cout <<"quadrature_point(0) " <<fe_values_coupling_test_face.get_quadrature_points()[0]<<std::endl;
+                       // pcout <<"Boundingbox "<<fe_values_coupling_test_face.normal_vector(0)<<std::endl;
+                       // pcout <<"Boundingbox "<<bounding_box.get_boundary_points().first<<" | " <<bounding_box.get_boundary_points().second<<
+                //" length "<<bounding_box.side_length(0)<<" "<<bounding_box.side_length(1)<<" "<<bounding_box.side_length(2)<<std::endl;
+                     //  std::cout <<"quadrature_point(0) " <<fe_values_coupling_test_face.get_quadrature_points().size()<<" v "<<fe_values_coupling_test_face.get_quadrature_points()[0]<<std::endl;
+                       // std::cout<< "face_no "<<face_no<<" present_face_no "<<fe_values_coupling_test_face.get_face_number()<<" present_face_index "
+                      //  <<fe_values_coupling_test_face.get_face_index()<<std::endl;
                     unsigned int dofs_this_cell =
                         fe_values_coupling_test_face.dofs_per_cell;
                     
@@ -2896,13 +2920,13 @@ pcout <<bounding_box.get_boundary_points().first<<" | " <<bounding_box.get_bound
                       }
                      // std::cout<<"insideCell_test " <<insideCell_test <<" insideCell_trial " << insideCell_trial<<std::endl;
                      
-                      std::cout<<"cell_trial "<< cell_test <<" insideCell_test "<<insideCell_test <<" n_ftest "<<n_ftest<<" n_te "<<n_te<< " face_no_test ";
+                   /*   std::cout<<"cell_test "<< cell_test <<" insideCell_test "<<insideCell_test <<" n_ftest "<<n_ftest<<" n_te "<<n_te<< " face_no_test ";
                       for(const auto& kk : face_no_test)
                       std::cout<<kk<<" ";
                       std::cout<<" cell_trial "<< cell_trial <<" insideCell_trial "<<insideCell_trial <<" n_ftrial "<<n_ftrial<<" n_tr "<<n_tr<<" face_no_trial ";
                       for(const auto& kk : face_no_trial)
                       std::cout<<kk<<" ";
-                      std::cout <<std::endl;
+                      std::cout <<std::endl;*/
                       
                       
                       for (unsigned int ftest = 0; ftest < n_ftest; ftest++) {
@@ -2912,6 +2936,9 @@ pcout <<bounding_box.get_boundary_points().first<<" | " <<bounding_box.get_bound
                             mapping.project_real_point_to_unit_point_on_face(
                                 cell_test, face_no_test[ftest],
                                 quadrature_point_test);
+                         if(face_no_test[ftest]== 2 ||face_no_test[ftest] ==3)
+                            quadrature_point_test_mapped_face = {quadrature_point_test_mapped_face[1],quadrature_point_test_mapped_face[0] };
+                        
                         for(unsigned int tf = 0; tf < dim -1; tf++)
                         quadrature_point_test_mapped_face[tf] = std::max(0.0,quadrature_point_test_mapped_face[tf]);
 
@@ -2924,7 +2951,8 @@ pcout <<bounding_box.get_boundary_points().first<<" | " <<bounding_box.get_bound
                             update_flags_coupling);
                         fe_values_coupling_test_face.reinit(
                             cell_test, face_no_test[ftest]);
-
+                     /* std::cout <<"quadrature_point_test(0) " <<fe_values_coupling_test_face.get_quadrature_points().size()<<
+                      " v "<<fe_values_coupling_test_face.get_quadrature_points()[0]<<std::endl;*/
                         for (unsigned int ftrial = 0; ftrial < n_ftrial;
                              ftrial++) {
 
@@ -2932,6 +2960,9 @@ pcout <<bounding_box.get_boundary_points().first<<" | " <<bounding_box.get_bound
                               mapping.project_real_point_to_unit_point_on_face(
                                   cell_trial, face_no_trial[ftrial],
                                   quadrature_point_trial);
+                        if( face_no_trial[ftrial] == 2 || face_no_trial[ftrial] ==3)
+                            quadrature_point_trial_mapped_face = {quadrature_point_trial_mapped_face[1],quadrature_point_trial_mapped_face[0] };
+                        
                         for(unsigned int tf = 0; tf < dim -1; tf++)
                         quadrature_point_trial_mapped_face[tf] = std::max(0.0,quadrature_point_trial_mapped_face[tf]);
 
@@ -2948,6 +2979,8 @@ pcout <<bounding_box.get_boundary_points().first<<" | " <<bounding_box.get_bound
                              // std::cout<<" face_no_trial[ftrial] "<< face_no_trial[ftrial]<<std::endl; 
                           fe_values_coupling_trial_face.reinit(
                               cell_trial, face_no_trial[ftrial]);
+                            /*  std::cout <<"quadrature_point_trial(0) " <<fe_values_coupling_trial_face.get_quadrature_points().size()<<
+                      " v "<<fe_values_coupling_trial_face.get_quadrature_points()[0]<<std::endl;*/
                           V_U_matrix_coupling = 0;
                           v_U_matrix_coupling = 0;
                           V_u_matrix_coupling = 0;
@@ -4097,7 +4130,7 @@ int main(int argc, char *argv[]) {
       std::string paperSolution_string = PAPER_SOLUTION ==1 ? "true" : "false";
       std::string vessel_string = VESSEL ==1 ? "true" : "false";
 
-      std::string name =  "_testpaper_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
+      std::string name =  "_testpaper02_04_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
       "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_paper_solution_" + paperSolution_string + "_vessel_" + vessel_string + 
       "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string + "_D_" + D_string + "_penalty_" + std::to_string(penalty_sigma);
       

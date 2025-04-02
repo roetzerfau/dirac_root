@@ -25,9 +25,9 @@
 #define A11SCHUR 0
 
 #define ANISO 0
-#define PAPER_SOLUTION 1
-#define VESSEL 1
-#define SOLUTION1_LINEAR 1
+#define PAPER_SOLUTION 0 //paper dangelo, O: thesis
+#define VESSEL 0
+#define SOLUTION1_LINEAR 0
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
 
@@ -47,14 +47,14 @@ constexpr unsigned int constructed_solution{1};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[4] = {1,2,3,4};//,7,8,9,10
-const unsigned int p_degree[1] = {1};
+const unsigned int refinement[6] = {1,2,3,4,5,6};//,7,8,9,10
+const unsigned int p_degree[2] = {1,2};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
 const double radii[n_r] = {0.01};
 const double D = 1;
-const double penalty_sigma = 10;
+const double penalty_sigma = 5;
 
 #if PAPER_SOLUTION && COUPLED
 const double sol_factor = D * radii[0]/(1- D * radii[0]*  std::log(radii[0]));
@@ -661,6 +661,7 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
     else
       values(i) = std::pow(r,2*alpha);
     //else  
+if(constructed_solution == 1)
    values(i) = 1;
 // values(i) = 1;
   //values(i) = values(i) * std::pow(r,2*alpha);
