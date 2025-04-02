@@ -145,7 +145,7 @@ const FEValuesExtractors::Scalar Potential(dimension_Omega);
 const double extent = 1.0;
 const double alpha = 1.0;
 const double half_length =  is_omega_on_face ? std::sqrt(0.5): std::sqrt(0.5);//0.5  -sqrt(2)* 0.001
-const double distance_tolerance = 100;
+const double distance_tolerance = 100;//100
 const unsigned int N_quad_points = 10;
 const double reduction = 1e-8;
 const double tolerance = 1e-10;
@@ -659,6 +659,7 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
  //
  pcout<<"h_max "<<h_max<<" level_max "<<level_max<<std::endl;
  double mu = alpha/(degree + 1);
+ double delta = 1.0;
  pcout<<"mu "<<mu<<std::endl;
  for (unsigned int i =n_refine; i <n_refine * 5; ++i)
     {
@@ -670,7 +671,7 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
         double r = 0, r_max = 0, r_min = 10000;
         for(unsigned int i = 0; i < cell->n_vertices();i++)  
         {
-          double r = distance_to_singularity<dim>(cell->vertex(i));//TODO nicht center, sondern inf or sup
+          double r = distance_to_singularity<dim>(cell->vertex(i))* 1.0000001 ;//TODO nicht center, sondern inf or sup  
           if(r_max < r)
             r_max = r;
           if(r_min > r)
@@ -678,7 +679,7 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
           
         }
           
-        r = r_min;
+        r = r_max;//r_min im paper
     
     cell->clear_refine_flag();
       
@@ -689,7 +690,7 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
 
 #if ANISO
      // if(r < 2 * half_length/std::pow(2,triangulation.n_global_levels()-1) * 1.1 * std::sqrt(2))//innere Bereich
-     if(r <  (2 * half_length)/std::pow(2,cell->level()) *  std::sqrt(2))//innere Bereich
+     if(r <= delta  * (2 * half_length)/std::pow(2,cell->level()) *  std::sqrt(2))//innere Bereich
      //if(r <  0.00001)
 #else
       //if(r <  GridTools::minimal_cell_diameter(triangulation)* 1.1)
@@ -2032,8 +2033,7 @@ else
             fe_neighbor_face_values_omega.reinit(neighbor_omega,
                                                  neighbor_face_no_omega);
 
-            double h = 1;
-                //std::min(cell_omega->diameter(), neighbor_omega->diameter());
+            double h = 1;// std::min(cell_omega->diameter(), neighbor_omega->diameter());
 
            assemble_flux_terms(
                 fe_face_values_omega, fe_neighbor_face_values_omega,

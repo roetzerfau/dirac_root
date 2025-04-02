@@ -16,7 +16,7 @@
 #define COUPLED 1
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
-#define GRADEDMESH 0
+#define GRADEDMESH 1
 #define MEMORY_CONSUMPTION 0
 
 #define USE_MPI_ASSEMBLE 1
@@ -24,8 +24,8 @@
 #define CYLINDER 0
 #define A11SCHUR 0
 
-#define ANISO 0
-#define PAPER_SOLUTION 0 //paper dangelo, O: thesis
+#define ANISO 1
+#define PAPER_SOLUTION 1 //paper dangelo, O: thesis
 #define VESSEL 0
 #define SOLUTION1_LINEAR 0
 using namespace dealii;
@@ -54,7 +54,7 @@ const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
 const double radii[n_r] = {0.01};
 const double D = 1;
-const double penalty_sigma = 5;
+const double penalty_sigma = 10;
 
 #if PAPER_SOLUTION && COUPLED
 const double sol_factor = D * radii[0]/(1- D * radii[0]*  std::log(radii[0]));
