@@ -2548,11 +2548,11 @@ double beta =g;
         quadrature_points_circle = equidistant_points_on_circle<dim>(
             quadrature_point_coupling, radius, normal_vector_omega,
             nof_quad_points);
-
+        
         // test function
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
-       //pcout<<"quadrature_point_coupling "<<quadrature_point_coupling<<std::endl;
+      //  pcout<<"quadrature_point_coupling "<<quadrature_point_coupling<<std::endl;
    
     
         unsigned int n_te;
@@ -2791,7 +2791,7 @@ double beta =g;
                    q_avag++) {
                 // Quadrature weights and points
                 quadrature_point_trial = quadrature_points_circle[q_avag];
-              
+             // std::cout<< "quadrature_point_coupling "<<quadrature_point_coupling <<" quadrature_point_trial "<<quadrature_point_trial<<std::endl;
                 double weight;
                 double C_avag;
                 if (AVERAGE) {
@@ -2987,9 +2987,12 @@ double beta =g;
                           fe_values_coupling_trial_face.reinit(
                               cell_trial, face_no_trial[ftrial]);
                               if(fe_values_coupling_trial_face.get_quadrature_points()[0].distance(quadrature_point_trial) > 0.0000001)
+                              //if(((fe_values_coupling_trial_face.get_quadrature_points()[0][1] - quadrature_point_trial[1]) > 0.0000001)|| 
+                              //((fe_values_coupling_trial_face.get_quadrature_points()[0][2] - quadrature_point_trial[2]) > 0.0000001))
                               {
-                              //std::cerr << "quadrature_point_trial wrong " <<fe_values_coupling_trial_face.get_quadrature_points()[0].distance(quadrature_point_trial)<< std::endl;
-                              //throw std::runtime_error("Falsch");  
+                                std::cout<<fe_values_coupling_trial_face.get_quadrature_points()[0] << " vs " << quadrature_point_trial<<std::endl;
+                                std::cerr << "quadrature_point_trial wrong " <<fe_values_coupling_trial_face.get_quadrature_points()[0].distance(quadrature_point_trial)<< std::endl;
+                              //  throw std::runtime_error("Falsch");  
                             }
                               /*  std::cout <<"quadrature_point_trial(0) " <<fe_values_coupling_trial_face.get_quadrature_points().size()<<
                       " v "<<fe_values_coupling_trial_face.get_quadrature_points()[0]<<std::endl;*/
@@ -4091,6 +4094,8 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
 int main(int argc, char *argv[]) {
   //std::cout << "USE_MPI_ASSEMBLE " << USE_MPI_ASSEMBLE << std::endl;
+  std::cout << "Using Deal.II version: " 
+          << DEAL_II_PACKAGE_VERSION << std::endl;
 #if 1
   deallog.depth_console(0);
 
