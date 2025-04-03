@@ -1263,7 +1263,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
   //malloc_trim(0);  // Force memory release
 
   int error_flag = 0, global_error_flag = 0;
-  AVERAGE = radius != 0 && !lumpedAverage && (COUPLED || VESSEL) && (constructed_solution == 3 || constructed_solution == 2) && geo_conf == GeometryConfiguration::ThreeD_OneD;//||constructed_solution == 2
+  AVERAGE = radius != 0 && !lumpedAverage && (COUPLED || VESSEL); //&& (constructed_solution == 3 || constructed_solution == 2) && geo_conf == GeometryConfiguration::ThreeD_OneD;//||constructed_solution == 2
 pcout << "AVERAGE (use circel) " << AVERAGE << " radius "<<radius << " lumpedAverage "<<lumpedAverage<<std::endl;
 // weight
 if (AVERAGE) {
@@ -1309,8 +1309,8 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
       cell_omega->get_dof_indices(local_dof_indices_omega);
       dof_omega_local_2_global(dof_handler_omega, local_dof_indices_omega);
 
-    //  std::vector<Point<dim_omega>> quadrature_points_omega = {Point<dim_omega>(std::sqrt(2)/2.0 + arrr)};
-       std::vector<Point<dim_omega>> quadrature_points_omega = fe_values_omega.get_quadrature_points();
+      //std::vector<Point<dim_omega>> quadrature_points_omega = {Point<dim_omega>(std::sqrt(2)/2.0 + arrr)};
+      std::vector<Point<dim_omega>> quadrature_points_omega = fe_values_omega.get_quadrature_points();
 
       for (unsigned int p = 0; p < quadrature_points_omega.size(); p++) {
         Point<dim_omega> quadrature_point_omega = quadrature_points_omega[p];
@@ -1342,7 +1342,7 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
         // test function
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
-        pcout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
+     //   pcout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
 
 //pcout <<"stat "<<std::endl;
    auto start = std::chrono::high_resolution_clock::now();  //Start time
@@ -2510,7 +2510,7 @@ double beta =g;
     cell_omega = dof_handler_omega.begin_active();
     endc_omega = dof_handler_omega.end();
 
-   for (; cell_omega != endc_omega; ++cell_omega) //man braucht nur das auskommentieren für einzelnen Punkt, einzelner Punkt, dann auch Vessel
+  for (; cell_omega != endc_omega; ++cell_omega) //man braucht nur das auskommentieren für einzelnen Punkt, einzelner Punkt, dann auch Vessel
     {
       //if (cell_omega->is_locally_owned())
  //     {
@@ -2955,7 +2955,7 @@ double beta =g;
                      /* std::cout <<"quadrature_point_test(0) " <<fe_values_coupling_test_face.get_quadrature_points().size()<<
                       " v "<<fe_values_coupling_test_face.get_quadrature_points()[0]<<std::endl;*/
 
-                      if(fe_values_coupling_test_face.get_quadrature_points()[0].distance(quadrature_point_test) > 0.0000001)
+                      if(fe_values_coupling_test_face.get_quadrature_points()[0].distance(quadrature_point_test) > 0.0000001 && !insideCell_test)
                       {
                           std::cerr << "quadrature_point_test wrong " <<fe_values_coupling_test_face.get_quadrature_points()[0].distance(quadrature_point_test)<< std::endl;
                           throw std::runtime_error("Falsch");  
@@ -2967,10 +2967,10 @@ double beta =g;
                               mapping.project_real_point_to_unit_point_on_face(
                                   cell_trial, face_no_trial[ftrial],
                                   quadrature_point_trial);
+
                         if( face_no_trial[ftrial] == 2 || face_no_trial[ftrial] ==3)
                             quadrature_point_trial_mapped_face = {quadrature_point_trial_mapped_face[1],quadrature_point_trial_mapped_face[0] };
                         
-    
                         for(unsigned int tf = 0; tf < dim -1; tf++)
                         quadrature_point_trial_mapped_face[tf] = std::max(0.0,quadrature_point_trial_mapped_face[tf]);
 
@@ -2987,7 +2987,8 @@ double beta =g;
                              // std::cout<<" face_no_trial[ftrial] "<< face_no_trial[ftrial]<<std::endl; 
                           fe_values_coupling_trial_face.reinit(
                               cell_trial, face_no_trial[ftrial]);
-                              if(fe_values_coupling_trial_face.get_quadrature_points()[0].distance(quadrature_point_trial) > 0.0000001)
+
+                              if(fe_values_coupling_trial_face.get_quadrature_points()[0].distance(quadrature_point_trial) > 0.0000001 && !insideCell_trial)
                               //if(((fe_values_coupling_trial_face.get_quadrature_points()[0][1] - quadrature_point_trial[1]) > 0.0000001)|| 
                               //((fe_values_coupling_trial_face.get_quadrature_points()[0][2] - quadrature_point_trial[2]) > 0.0000001))
                               {
