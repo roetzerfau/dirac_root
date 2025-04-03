@@ -2953,7 +2953,13 @@ double beta =g;
                             cell_test, face_no_test[ftest]);
                      /* std::cout <<"quadrature_point_test(0) " <<fe_values_coupling_test_face.get_quadrature_points().size()<<
                       " v "<<fe_values_coupling_test_face.get_quadrature_points()[0]<<std::endl;*/
-                        for (unsigned int ftrial = 0; ftrial < n_ftrial;
+
+                      if(fe_values_coupling_test_face.get_quadrature_points()[0].distance(quadrature_point_test) > 0.0000001)
+                      {
+                          std::cerr << "quadrature_point_test wrong " <<fe_values_coupling_test_face.get_quadrature_points()[0].distance(quadrature_point_test)<< std::endl;
+                          throw std::runtime_error("Falsch");  
+                        }
+                          for (unsigned int ftrial = 0; ftrial < n_ftrial;
                              ftrial++) {
 
                           Point<dim - 1> quadrature_point_trial_mapped_face =
@@ -2963,6 +2969,7 @@ double beta =g;
                         if( face_no_trial[ftrial] == 2 || face_no_trial[ftrial] ==3)
                             quadrature_point_trial_mapped_face = {quadrature_point_trial_mapped_face[1],quadrature_point_trial_mapped_face[0] };
                         
+    
                         for(unsigned int tf = 0; tf < dim -1; tf++)
                         quadrature_point_trial_mapped_face[tf] = std::max(0.0,quadrature_point_trial_mapped_face[tf]);
 
@@ -2979,7 +2986,12 @@ double beta =g;
                              // std::cout<<" face_no_trial[ftrial] "<< face_no_trial[ftrial]<<std::endl; 
                           fe_values_coupling_trial_face.reinit(
                               cell_trial, face_no_trial[ftrial]);
-                            /*  std::cout <<"quadrature_point_trial(0) " <<fe_values_coupling_trial_face.get_quadrature_points().size()<<
+                              if(fe_values_coupling_trial_face.get_quadrature_points()[0].distance(quadrature_point_trial) > 0.0000001)
+                              {
+                              //std::cerr << "quadrature_point_trial wrong " <<fe_values_coupling_trial_face.get_quadrature_points()[0].distance(quadrature_point_trial)<< std::endl;
+                              //throw std::runtime_error("Falsch");  
+                            }
+                              /*  std::cout <<"quadrature_point_trial(0) " <<fe_values_coupling_trial_face.get_quadrature_points().size()<<
                       " v "<<fe_values_coupling_trial_face.get_quadrature_points()[0]<<std::endl;*/
                           V_U_matrix_coupling = 0;
                           v_U_matrix_coupling = 0;
@@ -4130,7 +4142,7 @@ int main(int argc, char *argv[]) {
       std::string paperSolution_string = PAPER_SOLUTION ==1 ? "true" : "false";
       std::string vessel_string = VESSEL ==1 ? "true" : "false";
 
-      std::string name =  "_testpaper02_04_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
+      std::string name =  "_testpaper03_04_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
       "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_paper_solution_" + paperSolution_string + "_vessel_" + vessel_string + 
       "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string + "_D_" + D_string + "_penalty_" + std::to_string(penalty_sigma);
       
