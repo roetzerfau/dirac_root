@@ -47,7 +47,7 @@ constexpr unsigned int constructed_solution{1};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[4] = {1,2,3,4};//,7,8,9,10
+const unsigned int refinement[6] = {1,2,3,4,5,6};//,7,8,9,10
 const unsigned int p_degree[2] = {1,2};
 
 const unsigned int n_r = 1;
@@ -198,6 +198,7 @@ double RightHandSide<dim>::value(const Point<dim> &p,
    #if SOLUTION1_LINEAR
      return 0;
    #else
+   return -6;
    return -2;
     #endif
     if (dim == 2)
@@ -488,6 +489,15 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
       values(1) = 0;
       values(2) = 0;
       values(3) = std::pow(x,2);     // U
+      
+      /*values(0) = - (2 * x * (std::pow(y,2) + std::pow(z,2) + 1)); // Q
+      values(1) = - std::pow(x,2) * 2 * y;
+      values(2) = - std::pow(x,2) * 2 * z;
+      values(3) = std::pow(x,2) * (std::pow(y,2) + std::pow(z,2) + 1);     // U*/
+      values(0) = - 2 * x; // Q
+      values(1) = - 2 * y;
+      values(2) = - 2 * z;
+      values(3) = std::pow(x,2) +  std::pow(y,2) + std::pow(z,2) - std::pow(radii[0],2);   
       #endif
 
 
