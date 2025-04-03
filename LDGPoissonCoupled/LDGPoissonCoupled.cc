@@ -150,7 +150,7 @@ const unsigned int N_quad_points = 10;
 const double reduction = 1e-8;
 const double tolerance = 1e-10;
 
-double arrr = 0.0001;
+double arrr = 0.000;
 struct Parameters {
   double radius;
   bool lumpedAverage;
@@ -763,7 +763,7 @@ pcout<<"level_max "<<level_max<<" level_min "<<level_min<<std::endl;
  
  minimal_cell_diameter_2D = 2 * half_length/std::pow(2,level_max)* std::sqrt(2);
  maximal_cell_diameter_2D = 2 * half_length/std::pow(2,n_refine)* std::sqrt(2);
-arrr =  0.0;//half_length/std::pow(2,n_refine)/2;
+arrr =  half_length/std::pow(2,n_refine)/2;
 pcout<<"arrr "<<arrr<<std::endl;
  h_min = minimal_cell_diameter_2D;
  pcout<<"2D minimal_cell_diameter "<<minimal_cell_diameter_2D<< " maximal_cell_diameter "<< maximal_cell_diameter_2D;
@@ -1263,12 +1263,12 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
   //malloc_trim(0);  // Force memory release
 
   int error_flag = 0, global_error_flag = 0;
-  AVERAGE = radius != 0 && !lumpedAverage && (COUPLED || VESSEL);// && (constructed_solution == 3 || constructed_solution == 2) && geo_conf == GeometryConfiguration::ThreeD_OneD;//||constructed_solution == 2
+  AVERAGE = radius != 0 && !lumpedAverage && (COUPLED || VESSEL) && (constructed_solution == 3 || constructed_solution == 2) && geo_conf == GeometryConfiguration::ThreeD_OneD;//||constructed_solution == 2
 pcout << "AVERAGE (use circel) " << AVERAGE << " radius "<<radius << " lumpedAverage "<<lumpedAverage<<std::endl;
 // weight
 if (AVERAGE) {
   unsigned int n = std::ceil(radius/(pow(2,minimal_cell_diameter_2D/std::sqrt(2)))) + 1;
-  std::cout<<"n "<<n <<" "<< minimal_cell_diameter_2D<<" "<<minimal_cell_diameter_2D/std::sqrt(2)<<std::endl;
+ // std::cout<<"n "<<n <<" "<< minimal_cell_diameter_2D<<" "<<minimal_cell_diameter_2D/std::sqrt(2)<<std::endl;
   nof_quad_points = 25 * n_refine;// std::pow(2,n);
 } else {
   nof_quad_points = 1;
@@ -1309,8 +1309,8 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
       cell_omega->get_dof_indices(local_dof_indices_omega);
       dof_omega_local_2_global(dof_handler_omega, local_dof_indices_omega);
 
-      std::vector<Point<dim_omega>> quadrature_points_omega =  fe_values_omega.get_quadrature_points();//{Point<dim_omega>(std::sqrt(2)/2.0 + arrr)};
-         //
+    //  std::vector<Point<dim_omega>> quadrature_points_omega = {Point<dim_omega>(std::sqrt(2)/2.0 + arrr)};
+       std::vector<Point<dim_omega>> quadrature_points_omega = fe_values_omega.get_quadrature_points();
 
       for (unsigned int p = 0; p < quadrature_points_omega.size(); p++) {
         Point<dim_omega> quadrature_point_omega = quadrature_points_omega[p];
@@ -1342,7 +1342,7 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
         // test function
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
-       // pcout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
+        pcout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
 
 //pcout <<"stat "<<std::endl;
    auto start = std::chrono::high_resolution_clock::now();  //Start time
@@ -2510,16 +2510,17 @@ double beta =g;
     cell_omega = dof_handler_omega.begin_active();
     endc_omega = dof_handler_omega.end();
 
-    for (; cell_omega != endc_omega; ++cell_omega) 
+   for (; cell_omega != endc_omega; ++cell_omega) //man braucht nur das auskommentieren für einzelnen Punkt, einzelner Punkt, dann auch Vessel
     {
       //if (cell_omega->is_locally_owned())
  //     {
-     fe_values_omega.reinit(cell_omega);
+    fe_values_omega.reinit(cell_omega);
       cell_omega->get_dof_indices(local_dof_indices_omega);
       dof_omega_local_2_global(dof_handler_omega, local_dof_indices_omega);
-
-      std::vector<Point<dim_omega>> quadrature_points_omega = fe_values_omega.get_quadrature_points();
-//{Point<dim_omega>(std::sqrt(2)/2.0 + arrr)};
+  
+  //std::vector<Point<dim_omega>> quadrature_points_omega = {Point<dim_omega>(std::sqrt(2)/2.0 + arrr)};//
+ std::vector<Point<dim_omega>> quadrature_points_omega = fe_values_omega.get_quadrature_points();
+//
           //
       for (unsigned int p = 0; p < quadrature_points_omega.size(); p++)
        {
@@ -2552,7 +2553,7 @@ double beta =g;
         // test function
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
-      //  pcout<<"quadrature_point_coupling "<<quadrature_point_coupling<<std::endl;
+       // pcout<<"quadrature_point_coupling "<<quadrature_point_coupling<<std::endl;
    
     
         unsigned int n_te;
@@ -2791,7 +2792,7 @@ double beta =g;
                    q_avag++) {
                 // Quadrature weights and points
                 quadrature_point_trial = quadrature_points_circle[q_avag];
-             // std::cout<< "quadrature_point_coupling "<<quadrature_point_coupling <<" quadrature_point_trial "<<quadrature_point_trial<<std::endl;
+             //  std::cout<< "quadrature_point_coupling "<<quadrature_point_coupling <<" quadrature_point_trial "<<quadrature_point_trial<<std::endl;
                 double weight;
                 double C_avag;
                 if (AVERAGE) {
@@ -2992,7 +2993,7 @@ double beta =g;
                               {
                                 std::cout<<fe_values_coupling_trial_face.get_quadrature_points()[0] << " vs " << quadrature_point_trial<<std::endl;
                                 std::cerr << "quadrature_point_trial wrong " <<fe_values_coupling_trial_face.get_quadrature_points()[0].distance(quadrature_point_trial)<< std::endl;
-                              //  throw std::runtime_error("Falsch");  
+                                throw std::runtime_error("Falsch");  
                             }
                               /*  std::cout <<"quadrature_point_trial(0) " <<fe_values_coupling_trial_face.get_quadrature_points().size()<<
                       " v "<<fe_values_coupling_trial_face.get_quadrature_points()[0]<<std::endl;*/
@@ -4344,7 +4345,6 @@ int main(int argc, char *argv[]) {
 
   return 0;
 }
-
 
 
 

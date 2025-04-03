@@ -16,7 +16,7 @@
 #define COUPLED 1
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
-#define GRADEDMESH 1
+#define GRADEDMESH 0
 #define MEMORY_CONSUMPTION 0
 
 #define USE_MPI_ASSEMBLE 1
@@ -24,10 +24,10 @@
 #define CYLINDER 0
 #define A11SCHUR 0
 
-#define ANISO 1
+#define ANISO 0
 #define PAPER_SOLUTION 1 //paper dangelo, O: thesis
 #define VESSEL 0
-#define SOLUTION1_LINEAR 1
+#define SOLUTION1_LINEAR 0
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
 
@@ -48,7 +48,7 @@ constexpr unsigned int constructed_solution{1};   // 1:sin cos (Kopplung hebt si
 
 
 const unsigned int refinement[4] = {1,2,3,4};//,7,8,9,10
-const unsigned int p_degree[1] = {1};
+const unsigned int p_degree[2] = {1,2};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
@@ -936,6 +936,5 @@ equidistant_points_on_circle(const Point<dim> &center, double radius,
  
     return cells_and_points;
   }
-
 
 
