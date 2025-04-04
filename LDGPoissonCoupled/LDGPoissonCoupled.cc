@@ -2744,7 +2744,10 @@ double beta =g;
                         else if(constructed_solution == 2)
                           z = 1;
                         else if(constructed_solution == 3  )
+                          if(SOLUTION1_LINEAR)
                           z = (1 + quadrature_point_omega[0]);
+                          else
+                           z = std::pow(quadrature_point_omega[0],2);
                         else
                           z = 0;
                         local_vector(i) +=
@@ -2777,7 +2780,10 @@ double beta =g;
                   else if(constructed_solution == 2)
                     z = 1;
                   else if (constructed_solution == 3)
+                    if(SOLUTION1_LINEAR)
                     z = (1 + quadrature_point_omega[0]);
+                    else
+                    z = std::pow(quadrature_point_omega[0],2);
                   else 
                     z = 0;
                   local_vector(i) +=

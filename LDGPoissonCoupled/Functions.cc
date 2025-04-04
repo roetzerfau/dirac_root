@@ -48,7 +48,7 @@ constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt si
 
 
 const unsigned int refinement[6] = {1,2,3,4,5,6};//,7,8,9,10
-const unsigned int p_degree[2] = {1,2};
+const unsigned int p_degree[2] = {2};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
@@ -269,7 +269,7 @@ return 1;
     if(COUPLED == 1)
     {
       if(PAPER_SOLUTION == 1)  
-      return  u_o* 2 * numbers::PI* sol_factor - f;
+      return  u_o* 2 * numbers::PI* sol_factor - 2*f;//TODO oerscauen
       else
       return  u_o - f;
       //  return (1 + p[0]) * 2 * numbers::PI* sol_factor - (1 + p[0]);
@@ -567,12 +567,13 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     else
     {
       if (r != 0) {
+       //  std::cout<<"alllo"<<std::endl;
         values(0) = 2 * x * sol_factor * std::log(r); //Q 
         values(1) = std::pow(x,2) *sol_factor* (y/std::pow(r,2)); // Q
         values(2) = std::pow(x,2)*sol_factor * (z/std::pow(r,2)); //Q
         values(3) = -std::pow(x,2)*sol_factor* std::log(r); // U  
       } else {
-        values(3) = sol_factor* std::pow(x,2); // U
+        values(3) =  sol_factor* std::pow(x,2); // U
       }
     }
 
