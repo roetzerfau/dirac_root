@@ -679,7 +679,7 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
           
         }
           
-        r = r_max;//r_min im paper
+        r = r_min;//r_min im paper
     
     cell->clear_refine_flag();
       
@@ -697,6 +697,7 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
       if(r < 0.5 * cell->diameter())
 #endif
       {
+     //   std::cout<<"aaaa"<<std::endl;
         //if(r <= 0.0)
         //std::cout<<"aaaaa "<<cell->level()<<" " <<2 * half_length/std::pow(2,cell->level())* std::sqrt(2)<< " " << std::pow(h_max,1.0/mu)<<std::endl;
 #if ANISO        
@@ -874,7 +875,7 @@ if( is_repartioned)
     if (cell_diameter > max_diameter) {
       max_diameter = cell_diameter;
     }
-
+   
     for (unsigned int face_no = 0; face_no < GeometryInfo<dim>::faces_per_cell;
          face_no++) {
       Point<dim> p = cell->face(face_no)->center();
@@ -897,6 +898,7 @@ if( is_repartioned)
     }
     cell_number++;
   }
+  max_diameter = GridTools::maximal_cell_diameter(triangulation);
   pcout<<" is_cell_inside_box "<<cells_inside_box.size()<<std::endl;//TODOD einfach zu viele Einträge um in Sparsity matrix reinzumachen
 if(is_repartioned)
 {
@@ -1005,7 +1007,7 @@ if(is_repartioned)
       if (cell_diameter > max_diameter_omega) {
         max_diameter_omega = cell_diameter;
       }
-
+    
     for (unsigned int face_no = 0;
          face_no < GeometryInfo<dim_omega>::faces_per_cell; face_no++) {
       if (cell_omega->face(face_no)->at_boundary())
@@ -1022,6 +1024,7 @@ if(is_repartioned)
     }
     }
   }
+  max_diameter_omega = GridTools::maximal_cell_diameter(triangulation_omega);
 /*
 GridOut grid_out_omega;
 std::ofstream out_omega("grid_omega.vtk"); 
@@ -2033,7 +2036,7 @@ else
             fe_neighbor_face_values_omega.reinit(neighbor_omega,
                                                  neighbor_face_no_omega);
 
-            double h = 1;// std::min(cell_omega->diameter(), neighbor_omega->diameter());
+            double h = 1;//std::min(cell_omega->diameter(), neighbor_omega->diameter());
 
            assemble_flux_terms(
                 fe_face_values_omega, fe_neighbor_face_values_omega,
@@ -4148,10 +4151,12 @@ int main(int argc, char *argv[]) {
       std::string gradedMesh_string = GRADEDMESH ==1 ? "true" : "false";
       std::string paperSolution_string = PAPER_SOLUTION ==1 ? "true" : "false";
       std::string vessel_string = VESSEL ==1 ? "true" : "false";
+      std::string solution_linear_string = SOLUTION1_LINEAR ==1 ? "true" : "false";
 
-      std::string name =  "_testpaperLetsGo_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
-      "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_paper_solution_" + paperSolution_string + "_vessel_" + vessel_string + 
-      "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + "_rad_" + radius_string + "_D_" + D_string + "_penalty_" + std::to_string(penalty_sigma);
+      std::string name =  "_finalResults_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
+      "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_paper_solution_" + paperSolution_string +"_solution_linear_" + solution_linear_string +
+       "_vessel_" + vessel_string +  "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + 
+       "_rad_" + radius_string + "_D_" + D_string + "_penalty_" + std::to_string(penalty_sigma);
       
       std::string folderName =name +"/";
      std::cout<<folderName<<std::endl;

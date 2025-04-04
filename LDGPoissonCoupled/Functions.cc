@@ -16,7 +16,7 @@
 #define COUPLED 1
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
-#define GRADEDMESH 0
+#define GRADEDMESH 1
 #define MEMORY_CONSUMPTION 0
 
 #define USE_MPI_ASSEMBLE 1
@@ -24,10 +24,10 @@
 #define CYLINDER 0
 #define A11SCHUR 0
 
-#define ANISO 0
-#define PAPER_SOLUTION 1 //paper dangelo, O: thesis
+#define ANISO 1
+#define PAPER_SOLUTION 1 //1: paper dangelo, O: thesis, 1 funktionert besser
 #define VESSEL 0
-#define SOLUTION1_LINEAR 0
+#define SOLUTION1_LINEAR 1
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
 
@@ -39,11 +39,11 @@ enum GeometryConfiguration
 
 };
 const bool is_omega_on_face = true;
-constexpr double y_l = is_omega_on_face ? 0.0 : 0.0001;
-constexpr double z_l =  is_omega_on_face ? 0.0 : 0.0001;
+constexpr double y_l = is_omega_on_face ? 0.0 : 0.00001;
+constexpr double z_l =  is_omega_on_face ? 0.0 : 0.00001;
 constexpr unsigned int geo_conf{2};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
-constexpr unsigned int constructed_solution{1};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
+constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
 
 
 
@@ -54,7 +54,7 @@ const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
 const double radii[n_r] = {0.01};
 const double D = 1;
-const double penalty_sigma = 10;
+const double penalty_sigma = 10;//10
 
 #if PAPER_SOLUTION && COUPLED
 const double sol_factor = D * radii[0]/(1- D * radii[0]*  std::log(radii[0]));
@@ -251,14 +251,31 @@ return 1;
     break;
   }
   case 3: {
+    double f,u_o;
+      if(SOLUTION1_LINEAR == 1)
+      {
+        u_o = (1 + p[0]);
+        f = 0;
+      }
+      else
+      {
+        u_o = std::pow(p[0],2) ;
+        f = 2;
+      }
     if(geo_conf == GeometryConfiguration::TwoD_ZeroD)
-      return -(1 + p[0]);
+      return -u_o;
     else
     {
     if(COUPLED == 1)
-      return (1 + p[0]) * 2 * numbers::PI* sol_factor - (1 + p[0]);
-    else
-      return -(1 + p[0]);
+    {
+      if(PAPER_SOLUTION == 1)  
+      return  u_o* 2 * numbers::PI* sol_factor - f;
+      else
+      return  u_o - f;
+      //  return (1 + p[0]) * 2 * numbers::PI* sol_factor - (1 + p[0]);
+     }
+      else
+      return -u_o;
     }
 
     //return - std::sin(2 * numbers::PI * p[0]);//std::pow(2 * numbers::PI, 2) * std::sin(2 * numbers::PI * p[0]) ;
@@ -325,13 +342,27 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
   case 3: {
     if (p[0] > 1)
     {
-    //  std::cout<<"neum1 "<<p[0]<<std::endl;
+    //std::cout<<"neum1 "<<p[0]<<std::endl;
+    if(SOLUTION1_LINEAR == 1)
       return  sol_factor  * std::log(r);///-
+    else
+    {
+     // std::cout<<"neum1 "<< 2 * x * sol_factor  * std::log(r)<<std::endl;
+      return 2 * x * sol_factor  * std::log(r);
+    }
+
     }
     if (p[0] < 1)
     {
-      //std::cout<<"neum0 "<<p[0]<<std::endl;
+     // std::cout<<"neum0 "<<p[0]<<std::endl;
+      if(SOLUTION1_LINEAR == 1)
       return - sol_factor  * std::log(r);
+      else
+      {
+     //   std::cout<<"neum0 "<<- 2 * x * sol_factor  * std::log(r)<<std::endl;
+        return - 2 * x * sol_factor  * std::log(r);
+      }
+      
     }
     break;
   }
@@ -428,7 +459,7 @@ void KInverse<dim>::value_list(const std::vector<Point<dim>> &points,
       for (unsigned int i = 0; i < dim; i++) {
         Point<dim> p = points[i];
       // value[i][i]  = p[0] + 1;//
-      value[i][i]  = 1/(1 + p[0] + 0.5 * std::pow(p[0], 2));
+     // value[i][i]  = 1/(1 + p[0] + 0.5 * std::pow(p[0], 2));
      //value[i][i]  = 1/(2 * numbers::PI*radii[0]/(1- radii[0]*  std::log(radii[0]))* p[0]) ;
       //value[i][i] = -std::pow(numbers::PI *2,2);
            
@@ -522,13 +553,27 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
   case 3: {
     if(dim==3)//
     {
-    if (r != 0) {
-      values(0) = sol_factor * std::log(r); //Q 
-       values(1) = (1.0+x) *sol_factor* (y/std::pow(r,2)); // Q
-      values(2) = (1.0+x)*sol_factor * (z/std::pow(r,2)); //Q
-      values(3) = -(1.0+x)*sol_factor* std::log(r); // U  
-    } else {
-      values(3) = 1 + x ; // U
+    if(SOLUTION1_LINEAR == 1)
+    {
+      if (r != 0) {
+        values(0) = sol_factor * std::log(r); //Q 
+        values(1) = (1.0+x) *sol_factor* (y/std::pow(r,2)); // Q
+        values(2) = (1.0+x)*sol_factor * (z/std::pow(r,2)); //Q
+        values(3) = -(1.0+x)*sol_factor* std::log(r); // U  
+      } else {
+        values(3) = (1 + x)* sol_factor  ; // U
+      }
+    }
+    else
+    {
+      if (r != 0) {
+        values(0) = 2 * x * sol_factor * std::log(r); //Q 
+        values(1) = std::pow(x,2) *sol_factor* (y/std::pow(r,2)); // Q
+        values(2) = std::pow(x,2)*sol_factor * (z/std::pow(r,2)); //Q
+        values(3) = -std::pow(x,2)*sol_factor* std::log(r); // U  
+      } else {
+        values(3) = sol_factor* std::pow(x,2); // U
+      }
     }
 
      }
@@ -608,11 +653,20 @@ void TrueSolution_omega<dim>::vector_value(const Point<dim> &p,
     break;
   }
   case 3: {
+    if(SOLUTION1_LINEAR == 1)
+    {
      //values(0) = 0; //q 
     //values(1) =  1 + x;//u
-    values(0) = -(1 + x + 0.5 * std::pow(x,2)); //q 
+    //values(0) = -(1 + x + 0.5 * std::pow(x,2)); //q 
+    values(0) = -1;
     values(1) = 1 + x;//u
     // std::cout<<"w "<<values(0)<<" "<<values(1)<<std::endl;
+  }
+  else
+  {
+    values(0) = -2*x;
+    values(1) = std::pow(x,2);//u
+  }
     break;
   }
   default:
