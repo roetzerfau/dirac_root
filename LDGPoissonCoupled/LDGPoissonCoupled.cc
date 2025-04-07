@@ -554,9 +554,7 @@ LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
       Dirichlet_bc_function_omega(), radius(parameters.radius),
       lumpedAverage(parameters.lumpedAverage), folder_name(parameters.folder_name) {
 
-  g = constructed_solution == 3 || constructed_solution == 2
-          ? (2 * numbers::PI) / (2 * numbers::PI + std::log(radius))
-          : 1;
+  
 }
 
 template <int dim, int dim_omega>
@@ -1278,7 +1276,7 @@ if (AVERAGE) {
 }
 pcout<<"nof_quad_points "<<nof_quad_points<<std::endl;
 std::cout <<"std::sqrt(2)/2.0 "<<std::sqrt(2)/2.0<<std::endl;
-#if COUPLED
+#if COUPLED || VESSEL
 if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
     // coupling
   pcout<<"Sparsity Coupling "<<std::endl;
@@ -1463,7 +1461,7 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
                                   local_dof_indices_trial[j]);
                         }
                       }
-
+#if COUPLED
                       for (unsigned int i = 0;
                            i < local_dof_indices_omega.size(); i++) {
                         for (unsigned int j = 0;
@@ -1490,6 +1488,7 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
                                   local_dof_indices_omega[j]);                        
                         }
                       }
+#endif
                    } 
                    else
                    {
@@ -2079,6 +2078,15 @@ else
 
 #if 1
 {
+#if PAPER_SOLUTION
+    g = 2 * numbers::PI * D * radius;
+#else
+    g = (2 * numbers::PI) / (2 * numbers::PI + std::log(radius));
+#endif
+#if !COUPLED
+ // g =1;
+#endif
+
 #if 1// USE_MPI_ASSEMBLE
 // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 #endif
@@ -2088,11 +2096,12 @@ else
   
   if (geo_conf == GeometryConfiguration::TwoD_ZeroD) {
     pcout << "2D/0D" << std::endl;
-#if COUPLED 
+/*#if COUPLED 
     double beta = 2 * numbers::PI * D * radius;
 #else
     double beta = (2 * numbers::PI)/(2 * numbers::PI + std::log( radius));
-#endif
+#endif*/
+
     FullMatrix<double> V_U_matrix_coupling(dofs_per_cell, dofs_per_cell);
     bool insideCell_test = true;
     bool insideCell_trial = true;
@@ -2209,18 +2218,12 @@ else
                // std::cout<< "q " <<q <<std::endl; 
                 for (unsigned int i = 0; i < dofs_this_cell; ++i) {
                   //std::cout<< "q " <<q <<" i "<<i<<std::endl; 
-#if COUPLED
-      if(constructed_solution == 1)
-      {
-      local_vector(i) +=beta * (quadrature_point_test[0] +1) * fe_values_coupling_test_face[Potential].value(i, q) * 1 /
-      (n_te * n_ftest);
-   //   std::cout<< "face quadrature_point_test[0] "<<quadrature_point_test[0]<<std::endl;
-      }
-      else{
-                        local_vector(i) += beta *
-                            fe_values_coupling_test_face[Potential].value(i, q) * 1 /
-                            (n_te * n_ftest);
-      }
+#if VESSEL
+   
+              local_vector(i) += g *
+                  fe_values_coupling_test_face[Potential].value(i, q) * 1 /
+                  (n_te * n_ftest);
+    
 
 #else
                 local_vector(i) +=
@@ -2258,16 +2261,9 @@ else
              for (unsigned int i = 0; i < dofs_per_cell; i++) {
             
               //std::cout<<"fe_values_coupling_test[Potential].value(i, 0) "<<fe_values_coupling_test[Potential].value(i, 0)<<std::endl;
-#if COUPLED
-if(constructed_solution == 1){
-              local_vector(i) += beta* (quadrature_point_test[0] +1) * fe_values_coupling_test[Potential].value(i, 0);;
-              //std::cout<< "cell quadrature_point_test[0] "<<quadrature_point_test[0]<<std::endl;
-            }else
-            {
-             local_vector(i) += beta *
+#if VESSEL
+             local_vector(i) +=g *
               fe_values_coupling_test[Potential].value(i, 0);
-            }
-
 #else
               local_vector(i) +=
               fe_values_coupling_test[Potential].value(i, 0) ;
@@ -2282,7 +2278,7 @@ if(constructed_solution == 1){
                 local_vector, local_dof_indices_test, system_rhs);
           }
 //#endif
-#if COUPLED 
+#if VESSEL 
 // TODO right hand side
       for (unsigned int q_avag = 0; q_avag < nof_quad_points;
                    q_avag++) {
@@ -2389,8 +2385,8 @@ if(constructed_solution == 1){
         } else {
           insideCell_trial = false;
         }
-        std::cout<<"cell_trial "<< cell_test <<" insideCell_test "<<insideCell_test <<" n_ftest "<<n_ftest<<" n_te "<<n_te<< 
-        " cell_trial "<< cell_trial <<" insideCell_trial "<<insideCell_trial <<" n_ftrial "<<n_ftrial<<" n_tr "<<n_tr<<std::endl;
+      //  std::cout<<"cell_trial "<< cell_test <<" insideCell_test "<<insideCell_test <<" n_ftest "<<n_ftest<<" n_te "<<n_te<< 
+        //" cell_trial "<< cell_trial <<" insideCell_trial "<<insideCell_trial <<" n_ftrial "<<n_ftrial<<" n_tr "<<n_tr<<std::endl;
 
  //std::cout<<"n_tr "<<n_tr <<" n_ftrial "<<n_ftrial<<" n_te "<< n_te <<" n_ftest "<< n_ftest<<std::endl;
         for (unsigned int ftest = 0; ftest < n_ftest; ftest++) {
@@ -2460,7 +2456,7 @@ if(constructed_solution == 1){
                   psi_potential_trial =
                       fe_values_coupling_trial_face[Potential]
                           .value(j, 0);
-                V_U_matrix_coupling(i, j) +=   beta *
+                V_U_matrix_coupling(i, j) +=  g *
                     psi_potential_test * psi_potential_trial *
                     C_avag * weight * 1 /
                     (n_tr * n_ftrial) * 1 / (n_te * n_ftest);
@@ -2501,15 +2497,7 @@ if(constructed_solution == 1){
     bool insideCell_trial = true;
 
 MappingCartesian<dim> mymapping;
-#if PAPER_SOLUTION
-    double beta = 2 * numbers::PI * D * radius;
-    g = beta;
-#else
-double beta =g;
-#endif
-#if !COUPLED
-  beta =1;//g
-#endif
+
     cell_omega = dof_handler_omega.begin_active();
     endc_omega = dof_handler_omega.end();
 
@@ -2739,19 +2727,19 @@ double beta =g;
                     for (unsigned int q = 0; q < n_face_points; ++q) {
                       for (unsigned int i = 0; i < dofs_this_cell; ++i) {
                         double z;
-                        if(constructed_solution == 1)
+                      //  if(constructed_solution == 1)
+                        //  z = (1 + quadrature_point_omega[0]);
+                        //else if(constructed_solution == 2)
+                         // z = 1;
+                        //else if(constructed_solution == 3  )
+                          if(SOLUTION_SPACE == 1)
                           z = (1 + quadrature_point_omega[0]);
-                        else if(constructed_solution == 2)
-                          z = 1;
-                        else if(constructed_solution == 3  )
-                          if(SOLUTION1_LINEAR)
-                          z = (1 + quadrature_point_omega[0]);
-                          else
+                          else if(SOLUTION_SPACE == 2)
                            z = std::pow(quadrature_point_omega[0],2);
                         else
                           z = 0;
                         local_vector(i) +=
-                           beta * fe_values_coupling_test_face[Potential].value(i,
+                           g * fe_values_coupling_test_face[Potential].value(i,
                                                                          q) *
                            1.0 / (n_te * n_ftest) *
                            z *fe_values_omega.JxW(p);
@@ -2775,19 +2763,19 @@ double beta =g;
                 for (unsigned int i = 0; i < dofs_per_cell; i++) {
                   
                   double z;
-                  if(constructed_solution == 1)
+                 /* if(constructed_solution == 1)
                     z = (1 + quadrature_point_omega[0]);
                   else if(constructed_solution == 2)
                     z = 1;
-                  else if (constructed_solution == 3)
-                    if(SOLUTION1_LINEAR)
-                    z = (1 + quadrature_point_omega[0]);
+                  else if (constructed_solution == 3)*/
+                  if(SOLUTION_SPACE == 1)
+                      z = (1 + quadrature_point_omega[0]);
+                      else if(SOLUTION_SPACE == 2)
+                        z = std::pow(quadrature_point_omega[0],2);
                     else
-                    z = std::pow(quadrature_point_omega[0],2);
-                  else 
-                    z = 0;
+                      z = 0;
                   local_vector(i) +=
-                  beta *  fe_values_coupling_test[Potential].value(i, q) * z *fe_values_omega.JxW(p);
+                  g *  fe_values_coupling_test[Potential].value(i, q) * z *fe_values_omega.JxW(p);
                 }
                 constraints.distribute_local_to_global(
                     local_vector, local_dof_indices_test, system_rhs);
@@ -3683,8 +3671,8 @@ preconditioner_block_1.initialize(system_matrix.block(1, 1));  // ILU for block 
   solver.solve(system_matrix.block(0,0), completely_distributed_solution.block(0), system_rhs.block(0),preconditioner_block_0);
   pcout<<"Solve Omega done"<<std::endl;
   TrilinosWrappers::PreconditionIdentity precondition;
-  solver.solve(system_matrix.block(1,1), completely_distributed_solution.block(1), system_rhs.block(1),precondition);
- pcout<<"Solve omega done"<<std::endl;
+ // solver.solve(system_matrix.block(1,1), completely_distributed_solution.block(1), system_rhs.block(1),precondition);
+  pcout<<"Solve omega done"<<std::endl;
 }
 else
 {
@@ -4157,7 +4145,7 @@ int main(int argc, char *argv[]) {
       std::string gradedMesh_string = GRADEDMESH ==1 ? "true" : "false";
       std::string paperSolution_string = PAPER_SOLUTION ==1 ? "true" : "false";
       std::string vessel_string = VESSEL ==1 ? "true" : "false";
-      std::string solution_linear_string = SOLUTION1_LINEAR ==1 ? "true" : "false";
+      std::string solution_linear_string = std::to_string(SOLUTION_SPACE);
 
       std::string name =  "_07_04_finalResults_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
       "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_paper_solution_" + paperSolution_string +"_solution_linear_" + solution_linear_string +

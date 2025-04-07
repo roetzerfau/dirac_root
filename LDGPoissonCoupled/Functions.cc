@@ -14,6 +14,8 @@
 // std::numbers::PI
 
 #define COUPLED 1
+#define VESSEL 0
+
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
 #define GRADEDMESH 1
@@ -25,9 +27,10 @@
 #define A11SCHUR 0
 
 #define ANISO 1
-#define PAPER_SOLUTION 1 //1: paper dangelo, O: thesis, 1 funktionert besser
-#define VESSEL 0
-#define SOLUTION1_LINEAR 1
+#define PAPER_SOLUTION 1 //1: paper dangelo, O: thesis, 1 funktionert besser 
+
+#define SOLUTION_SPACE 1 //2
+
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
 
@@ -47,7 +50,7 @@ constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[8] = {1,2,3,4,5,6,7,8};//,7,8,9,10
+const unsigned int refinement[4] = {1,2,3,4};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
@@ -56,11 +59,12 @@ const double radii[n_r] = {0.01};
 const double D = 1;
 const double penalty_sigma = 10;//10
 
-#if PAPER_SOLUTION && COUPLED
-const double sol_factor = D * radii[0]/(1- D * radii[0]*  std::log(radii[0]));
-#else
+#if !PAPER_SOLUTION || (!COUPLED && !VESSEL)
 const double sol_factor =  1/(2*numbers::PI);
+#else
+const double sol_factor = D * radii[0]/(1- D * radii[0]*  std::log(radii[0]));
 #endif
+
 
 const bool lumpedAverages[n_LA] = {false};//TODO bei punkt wuelle noch berücksichtnge
 
@@ -195,17 +199,17 @@ double RightHandSide<dim>::value(const Point<dim> &p,
                                  const unsigned int) const {
   switch (constructed_solution) {
   case 1: {
-   #if SOLUTION1_LINEAR
+   #if SOLUTION_SPACE == 1
      return 0;
    #else
    return -6;
-   return -2;
+   //return -2;
     #endif
-    if (dim == 2)
-      return (2 * std::pow(w, 2)) * std::cos(w * p[0]) * std::cos(w * p[1]);
-    if (dim == 3)
-      return (3 * std::pow(w, 2)) * std::cos(w * p[0]) * std::cos(w * p[1]) *
-             std::cos(w * p[2]);
+   // if (dim == 2)
+   //   return (2 * std::pow(w, 2)) * std::cos(w * p[0]) * std::cos(w * p[1]);
+   // if (dim == 3)
+    //  return (3 * std::pow(w, 2)) * std::cos(w * p[0]) * std::cos(w * p[1]) *
+     //        std::cos(w * p[2]);
     break;
   }
   case 2:
@@ -227,13 +231,13 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
   /* if (dim == 2)
       return std::pow(w, 2) * std::cos(w * p[0]) * std::cos(w * y_l);
     if (dim == 3)*/
-    #if SOLUTION1_LINEAR
+    #if SOLUTION_SPACE
       return 0;
     #else
       return -2;
     #endif
-      return std::pow(w, 2) * std::cos(w * p[0]) * std::cos(w * y_l) *
-             std::cos(w * z_l);
+    //  return std::pow(w, 2) * std::cos(w * p[0]) * std::cos(w * y_l) *
+      //       std::cos(w * z_l);
     break;
   }
   case 2:
@@ -252,20 +256,28 @@ return 1;
   }
   case 3: {
     double f,u_o;
-      if(SOLUTION1_LINEAR == 1)
+       if(SOLUTION_SPACE == 0)
+       { u_o = 1;
+        f  = 0;}
+      else if(SOLUTION_SPACE == 1)
       {
         u_o = (1 + p[0]);
         f = 0;
       }
-      else
+      else if(SOLUTION_SPACE == 2)
       {
-        u_o = std::pow(p[0],2) ;
-        f = 2;
+       u_o = std::pow(p[0],2) ;
+        f = 8;
       }
-    if(geo_conf == GeometryConfiguration::TwoD_ZeroD)
-      return -u_o;
-    else
-    {
+      else
+      {      
+      }
+      /*else
+      {
+        u_o = std::sin(w * x);
+        f = - std::pow(w,2) * std::sin(w * x) ;
+      }*/
+
     if(COUPLED == 1)
     {
       if(PAPER_SOLUTION == 1)  
@@ -275,12 +287,13 @@ return 1;
       //  return (1 + p[0]) * 2 * numbers::PI* sol_factor - (1 + p[0]);
      }
       else
-      return -u_o;
+      return - f;
+    
+    break;
     }
 
     //return - std::sin(2 * numbers::PI * p[0]);//std::pow(2 * numbers::PI, 2) * std::sin(2 * numbers::PI * p[0]) ;
-    break;
-  }
+   
   default:
     break;
   }
@@ -301,11 +314,11 @@ double DirichletBoundaryValues<dim>::value(const Point<dim> &p,
     solution.vector_value(p, values);
     return values[dim];
    
-    #if SOLUTION1_LINEAR
+    if(SOLUTION_SPACE == 1)
     return x;
-    #else
+    else if (SOLUTION_SPACE == 2)
     return std::pow(x,2);
-    #endif
+    else{}
 
     if (dim == 2)
       return std::cos(w * x) * std::cos(w * y);
@@ -343,7 +356,7 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
     if (p[0] > 1)
     {
     //std::cout<<"neum1 "<<p[0]<<std::endl;
-    if(SOLUTION1_LINEAR == 1)
+    if(SOLUTION_SPACE == 1)
       return  sol_factor  * std::log(r);///-
     else
     {
@@ -355,7 +368,7 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
     if (p[0] < 1)
     {
      // std::cout<<"neum0 "<<p[0]<<std::endl;
-      if(SOLUTION1_LINEAR == 1)
+      if(SOLUTION_SPACE == 1)
       return - sol_factor  * std::log(r);
       else
       {
@@ -410,12 +423,12 @@ double DirichletBoundaryValues_omega<dim>::value(
     /*if (dim == 2)
       return std::cos(w * p[0]) * std::cos(w * y_l);
     if (dim == 3)*/
-    #if SOLUTION1_LINEAR
+    if(SOLUTION_SPACE == 1)
        return p[0];
-  #else
+    else if(SOLUTION_SPACE == 2)
        return std::pow(p[0],2);
-  #endif
-      return std::cos(w * p[0]) * std::cos(w * y_l) * std::cos(w * z_l);
+  else{}
+      //return std::cos(w * p[0]) * std::cos(w * y_l) * std::cos(w * z_l);
     break;
   }
   case 2:
@@ -481,17 +494,38 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
   values = 0;
   double r =  distance_to_singularity<dim>(p);
 
+
+      double f,u_o;
+       if(SOLUTION_SPACE == 0)
+       { u_o = 1;
+        f  = 0;}
+      else if(SOLUTION_SPACE == 1)
+      {
+      
+        u_o = (1 + p[0]);
+        f = 0;
+      }
+      else if(SOLUTION_SPACE == 2)
+      {
+       u_o = std::pow(p[0],2) ;
+        f = 8;
+      }
+      else
+      {      
+      }
+
+
   if(r > (1 + 0.01))
   std::cout<<"FALSCH!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!   "<<r<<std::endl;
   switch (constructed_solution) {
 
   case 1: {
     if (dim == 2) {
-      values(0) = w * std::sin(w * x) * std::cos(w * y); // Q
-      values(1) = w * std::cos(w * x) * std::sin(w * y);
-      values(2) = std::cos(w * x) * std::cos(w * y);       // U
+     // values(0) = w * std::sin(w * x) * std::cos(w * y); // Q
+     // values(1) = w * std::cos(w * x) * std::sin(w * y);
+     // values(2) = std::cos(w * x) * std::cos(w * y);       // U
 
-      #if SOLUTION1_LINEAR
+      #if SOLUTION_SPACE
       values(0) = -1; // Q
       values(1) = 0;
       values(2) = x + 1;     // U
@@ -510,16 +544,16 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
       values(2) = w * std::cos(w * x) * std::cos(w * y) * std::sin(w * z);
       values(3) = std::cos(w * x) * std::cos(w * y) * std::cos(w * z);     // U
 
-      #if SOLUTION1_LINEAR
+      #if SOLUTION_SPACE
       values(0) = -1; // Q
       values(1) = 0;
       values(2) = 0;
       values(3) = x + 1;     // U
       #else
-      values(0) = - 2 * x; // Q
+     /* values(0) = - 2 * x; // Q
       values(1) = 0;
       values(2) = 0;
-      values(3) = std::pow(x,2);     // U
+      values(3) = std::pow(x,2);    */ // U
       
       /*values(0) = - (2 * x * (std::pow(y,2) + std::pow(z,2) + 1)); // Q
       values(1) = - std::pow(x,2) * 2 * y;
@@ -535,7 +569,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     }
     break;
   }
-  case 2:
+  case 2://    if(SOLUTION_SPACE == 0)
   {
     if(dim==3)
     {
@@ -551,48 +585,49 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
      break;
   }
   case 3: {
-    if(dim==3)//
+    if(dim==3)
     {
-    if(SOLUTION1_LINEAR == 1)
+    if(SOLUTION_SPACE == 1)
     {
       if (r != 0) {
         values(0) = sol_factor * std::log(r); //Q 
-        values(1) = (1.0+x) *sol_factor* (y/std::pow(r,2)); // Q
-        values(2) = (1.0+x)*sol_factor * (z/std::pow(r,2)); //Q
-        values(3) = -(1.0+x)*sol_factor* std::log(r); // U  
+        values(1) = u_o *sol_factor* (y/std::pow(r,2)); // Q
+        values(2) = u_o*sol_factor * (z/std::pow(r,2)); //Q
+        values(3) = -u_o*sol_factor* std::log(r); // U  
       } else {
-        values(3) = (1 + x)* sol_factor  ; // U
+        values(3) = -u_o* sol_factor  ; // U
       }
     }
-    else
+    else if(SOLUTION_SPACE == 2)
     {
       if (r != 0) {
        //  std::cout<<"alllo"<<std::endl;
         values(0) = 2 * x * sol_factor * std::log(r); //Q 
-        values(1) = std::pow(x,2) *sol_factor* (y/std::pow(r,2)); // Q
-        values(2) = std::pow(x,2)*sol_factor * (z/std::pow(r,2)); //Q
-        values(3) = -std::pow(x,2)*sol_factor* std::log(r); // U  
+        values(1) = u_o *sol_factor* (y/std::pow(r,2)); // Q
+        values(2) =u_o*sol_factor * (z/std::pow(r,2)); //Q
+        values(3) = -u_o*sol_factor* std::log(r); // U  
       } else {
-        values(3) =  sol_factor* std::pow(x,2); // U
+        values(3) =  -u_o * sol_factor* std::pow(x,2); // U
       }
     }
+    else {}
 
      }
-     if(dim == 2)//
+    if(dim == 2)//
      {
       if(GeometryConfiguration::TwoD_ZeroD == geo_conf)
       {
-#if COUPLED
+//#if VESSEL
     if(r!= 0)
     {
 
-    values(0) = radii[0]/(1- radii[0]*  std::log(radii[0])) * (x/std::pow(r,2)); //Q 
-    values(1) =radii[0]/(1- radii[0]*  std::log(radii[0])) * (y/std::pow(r,2)); // Q   
-    values(2) = -radii[0]/(1- radii[0]*  std::log(radii[0]))  *  std::log(r); // U   
+    values(0) = sol_factor  * (x/std::pow(r,2)); //Q 
+    values(1) = sol_factor  * (y/std::pow(r,2)); // Q   
+    values(2) = - sol_factor*  std::log(r); // U   
     }
     else
       values(2) = 1 ;
-#else
+/*#else
     if(r!= 0)
     {
     values(0) = 1/(2*numbers::PI) * (x/std::pow(r,2)); //Q 
@@ -601,7 +636,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     }
     else
       values(2) = 1 ;
-#endif
+#endif*/
   }
   }
     break;
@@ -633,7 +668,7 @@ void TrueSolution_omega<dim>::vector_value(const Point<dim> &p,
       values(0) = w * std::sin(w * x) * std::cos(w * y_l) * std::cos(w * z_l);
       values(1) = std::cos(w * x) * std::cos(w * y_l) * std::cos(w * z_l);
 
-      #if SOLUTION1_LINEAR
+      #if SOLUTION_SPACE
         values(0) = -1;
         values(1) = x+1;
         
@@ -654,7 +689,7 @@ void TrueSolution_omega<dim>::vector_value(const Point<dim> &p,
     break;
   }
   case 3: {
-    if(SOLUTION1_LINEAR == 1)
+    if(SOLUTION_SPACE == 1)
     {
      //values(0) = 0; //q 
     //values(1) =  1 + x;//u
