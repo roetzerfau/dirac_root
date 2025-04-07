@@ -27,7 +27,7 @@
 #define ANISO 1
 #define PAPER_SOLUTION 1 //1: paper dangelo, O: thesis, 1 funktionert besser
 #define VESSEL 0
-#define SOLUTION1_LINEAR 1
+#define SOLUTION1_LINEAR 0
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
 
@@ -47,8 +47,8 @@ constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[6] = {1,2,3,4,5,6};//,7,8,9,10
-const unsigned int p_degree[2] = {1,2};
+const unsigned int refinement[4] = {1,2,3,4};//,7,8,9,10
+const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
@@ -269,7 +269,7 @@ return 1;
     if(COUPLED == 1)
     {
       if(PAPER_SOLUTION == 1)  
-      return  u_o* 2 * numbers::PI* sol_factor - 2*f;//TODO oerscauen
+      return  u_o* 2 * numbers::PI* sol_factor - f;//TODO oerscauen
       else
       return  u_o - f;
       //  return (1 + p[0]) * 2 * numbers::PI* sol_factor - (1 + p[0]);
