@@ -600,14 +600,27 @@ if (dim == 3) {
    p2 =
       Point<dim>(0, half_length + offset, half_length + offset);
 }
- if (dim == 2) {
+ if (dim == 2 && GeometryConfiguration::TwoD_ZeroD ) {
    p1 =
       Point<dim>(-half_length + offset, -half_length + offset);	
    p2 =
       Point<dim>(half_length + offset, half_length + offset);
 
  }
+ if (dim == 2 && GeometryConfiguration::TwoD_OneD ) {
+  p1 =
+     Point<dim>(0, -half_length + offset);	
+  p2 =
+     Point<dim>(2 * half_length + offset, half_length + offset);
 
+}
+if (dim == 2 && GeometryConfiguration::TwoD_ZeroD ) {
+  p1 =
+     Point<dim>(-half_length + offset, -half_length + offset);	
+  p2 =
+     Point<dim>(half_length + offset, half_length + offset);
+
+}
 pcout<<"grid extent, p1:  "<<p1 <<" p2: "<<p2<<std::endl;
 //std::vector< unsigned int > 	repetitions({std::pow(2,n_refine),std::pow(2,n_refine),3});
 std::vector< unsigned int > 	repetitions({1,1,1});
@@ -646,8 +659,11 @@ else
 
  //pcout<<"3D maximal_cell_diameter "<<  GridTools::maximal_cell_diameter(triangulation)<<" std::pow(maximal_cell_diameter,2) "<<std::pow(GridTools::maximal_cell_diameter(triangulation),2)<<std::endl;
 unsigned int refine_omega =  n_refine;//n_refine - refinement[0] + 1;
-#if GRADEDMESH
+double mu = 1;
+#if GRADEDMESH && geo_conf == 2
+pcout<<"GRADEDMESH"<<std::endl;
 #if ANISO
+pcout<<"ANISO"<<std::endl;
  double h_max = (2 * half_length)/std::pow(2,n_refine)* std::sqrt(2);
 #else
 double  h_max = GridTools::maximal_cell_diameter(triangulation);
@@ -656,7 +672,7 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
 
  //
  pcout<<"h_max "<<h_max<<" level_max "<<level_max<<std::endl;
- double mu = alpha/(degree + 1);
+ mu = alpha/(degree + 1);
  double delta = 1.0;
  pcout<<"mu "<<mu<<std::endl;
  for (unsigned int i =n_refine; i <n_refine * 5; ++i)
@@ -804,10 +820,19 @@ if(dim == 3)
 corner1 =  Point<dim>(0, - (margin*radius + h), - (margin*radius + h));//2*radius
 corner2 =  Point<dim>(2 * half_length,  (margin*radius + h),  (margin*radius + h));//radius
 }
-if(dim == 2)
+if (dim == 2 && GeometryConfiguration::TwoD_ZeroD )
 {
-corner1 =  Point<dim>( -half_length,- (margin*radius + h));
-corner2 =  Point<dim>(half_length,(margin*radius + h));
+  corner1 =  Point<dim>(  (margin*radius + h),- (margin*radius + h));
+  corner2 =  Point<dim>((margin*radius + h),(margin*radius + h));
+}
+
+if(dim == 2 &&  GeometryConfiguration::TwoD_OneD)
+{
+  corner1  =
+  Point<dim>(0 ,- (margin*radius + h));	
+  corner2 =
+  Point<dim>(2 * half_length, (margin*radius + h));
+
 }
 std::pair<Point<dim>, Point<dim>> corner_pair(corner1, corner2);     
     
@@ -879,7 +904,7 @@ if( is_repartioned)
       Point<dim> p = cell->face(face_no)->center();
       if (cell->face(face_no)->at_boundary()) {
        double error = 0.000001;
-        if((std::abs(p[0] - 0)< error || std::abs(p[0] - 2 * half_length)<error) && geo_conf == GeometryConfiguration::ThreeD_OneD && (constructed_solution >= 2)) {//
+        if((std::abs(p[0] - 0)< error || std::abs(p[0] - 2 * half_length)<error) && (geo_conf == GeometryConfiguration::ThreeD_OneD || geo_conf == GeometryConfiguration::TwoD_OneD )&& (constructed_solution >= 2)) {//
         cell->face(face_no)->set_boundary_id(Neumann);
          //pcout<<"Neumann"<<std::endl;
         }
@@ -984,8 +1009,8 @@ if(is_repartioned)
     //throw std::invalid_argument("MAX DIAMETER > RADIUS");
   }
 //---------------omega-------------------------
-    if(dim == 2)
-    GridGenerator::hyper_cube(triangulation_omega, -half_length ,  half_length);
+    if(dim == 2 )
+    GridGenerator::hyper_cube(triangulation_omega, 0 ,  2 * half_length);
     if(dim == 3)
     GridGenerator::hyper_cube(triangulation_omega,0 ,  2*half_length);
 
@@ -1010,10 +1035,10 @@ if(is_repartioned)
          face_no < GeometryInfo<dim_omega>::faces_per_cell; face_no++) {
       if (cell_omega->face(face_no)->at_boundary())
       {
-        if(constructed_solution != 2)
+         if(SOLUTION_SPACE != 0)
         cell_omega->face(face_no)->set_boundary_id(Dirichlet);
         else
-        cell_omega->face(face_no)->set_boundary_id(NotDefined);
+       cell_omega->face(face_no)->set_boundary_id(NotDefined);
 
         //cell_omega->face(face_no)->set_boundary_id(Dirichlet);
         //cell_omega->face(face_no)->set_boundary_id(Neumann);
@@ -1957,19 +1982,19 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
     
       fe_values_omega.reinit(cell_omega);
 
-if(constructed_solution == 2)
+if(SOLUTION_SPACE == 0)//no_gradient
 {
- assemble_cell_terms(fe_values_omega, local_matrix_omega,
+   assemble_cell_terms(fe_values_omega, local_matrix_omega,
                           local_vector_omega, k_inverse_function,
                           rhs_function_omega, VectorField_omega,
                           Potential_omega,true );
 }
 else
 {
-   assemble_cell_terms(fe_values_omega, local_matrix_omega,
-                          local_vector_omega, k_inverse_function,
-                          rhs_function_omega, VectorField_omega,
-                          Potential_omega,false );
+  assemble_cell_terms(fe_values_omega, local_matrix_omega,
+    local_vector_omega, k_inverse_function,
+    rhs_function_omega, VectorField_omega,
+    Potential_omega,false );
 }
 
 
@@ -2009,7 +2034,7 @@ else
           else
            {
                // std::cout<<rank_mpi << " c " <<cell_omega->index()<<" f "<<face_omega->index()<<" omega, boundary condition not implemented "<<std::endl;
-                if(constructed_solution != 2)
+               if(SOLUTION_SPACE != 0)
                 Assert(false, ExcNotImplemented());
            } 
         } else {
@@ -2045,7 +2070,7 @@ else
             neighbor_omega->get_dof_indices(local_neighbor_dof_indices_omega);
            dof_omega_local_2_global(dof_handler_omega,
                               local_neighbor_dof_indices_omega);
-            if(constructed_solution != 2)
+            if(SOLUTION_SPACE != 0)
             {
             distribute_local_flux_to_global(
                   vi_ui_matrix_omega, vi_ue_matrix_omega, ve_ui_matrix_omega,
@@ -2083,8 +2108,8 @@ else
 #else
     g = (2 * numbers::PI) / (2 * numbers::PI + std::log(radius));
 #endif
-#if !COUPLED
- // g =1;
+#if !COUPLED && !VESSEL
+   g =1;
 #endif
 
 #if 1// USE_MPI_ASSEMBLE
@@ -2517,6 +2542,18 @@ MappingCartesian<dim> mymapping;
        {
         Point<dim_omega> quadrature_point_omega = quadrature_points_omega[p];
 
+
+        double z;
+          if(SOLUTION_SPACE == 0)
+          z = (1);
+         else if(SOLUTION_SPACE == 1)
+            z = (1 + quadrature_point_omega[0]);
+          else if(SOLUTION_SPACE == 2)
+             z = std::pow(quadrature_point_omega[0],2);
+          else
+            z = 0;
+
+
         // TODO hier über kreis iterieren
         std::vector<Point<dim>> quadrature_points_circle;
         Point<dim> quadrature_point_coupling;
@@ -2537,6 +2574,7 @@ MappingCartesian<dim> mymapping;
         else
           normal_vector_omega = Point<dim>(1, 0);
 
+
         quadrature_points_circle = equidistant_points_on_circle<dim>(
             quadrature_point_coupling, radius, normal_vector_omega,
             nof_quad_points);
@@ -2544,7 +2582,7 @@ MappingCartesian<dim> mymapping;
         // test function
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
-       // pcout<<"quadrature_point_coupling "<<quadrature_point_coupling<<std::endl;
+       //pcout<<"quadrature_point_coupling "<<quadrature_point_coupling<<std::endl;
    
     
         unsigned int n_te;
@@ -2563,7 +2601,7 @@ MappingCartesian<dim> mymapping;
 
 
         n_te = cell_test_array.size();    
-       // pcout << "quadrature_point_omega "<<quadrature_point_omega<<" cell_test_array " << cell_test_array.size() << std::endl;
+        //pcout << "quadrature_point_omega "<<quadrature_point_omega<<" cell_test_array " << cell_test_array.size() << std::endl;
         for (auto cellpair : cell_test_array)
 #else
         auto cell_test = GridTools::find_active_cell_around_point(
@@ -2673,7 +2711,7 @@ MappingCartesian<dim> mymapping;
                       mapping.project_real_point_to_unit_point_on_face(//das ist nicht reference Face, sondern face in eigenen Koordinatensystem, wird nochmal gedreht 
                           cell_test, face_no, quadrature_point_test);// für jedes Face braucht man eigenes Referenzface, welche dann gedreht wird und dann zu richtigen quadrature point wird
                   
-                  if(face_no == 2 || face_no ==3)//TODO checken warum man das machen muss
+                  if((face_no == 2 || face_no ==3))//TODO checken warum man das machen muss
                   quadrature_point_test_mapped_face = {quadrature_point_test_mapped_face[1],quadrature_point_test_mapped_face[0] };
                   
                 //  std::cout<<"face_no "<<face_no<<" ----quadrature_point_test "<<quadrature_point_test<<" quadrature_point_test_mapped_face "<<quadrature_point_test_mapped_face<<std::endl;
@@ -2723,22 +2761,10 @@ MappingCartesian<dim> mymapping;
                         fe_values_coupling_test_face.dofs_per_cell;
                     
                     local_vector = 0;
-                  //  std::cout<<"n_face_points "<<n_face_points <<" dofs_this_cell "<<dofs_this_cell<<std::endl;
+                   //std::cout<<"n_face_points "<<n_face_points <<" dofs_this_cell "<<dofs_this_cell<<std::endl;
                     for (unsigned int q = 0; q < n_face_points; ++q) {
                       for (unsigned int i = 0; i < dofs_this_cell; ++i) {
-                        double z;
-                      //  if(constructed_solution == 1)
-                        //  z = (1 + quadrature_point_omega[0]);
-                        //else if(constructed_solution == 2)
-                         // z = 1;
-                        //else if(constructed_solution == 3  )
-                          if(SOLUTION_SPACE == 1)
-                          z = (1 + quadrature_point_omega[0]);
-                          else if(SOLUTION_SPACE == 2)
-                           z = std::pow(quadrature_point_omega[0],2);
-                        else
-                          z = 0;
-                        local_vector(i) +=
+                        local_vector(i) += 
                            g * fe_values_coupling_test_face[Potential].value(i,
                                                                          q) *
                            1.0 / (n_te * n_ftest) *
@@ -2756,24 +2782,11 @@ MappingCartesian<dim> mymapping;
 
               if (insideCell_test) {
 
-                pcout << "Omega rhs insideCell" << std::endl;
+              //  pcout << "Omega rhs insideCell" << std::endl;
                 local_vector = 0;
                 const unsigned int n_q_points = fe_values_coupling_test.n_quadrature_points;
                  for (unsigned int q = 0; q < n_q_points; ++q) {
                 for (unsigned int i = 0; i < dofs_per_cell; i++) {
-                  
-                  double z;
-                 /* if(constructed_solution == 1)
-                    z = (1 + quadrature_point_omega[0]);
-                  else if(constructed_solution == 2)
-                    z = 1;
-                  else if (constructed_solution == 3)*/
-                  if(SOLUTION_SPACE == 1)
-                      z = (1 + quadrature_point_omega[0]);
-                      else if(SOLUTION_SPACE == 2)
-                        z = std::pow(quadrature_point_omega[0],2);
-                    else
-                      z = 0;
                   local_vector(i) +=
                   g *  fe_values_coupling_test[Potential].value(i, q) * z *fe_values_omega.JxW(p);
                 }

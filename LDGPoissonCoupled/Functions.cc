@@ -13,7 +13,7 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 1
+#define COUPLED 0
 #define VESSEL 0
 
 #define TEST 1
@@ -29,7 +29,7 @@
 #define ANISO 1
 #define PAPER_SOLUTION 1 //1: paper dangelo, O: thesis, 1 funktionert besser 
 
-#define SOLUTION_SPACE 1 //2
+#define SOLUTION_SPACE 0 //2
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
@@ -44,7 +44,7 @@ enum GeometryConfiguration
 const bool is_omega_on_face = true;
 constexpr double y_l = is_omega_on_face ? 0.0 : 0.00001;
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.00001;
-constexpr unsigned int geo_conf{2};
+constexpr unsigned int geo_conf{1};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
 constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
 
@@ -212,7 +212,6 @@ double RightHandSide<dim>::value(const Point<dim> &p,
      //        std::cos(w * p[2]);
     break;
   }
-  case 2:
   case 3: {
     return 0;
     break;
@@ -240,25 +239,11 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
       //       std::cos(w * z_l);
     break;
   }
-  case 2:
-  {
-#if PAPER_SOLUTION
-if(COUPLED == 1)
-return 2 * numbers::PI *sol_factor+1;
-#else 
-if(COUPLED == 1)
-return 2;
-else 
-return 1;
-#endif
-
-    break;
-  }
   case 3: {
     double f,u_o;
        if(SOLUTION_SPACE == 0)
        { u_o = 1;
-        f  = 0;}
+        f  = 1;}
       else if(SOLUTION_SPACE == 1)
       {
         u_o = (1 + p[0]);
@@ -281,13 +266,13 @@ return 1;
     if(COUPLED == 1)
     {
       if(PAPER_SOLUTION == 1)  
-      return  u_o* 2 * numbers::PI* sol_factor - f;//TODO oerscauen
+      return  u_o* 2 * numbers::PI* sol_factor + f;//TODO oerscauen
       else
-      return  u_o - f;
+      return  u_o + 2 * f;
       //  return (1 + p[0]) * 2 * numbers::PI* sol_factor - (1 + p[0]);
      }
       else
-      return - f;
+      return f;
     
     break;
     }
@@ -307,38 +292,11 @@ double DirichletBoundaryValues<dim>::value(const Point<dim> &p,
   y = p[1];
   if(dim == 3)
   z= p[2];
-  switch (constructed_solution) {
-  case 1: {
-    Vector<double> values(dim + 1);
-    TrueSolution<dim> solution;
-    solution.vector_value(p, values);
-    return values[dim];
-   
-    if(SOLUTION_SPACE == 1)
-    return x;
-    else if (SOLUTION_SPACE == 2)
-    return std::pow(x,2);
-    else{}
 
-    if (dim == 2)
-      return std::cos(w * x) * std::cos(w * y);
-    if (dim == 3) {
-      return std::cos(w * x) * std::cos(w * y) * std::cos(w * z);
-    }
-    break;
-  }
-  case 2:
-  case 3: {
      Vector<double> values(dim + 1);
       TrueSolution<dim> solution;
       solution.vector_value(p, values);
       return values[dim];
-      //return 0;
-    break;
-  }
-  default:
-    break;
-  }
 }
 
 template <int dim>
@@ -350,9 +308,10 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
   double r = distance_to_singularity<dim>(p);
 
   switch (constructed_solution) {
-  case 2:
-      return 0;
+
   case 3: {
+    if(SOLUTION_SPACE == 0)
+     return 0;
     if (p[0] > 1)
     {
     //std::cout<<"neum1 "<<p[0]<<std::endl;
@@ -391,69 +350,20 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
 template <int dim>
 double NeumannBoundaryValues_omega<dim>::value(
     const Point<dim> &p, const unsigned int /*component*/) const {
-  switch (constructed_solution) {
-  case 1:
-  case 2:
-  case 3: {
+
     Vector<double> values(dim + 1);
       TrueSolution_omega<dim> solution;
       solution.vector_value(p, values);
       return values[0];
-    break;
-  }
-  default:
-  {
-    std::cout<<"default"<<std::endl;
-    break;
-  }
-    
-  }
- return 0;
 }
 template <int dim>
 double DirichletBoundaryValues_omega<dim>::value(
     const Point<dim> &p, const unsigned int /*component*/) const {
-  switch (constructed_solution) {
-  case 1: {
-    Vector<double> values(dim + 1);
-    TrueSolution_omega<dim> solution;
-    solution.vector_value(p, values);
-    return values[dim];
 
-    /*if (dim == 2)
-      return std::cos(w * p[0]) * std::cos(w * y_l);
-    if (dim == 3)*/
-    if(SOLUTION_SPACE == 1)
-       return p[0];
-    else if(SOLUTION_SPACE == 2)
-       return std::pow(p[0],2);
-  else{}
-      //return std::cos(w * p[0]) * std::cos(w * y_l) * std::cos(w * z_l);
-    break;
-  }
-  case 2:
-  case 3: {
-    //return 0;
-    /*if (p[0] == 0)
-      return 1;
-    if (p[0] == 1)
-      return 2;*/
     Vector<double> values(dim + 1);
       TrueSolution_omega<dim> solution;
       solution.vector_value(p, values);
       return values[dim];
-
-  //return 1 + p[0];
-    break;
-  }
-  default:
-  {
-    std::cout<<"default"<<std::endl;
-    break;
-  }
-    
-  }
- return 0;
 }
 
 template <int dim>
@@ -569,25 +479,22 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     }
     break;
   }
-  case 2://    if(SOLUTION_SPACE == 0)
-  {
-    if(dim==3)
-    {
-    if (r != 0) {
-      values(0) =0; //Q 
-       values(1) = sol_factor * (y/std::pow(r,2)); // Q
-      values(2) =  sol_factor * (z/std::pow(r,2)); //Q
-      values(3) = - sol_factor * std::log(r); // U  
-    } else {
-      values(3) = 1  ; // U
-    }
-     }
-     break;
-  }
   case 3: {
     if(dim==3)
     {
-    if(SOLUTION_SPACE == 1)
+
+    if(SOLUTION_SPACE == 0)
+    {
+      if (r != 0) {
+        values(0) =0; //Q 
+         values(1) = sol_factor * (y/std::pow(r,2)); // Q
+        values(2) =  sol_factor * (z/std::pow(r,2)); //Q
+        values(3) = - sol_factor * std::log(r); // U  
+      } else {
+        values(3) = 1  ; // U
+      }
+    }
+    else if(SOLUTION_SPACE == 1)
     {
       if (r != 0) {
         values(0) = sol_factor * std::log(r); //Q 
@@ -617,7 +524,6 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
      {
       if(GeometryConfiguration::TwoD_ZeroD == geo_conf)
       {
-//#if VESSEL
     if(r!= 0)
     {
 
@@ -627,18 +533,21 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     }
     else
       values(2) = 1 ;
-/*#else
+  }
+  if(GeometryConfiguration::TwoD_OneD == geo_conf)
+  {
+   // std::cout<<"r "<<r <<std::endl;
     if(r!= 0)
     {
-    values(0) = 1/(2*numbers::PI) * (x/std::pow(r,2)); //Q 
-    values(1) =  1/(2*numbers::PI) *(y/std::pow(r,2)); // Q   
-    values(2) = - 1/(2*numbers::PI) *  std::log(r); // U   
+    values(0) = 0; //Q 
+    values(1) = y < 0 ? -0.5 : 0.5; ;// 0.5  * 1/r; // Q   
+    values(2) = - 0.5 * std::abs(r); //- 0.5 *  std::log(r); // U   
     }
     else
       values(2) = 1 ;
-#endif*/
   }
   }
+
     break;
   }
   default:
@@ -682,14 +591,13 @@ void TrueSolution_omega<dim>::vector_value(const Point<dim> &p,
     //}
     break;
   }
-  case 2:
-  {
+  case 3: {
+    if(SOLUTION_SPACE == 0)
+    {
     values(0) = 0; //q 
     values(1) = 1;//u
-    break;
-  }
-  case 3: {
-    if(SOLUTION_SPACE == 1)
+    }
+    else if(SOLUTION_SPACE == 1)
     {
      //values(0) = 0; //q 
     //values(1) =  1 + x;//u
@@ -698,13 +606,15 @@ void TrueSolution_omega<dim>::vector_value(const Point<dim> &p,
     values(1) = 1 + x;//u
     // std::cout<<"w "<<values(0)<<" "<<values(1)<<std::endl;
   }
-  else
+  else if(SOLUTION_SPACE == 2)
   {
     values(0) = -2*x;
     values(1) = std::pow(x,2);//u
   }
+  else{}
     break;
   }
+
   default:
     break;
   }
