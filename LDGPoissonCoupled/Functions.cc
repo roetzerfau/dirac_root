@@ -18,7 +18,7 @@
 
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
-#define GRADEDMESH 1
+#define GRADEDMESH 0
 #define MEMORY_CONSUMPTION 0
 
 #define USE_MPI_ASSEMBLE 1
@@ -41,7 +41,7 @@ enum GeometryConfiguration
   ThreeD_OneD = 2 ////constructed solution 1, 2, 3
 
 };
-const bool is_omega_on_face = true;
+const bool is_omega_on_face = false;
 constexpr double y_l = is_omega_on_face ? 0.0 : 0.00001;
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.00001;
 constexpr unsigned int geo_conf{1};
@@ -50,12 +50,12 @@ constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[4] = {1,2,3,4};//,7,8,9,10
+const unsigned int refinement[6] = {1,2,3,4,5,6};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
-const double radii[n_r] = {0.01};
+const double radii[n_r] = {0.1};
 const double D = 1;
 const double penalty_sigma = 10;//10
 
@@ -544,7 +544,13 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     values(2) = - 0.5 * std::abs(r); //- 0.5 *  std::log(r); // U   
     }
     else
-      values(2) = 1 ;
+     {
+      //std::cout<<"r = 0"<<std::endl;
+      values(0) = 0; 
+      values(1) = 0;
+      values(2) = 0;
+     }
+
   }
   }
 
@@ -660,28 +666,27 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
   
   r = distance_to_singularity<dim>(p);
 
+  if(constructed_solution == 1)
+  {
+  return;
+  }
 
   for(unsigned int i = 0; i < n_components; i++)
   {
   
     if(r <= cell_size * 1.1)//
     {
+      
        values(i) = 0;
+       if(geo_conf == 1 && (i == 2 || i == 0))
+        values(i) = 1;
     }
     else
+    {
+      if(GRADEDMESH)
       values(i) = std::pow(r,2*alpha);
-    //else  
-if(constructed_solution == 1)
-   values(i) = 1;
-// values(i) = 1;
-  //values(i) = values(i) * std::pow(r,2*alpha);
+    }
   }
- 
- //values = 1;
- /* if(values[0] == 0)
-  std::cout<<"distValues " <<values<<std::endl;
-*/
-   
 
 }
 
@@ -706,13 +711,27 @@ equidistant_points_on_circle(const Point<dim> &center, double radius,
   double angle_step =
       2 * M_PI / num_points; // Angle between each point in radians
   if (dim == 2) {
+    if(geo_conf ==  GeometryConfiguration::TwoD_ZeroD)
+    {
     for (int i = 0; i < num_points; ++i) {
       double angle = i * angle_step;
       double x = center[0] + radius * std::cos(angle);
       double y = center[1] + radius * std::sin(angle);
       points.push_back(Point<dim>(x, y));
+      }
     }
-  }
+    else
+    {
+   //  std::cout<<"equidist"<<std::endl;
+       double x = center[0] + radius * normal[0];
+       double y = center[1] + radius * normal[1];
+      points.push_back(Point<dim>(x, y));
+       x = center[0] - radius * normal[0];
+       y = center[1] - radius * normal[1];
+       points.push_back(Point<dim>(x, y));
+    }
+   }
+  
   if (dim == 3) {
     // static_assert(dim == 3, "This function is designed for 3-dimensional
     // space only.");

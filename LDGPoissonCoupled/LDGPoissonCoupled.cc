@@ -609,9 +609,9 @@ if (dim == 3) {
  }
  if (dim == 2 && GeometryConfiguration::TwoD_OneD ) {
   p1 =
-     Point<dim>(0, -half_length + offset);	
+     Point<dim>(0, -1);	//half_length + offset
   p2 =
-     Point<dim>(2 * half_length + offset, half_length + offset);
+     Point<dim>(2 * half_length + offset, 1);//half_length + offset
 
 }
 if (dim == 2 && GeometryConfiguration::TwoD_ZeroD ) {
@@ -1279,6 +1279,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
     }
    // std::cout<<std::endl;
   }
+  
   DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0),cell_integrals_mask_Omega, face_integrals_mask_Omega,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
  // std::cout<<"sparsity memory flx block(0, 0)"<<sp_block.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
 	//              << " GB" << std::endl;
@@ -1296,15 +1297,18 @@ if (AVERAGE) {
   unsigned int n = std::ceil(radius/(pow(2,minimal_cell_diameter_2D/std::sqrt(2)))) + 1;
  // std::cout<<"n "<<n <<" "<< minimal_cell_diameter_2D<<" "<<minimal_cell_diameter_2D/std::sqrt(2)<<std::endl;
   nof_quad_points = 25 * n_refine;// std::pow(2,n);
+  if(GeometryConfiguration::TwoD_OneD)
+    nof_quad_points = 2;
 } else {
   nof_quad_points = 1;
 }
 pcout<<"nof_quad_points "<<nof_quad_points<<std::endl;
 std::cout <<"std::sqrt(2)/2.0 "<<std::sqrt(2)/2.0<<std::endl;
 #if COUPLED || VESSEL
+
 if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
     // coupling
-  pcout<<"Sparsity Coupling "<<std::endl;
+  pcout<<"Sparsity Coupling 3D/1D 2D/1D"<<std::endl;
  typename DoFHandler<dim>::active_cell_iterator
         cell_start = dof_handler_Omega.begin_active();
 
@@ -1316,7 +1320,7 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
     FEValues<dim_omega> fe_values_omega(fe_omega, quadrature_formula_omega,
                                         update_flags);
 
-    pcout << "setup dofs Coupling" << std::endl;
+
     std::vector<types::global_dof_index> local_dof_indices_test(dofs_per_cell);
     std::vector<types::global_dof_index> local_dof_indices_trial(dofs_per_cell);
     std::vector<types::global_dof_index> local_dof_indices_omega(
@@ -1359,7 +1363,7 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
         if (dim == 3)
           normal_vector_omega = Point<dim>(1, 0, 0);
         else
-          normal_vector_omega = Point<dim>(1, 0);
+          normal_vector_omega = Point<dim>(0, 1);
 
         quadrature_points_circle = equidistant_points_on_circle<dim>(
             quadrature_point_coupling, radius, normal_vector_omega,
@@ -1368,13 +1372,13 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
         // test function
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
-     //   pcout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
+       pcout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
 
 //pcout <<"stat "<<std::endl;
    auto start = std::chrono::high_resolution_clock::now();  //Start time
     auto cell_test_first = GridTools::find_active_cell_around_point(
           cache, quadrature_point_test, cell_start, marked_vertices);
-       //    pcout<<"###+++# " <<cell_test_first.first<<" "<<cell_test_first.second<<std::endl;
+       //   pcout<<"###+++# " <<cell_test_first.first<<" "<<cell_test_first.second<<std::endl;
     auto end = std::chrono::high_resolution_clock::now();    // End time
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
@@ -1427,16 +1431,16 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
                   fe_Omega, my_quadrature_formula_test, update_flags_coupling);
               fe_values_coupling_test.reinit(cell_test);
 
-              for (unsigned int q_avag = 0; q_avag < nof_quad_points;
+              for (unsigned int q_avag = 0; q_avag < quadrature_points_circle.size();// nof_quad_points
                    q_avag++) {
                 // Quadrature weights and points
                 quadrature_point_trial = quadrature_points_circle[q_avag];
 
 #if TEST
-//pcout<<"asdf " <<quadrature_point_trial<<std::endl;
+pcout<<"quadrature_point_trial " <<quadrature_point_trial<<std::endl;
     auto cell_trial_first = GridTools::find_active_cell_around_point(
-          cache, quadrature_point_trial, cell_start, marked_vertices);
-  //         pcout<<"###### " <<cell_trial_first.first<<" "<<cell_trial_first.second<<std::endl;
+          cache, quadrature_point_trial, cell_start);//, marked_vertices
+          pcout<<"###### " <<cell_trial_first.first<<" "<<cell_trial_first.second<<std::endl;
    #if FASTER
    auto cell_trial_array = find_all_active_cells_around_point<dim, dim>(
                        mapping, triangulation, quadrature_point_trial,1e-10 ,cell_trial_first, &cache.get_vertex_to_cell_map());//, cache.get_vertex_to_cell_map()*/ //correct
@@ -1444,7 +1448,7 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
    auto cell_trial_array = GridTools::find_all_active_cells_around_point(
                        mapping, triangulation, quadrature_point_trial,1e-10 ,cell_trial_first);//, cache.get_vertex_to_cell_map()
    #endif
- //pcout<<"----" <<std::endl;
+ pcout<<"----" <<std::endl;
     for (auto cellpair_trial : cell_trial_array)
 #else
               auto cell_trial = GridTools::find_active_cell_around_point(
@@ -1539,7 +1543,7 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
 
 if(geo_conf == GeometryConfiguration::TwoD_ZeroD)  {
   
-  pcout << "2D/0D" << std::endl;
+  pcout << "Sparsity Coupling 2D/0D" << std::endl;
    
   bool insideCell_test = true;
   bool insideCell_trial = true;
@@ -1590,7 +1594,7 @@ if(geo_conf == GeometryConfiguration::TwoD_ZeroD)  {
       {
         cell_test->get_dof_indices(local_dof_indices_test);
 
-    for (unsigned int q_avag = 0; q_avag < nof_quad_points;
+    for (unsigned int q_avag = 0; q_avag < quadrature_points_circle.size();//nof_quad_points;
                  q_avag++) {
      // Quadrature weights and points
       quadrature_point_trial = quadrature_points_circle[q_avag];
@@ -1683,8 +1687,19 @@ if (global_error_flag) {
  //  pcout<<"system_rhs.reinit"<<std::endl;
 
  //  std::cout<<rank_mpi<<" memory system_matrix "<<system_matrix.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<" memory system_rhs "<<system_rhs.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
+   pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<system_matrix.m()*system_matrix.n()<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()<<std::endl;
   pcout<<"Ende setup dof"<<std::endl;
-
+  
+/*for (unsigned int row = 0; row < system_matrix.m(); ++row)
+{
+    for (SparseMatrix<double>::const_iterator entry = system_matrix.begin(row);
+         entry != system_matrix.end(row); ++entry)
+    {
+        if (entry->value() == 0.0)
+            std::cout << "Warning: Unused entry in matrix at ("
+                      << row << ", " << entry->column() << ")" << std::endl;
+    }
+}*/
 
 //std::cout<<"malloc_trim "<<malloc_trim(0)<<std::endl;
 
@@ -2305,7 +2320,7 @@ else
 //#endif
 #if VESSEL 
 // TODO right hand side
-      for (unsigned int q_avag = 0; q_avag < nof_quad_points;
+      for (unsigned int q_avag = 0; q_avag < quadrature_points_circle.size();//nof_quad_points;
                    q_avag++) {
        // Quadrature weights and points
         quadrature_point_trial = quadrature_points_circle[q_avag];
@@ -2572,7 +2587,7 @@ MappingCartesian<dim> mymapping;
         if (dim == 3)
           normal_vector_omega = Point<dim>(1, 0, 0);
         else
-          normal_vector_omega = Point<dim>(1, 0);
+          normal_vector_omega = Point<dim>(0,1);
 
 
         quadrature_points_circle = equidistant_points_on_circle<dim>(
@@ -2696,7 +2711,7 @@ MappingCartesian<dim> mymapping;
               //-------------face -----------------
            
               if (!insideCell_test) {
-              // pcout << "Omega rhs face " << std::endl;
+            //   pcout << "Omega rhs face " << std::endl;
              /* Point<dim - 1> quadrature_point_test_mapped_face =
                       mapping.project_real_point_to_unit_point_on_face(
                           cell_test, 0, quadrature_point_test);*/
@@ -2782,7 +2797,7 @@ MappingCartesian<dim> mymapping;
 
               if (insideCell_test) {
 
-              //  pcout << "Omega rhs insideCell" << std::endl;
+            //   pcout << "Omega rhs insideCell" << std::endl;
                 local_vector = 0;
                 const unsigned int n_q_points = fe_values_coupling_test.n_quadrature_points;
                  for (unsigned int q = 0; q < n_q_points; ++q) {
@@ -2798,7 +2813,7 @@ MappingCartesian<dim> mymapping;
 
 #if COUPLED ||VESSEL
               // pcout << "coupled " << std::endl;
-              for (unsigned int q_avag = 0; q_avag < nof_quad_points;
+              for (unsigned int q_avag = 0; q_avag < quadrature_points_circle.size();
                    q_avag++) {
                 // Quadrature weights and points
                 quadrature_point_trial = quadrature_points_circle[q_avag];
@@ -3154,6 +3169,7 @@ std::cout<<"ja"<<std::endl;
   pcout<<"Start compress " <<std::endl;
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
+   pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<system_matrix.m()*system_matrix.n()<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()<<std::endl;
 }
 
 template <int dim, int dim_omega>
