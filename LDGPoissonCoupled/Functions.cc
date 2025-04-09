@@ -29,7 +29,7 @@
 #define ANISO 1
 #define PAPER_SOLUTION 1 //1: paper dangelo, O: thesis, 1 funktionert besser 
 
-#define SOLUTION_SPACE 1 //2
+#define SOLUTION_SPACE 0 //2
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
@@ -50,7 +50,7 @@ constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[8] = {1,2,3,4,5,6,7,8};//,7,8,9,10
+const unsigned int refinement[6] = {1,2,3,4,5,6};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
