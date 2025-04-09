@@ -13,12 +13,12 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 0
+#define COUPLED 1
 #define VESSEL 0
 
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
-#define GRADEDMESH 0
+#define GRADEDMESH 1
 #define MEMORY_CONSUMPTION 0
 
 #define USE_MPI_ASSEMBLE 1
@@ -29,7 +29,7 @@
 #define ANISO 1
 #define PAPER_SOLUTION 1 //1: paper dangelo, O: thesis, 1 funktionert besser 
 
-#define SOLUTION_SPACE 0 //2
+#define SOLUTION_SPACE 1 //2
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
@@ -41,21 +41,21 @@ enum GeometryConfiguration
   ThreeD_OneD = 2 ////constructed solution 1, 2, 3
 
 };
-const bool is_omega_on_face = false;
+const bool is_omega_on_face = true;
 constexpr double y_l = is_omega_on_face ? 0.0 : 0.00001;
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.00001;
-constexpr unsigned int geo_conf{1};
+constexpr unsigned int geo_conf{2};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
 constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
 
 
 
-const unsigned int refinement[6] = {1,2,3,4,5,6};//,7,8,9,10
+const unsigned int refinement[8] = {1,2,3,4,5,6,7,8};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
-const double radii[n_r] = {0.1};
+const double radii[n_r] = {0.01};
 const double D = 1;
 const double penalty_sigma = 10;//10
 
@@ -683,7 +683,7 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
     }
     else
     {
-      if(GRADEDMESH)
+     if(GRADEDMESH == 1)
       values(i) = std::pow(r,2*alpha);
     }
   }

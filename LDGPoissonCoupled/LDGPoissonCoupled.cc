@@ -660,7 +660,7 @@ else
  //pcout<<"3D maximal_cell_diameter "<<  GridTools::maximal_cell_diameter(triangulation)<<" std::pow(maximal_cell_diameter,2) "<<std::pow(GridTools::maximal_cell_diameter(triangulation),2)<<std::endl;
 unsigned int refine_omega =  n_refine;//n_refine - refinement[0] + 1;
 double mu = 1;
-#if GRADEDMESH && geo_conf == 2
+#if GRADEDMESH //&& geo_conf == 2
 pcout<<"GRADEDMESH"<<std::endl;
 #if ANISO
 pcout<<"ANISO"<<std::endl;
@@ -1297,7 +1297,7 @@ if (AVERAGE) {
   unsigned int n = std::ceil(radius/(pow(2,minimal_cell_diameter_2D/std::sqrt(2)))) + 1;
  // std::cout<<"n "<<n <<" "<< minimal_cell_diameter_2D<<" "<<minimal_cell_diameter_2D/std::sqrt(2)<<std::endl;
   nof_quad_points = 25 * n_refine;// std::pow(2,n);
-  if(GeometryConfiguration::TwoD_OneD)
+  if(geo_conf ==  GeometryConfiguration::TwoD_OneD)
     nof_quad_points = 2;
 } else {
   nof_quad_points = 1;
@@ -1372,7 +1372,7 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
         // test function
         std::vector<double> my_quadrature_weights = {1};
         quadrature_point_test = quadrature_point_coupling;
-       pcout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
+     //  pcout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
 
 //pcout <<"stat "<<std::endl;
    auto start = std::chrono::high_resolution_clock::now();  //Start time
@@ -1437,10 +1437,10 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
                 quadrature_point_trial = quadrature_points_circle[q_avag];
 
 #if TEST
-pcout<<"quadrature_point_trial " <<quadrature_point_trial<<std::endl;
+//pcout<<"quadrature_point_trial " <<quadrature_point_trial<<std::endl;
     auto cell_trial_first = GridTools::find_active_cell_around_point(
           cache, quadrature_point_trial, cell_start);//, marked_vertices
-          pcout<<"###### " <<cell_trial_first.first<<" "<<cell_trial_first.second<<std::endl;
+       //   pcout<<"###### " <<cell_trial_first.first<<" "<<cell_trial_first.second<<std::endl;
    #if FASTER
    auto cell_trial_array = find_all_active_cells_around_point<dim, dim>(
                        mapping, triangulation, quadrature_point_trial,1e-10 ,cell_trial_first, &cache.get_vertex_to_cell_map());//, cache.get_vertex_to_cell_map()*/ //correct
@@ -1448,7 +1448,7 @@ pcout<<"quadrature_point_trial " <<quadrature_point_trial<<std::endl;
    auto cell_trial_array = GridTools::find_all_active_cells_around_point(
                        mapping, triangulation, quadrature_point_trial,1e-10 ,cell_trial_first);//, cache.get_vertex_to_cell_map()
    #endif
- pcout<<"----" <<std::endl;
+// pcout<<"----" <<std::endl;
     for (auto cellpair_trial : cell_trial_array)
 #else
               auto cell_trial = GridTools::find_active_cell_around_point(
@@ -1689,7 +1689,7 @@ if (global_error_flag) {
  //  std::cout<<rank_mpi<<" memory system_matrix "<<system_matrix.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<" memory system_rhs "<<system_rhs.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
    pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<system_matrix.m()*system_matrix.n()<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()<<std::endl;
   pcout<<"Ende setup dof"<<std::endl;
-  
+
 /*for (unsigned int row = 0; row < system_matrix.m(); ++row)
 {
     for (SparseMatrix<double>::const_iterator entry = system_matrix.begin(row);
