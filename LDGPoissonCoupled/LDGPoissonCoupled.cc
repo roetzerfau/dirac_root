@@ -1659,6 +1659,9 @@ if (global_error_flag) {
 
 
   sp_block.compress();
+  
+ // std::ofstream out("sparsity_pattern2.svg");
+ // sp_block.block(0,0).print_svg(out);
 
    pcout<<"Sparsity "  <<sp_block.n_rows()<<" "<<sp_block.n_cols()<<" n_nonzero_elements " <<sp_block.n_nonzero_elements()<<std::endl;
 #if MEMORY_CONSUMPTION
