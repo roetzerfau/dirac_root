@@ -600,25 +600,18 @@ if (dim == 3) {
    p2 =
       Point<dim>(0, half_length + offset, half_length + offset);
 }
- if (dim == 2 && GeometryConfiguration::TwoD_ZeroD ) {
+ if (dim == 2 && geo_conf == GeometryConfiguration::TwoD_ZeroD ) {
    p1 =
       Point<dim>(-half_length + offset, -half_length + offset);	
    p2 =
       Point<dim>(half_length + offset, half_length + offset);
 
  }
- if (dim == 2 && GeometryConfiguration::TwoD_OneD ) {
+ if (dim == 2 &&  geo_conf == GeometryConfiguration::TwoD_OneD ) {
   p1 =
      Point<dim>(0, -1);	//half_length + offset
   p2 =
      Point<dim>(2 * half_length + offset, 1);//half_length + offset
-
-}
-if (dim == 2 && GeometryConfiguration::TwoD_ZeroD ) {
-  p1 =
-     Point<dim>(-half_length + offset, -half_length + offset);	
-  p2 =
-     Point<dim>(half_length + offset, half_length + offset);
 
 }
 pcout<<"grid extent, p1:  "<<p1 <<" p2: "<<p2<<std::endl;
@@ -820,14 +813,16 @@ if(dim == 3)
 corner1 =  Point<dim>(0, - (margin*radius + h), - (margin*radius + h));//2*radius
 corner2 =  Point<dim>(2 * half_length,  (margin*radius + h),  (margin*radius + h));//radius
 }
-if (dim == 2 && GeometryConfiguration::TwoD_ZeroD )
+if (dim == 2 && geo_conf== GeometryConfiguration::TwoD_ZeroD )
 {
-  corner1 =  Point<dim>(  (margin*radius + h),- (margin*radius + h));
-  corner2 =  Point<dim>((margin*radius + h),(margin*radius + h));
+ // pcout<<"GeometryConfiguration::TwoD_ZeroD"<<std::endl;
+  corner1 =  Point<dim>(-(margin*radius + h),-(margin*radius + h));
+  corner2 =  Point<dim>((margin*radius + h), (margin*radius + h));
 }
 
-if(dim == 2 &&  GeometryConfiguration::TwoD_OneD)
+if(dim == 2 && geo_conf== GeometryConfiguration::TwoD_OneD)
 {
+ // pcout<<"GeometryConfiguration::TwoD_OneD"<<std::endl;
   corner1  =
   Point<dim>(0 ,- (margin*radius + h));	
   corner2 =
@@ -2123,10 +2118,10 @@ else
 #else
     g = (2 * numbers::PI) / (2 * numbers::PI + std::log(radius));
 #endif
-#if !COUPLED && !VESSEL
+#if (!COUPLED && !VESSEL) || (1 == geo_conf)
    g =1;
 #endif
-
+pcout<<"g "<<g<<std::endl;
 #if 1// USE_MPI_ASSEMBLE
 // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
 #endif
@@ -2156,7 +2151,7 @@ else
         quadrature_point_coupling, radius, normal_vector,
         nof_quad_points);
     Point<dim> quadrature_point_test = quadrature_point_coupling;
-    //std::cout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
+   // std::cout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
 
 
     std::vector<types::global_dof_index> local_dof_indices_test(dofs_per_cell);
@@ -2168,7 +2163,7 @@ else
     auto cell_test_array = GridTools::find_all_active_cells_around_point(
         mapping, dof_handler_Omega, quadrature_point_test, 1e-10, marked_vertices);
     n_te = cell_test_array.size();
-   // std::cout << "cell_test_array " << cell_test_array.size() << std::endl;
+ //  std::cout << "cell_test_array " << cell_test_array.size() << std::endl;
 
     for (auto cellpair : cell_test_array)
 #else
@@ -2240,7 +2235,7 @@ else
             auto bounding_box = face_test->bounding_box();
 
             if (bounding_box.point_inside(quadrature_point_test) == true) {
-             // std::cout<<"c "<<cell_test<< " f "<<face_no<<std::endl;
+              //std::cout<<"c "<<cell_test<< " f "<<face_no<<std::endl;
               std::vector<Point<dim - 1>> quadrature_point_test_face = {
                   quadrature_point_test_mapped_face};
               const Quadrature<dim - 1> my_quadrature_formula_test(

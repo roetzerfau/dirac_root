@@ -13,8 +13,8 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 1
-#define VESSEL 0
+#define COUPLED 0
+#define VESSEL 1
 
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
@@ -29,10 +29,14 @@
 #define ANISO 1
 #define PAPER_SOLUTION 1 //1: paper dangelo, O: thesis, 1 funktionert besser 
 
-#define SOLUTION_SPACE 0 //2
+#define SOLUTION_SPACE 1 //2
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
+
+
+// ThreeD_OneD: GRADEDMESH 0, SOLUTION_SPACE 0, lumpedAverages[n_LA] = {true}
+//
 
 enum GeometryConfiguration
 {
@@ -44,13 +48,13 @@ enum GeometryConfiguration
 const bool is_omega_on_face = true;
 constexpr double y_l = is_omega_on_face ? 0.0 : 0.00001;
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.00001;
-constexpr unsigned int geo_conf{2};
+constexpr unsigned int geo_conf{0};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
 constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
 
 
 
-const unsigned int refinement[6] = {1,2,3,4,5,6};//,7,8,9,10
+const unsigned int refinement[4] = {1,2,3,4};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
@@ -263,7 +267,13 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
         f = - std::pow(w,2) * std::sin(w * x) ;
       }*/
 
-    if(COUPLED == 1)
+
+    if(GeometryConfiguration::TwoD_OneD == geo_conf && COUPLED == 1)
+    {
+      //std::cout<<"dsfadsfsdf"<<std::endl;
+      return -1;
+    }
+      if(COUPLED == 1)
     {
       if(PAPER_SOLUTION == 1)  
       return  u_o* 2 * numbers::PI* sol_factor + f;//TODO oerscauen
@@ -312,6 +322,15 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
   case 3: {
     if(SOLUTION_SPACE == 0)
      return 0;
+   /* if(SOLUTION_SPACE == 1 && GeometryConfiguration::TwoD_OneD == geo_conf)
+    {
+      if (p[0] > 1)
+        return 0.5;
+      if (p[0] < 1)
+      return -0.5;
+    }*/
+
+
     if (p[0] > 1)
     {
     //std::cout<<"neum1 "<<p[0]<<std::endl;
@@ -537,10 +556,13 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
   if(GeometryConfiguration::TwoD_OneD == geo_conf)
   {
    // std::cout<<"r "<<r <<std::endl;
+   if(SOLUTION_SPACE == 0)
+   {
+ //   std::cout<<"r "<<r <<std::endl;
     if(r!= 0)
     {
     values(0) = 0; //Q 
-    values(1) = y < 0 ? -0.5 : 0.5; ;// 0.5  * 1/r; // Q   
+    values(1) = y < 0 ? - 0.5 : 0.5;// 0.5  * 1/r; // Q   
     values(2) = - 0.5 * std::abs(r); //- 0.5 *  std::log(r); // U   
     }
     else
@@ -550,6 +572,23 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
       values(1) = 0;
       values(2) = 0;
      }
+   }
+ /* else if(SOLUTION_SPACE == 1)
+  {
+    if(r!= 0)
+    {
+    values(0) = 0.5 * std::abs(r); //Q 
+    values(1) = y < 0 ? - 0.5 : 0.5;// 0.5  * 1/r; // Q   
+    values(2) = - u_o * 0.5 * std::abs(r); //- 0.5 *  std::log(r); // U   
+    }
+    else
+     {
+      //std::cout<<"r = 0"<<std::endl;
+      values(0) = 0; 
+      values(1) = 0;
+      values(2) = 0;
+     }
+  }else{}*/
 
   }
   }
@@ -947,7 +986,7 @@ equidistant_points_on_circle(const Point<dim> &center, double radius,
             {
               const Point<dim> p_unit =
                 mapping.transform_real_to_unit_cell(cell, p);
-            // if (cell->reference_cell().contains_point(p_unit, tolerance))
+             // if (cell->reference_cell().contains_point(p_unit, tolerance))
               if (cell->point_inside(p))
                 cells_and_points.emplace_back(cell, p_unit);
             }
