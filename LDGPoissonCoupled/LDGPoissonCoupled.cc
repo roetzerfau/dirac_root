@@ -2121,6 +2121,8 @@ else
 #if (!COUPLED && !VESSEL) || (1 == geo_conf)
    g =1;
 #endif
+if(1 == geo_conf)
+g = 1;
 pcout<<"g "<<g<<std::endl;
 #if 1// USE_MPI_ASSEMBLE
 // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )

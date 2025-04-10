@@ -54,7 +54,7 @@ constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[4] = {1,2,3,4};//,7,8,9,10
+const unsigned int refinement[8] = {1,2,3,4,5,6,7,8};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
@@ -271,9 +271,15 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
     if(GeometryConfiguration::TwoD_OneD == geo_conf && COUPLED == 1)
     {
       //std::cout<<"dsfadsfsdf"<<std::endl;
-      return -1;
+      if(SOLUTION_SPACE == 0)
+      return 2;
+      if(SOLUTION_SPACE == 1)
+      return u_o;
+      
     }
-      if(COUPLED == 1)
+
+
+    if(COUPLED == 1)
     {
       if(PAPER_SOLUTION == 1)  
       return  u_o* 2 * numbers::PI* sol_factor + f;//TODO oerscauen
@@ -322,13 +328,13 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
   case 3: {
     if(SOLUTION_SPACE == 0)
      return 0;
-   /* if(SOLUTION_SPACE == 1 && GeometryConfiguration::TwoD_OneD == geo_conf)
+    if(SOLUTION_SPACE == 1 && GeometryConfiguration::TwoD_OneD == geo_conf)
     {
       if (p[0] > 1)
-        return 0.5;
+        return -0.5 * std::abs(r);
       if (p[0] < 1)
-      return -0.5;
-    }*/
+      return 0.5* std::abs(r);
+    }
 
 
     if (p[0] > 1)
@@ -573,7 +579,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
       values(2) = 0;
      }
    }
- /* else if(SOLUTION_SPACE == 1)
+  else if(SOLUTION_SPACE == 1)
   {
     if(r!= 0)
     {
@@ -588,7 +594,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
       values(1) = 0;
       values(2) = 0;
      }
-  }else{}*/
+  }else{}
 
   }
   }
