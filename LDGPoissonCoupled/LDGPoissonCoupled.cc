@@ -668,7 +668,7 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
  mu = alpha/(degree + 1);
  double delta = 1.0;
  pcout<<"mu "<<mu<<std::endl;
- for (unsigned int i =n_refine; i <n_refine * 5; ++i)
+ for (unsigned int i =n_refine; i <n_refine * 3; ++i)
     {
       typename Triangulation<dim>::active_cell_iterator
       cell = triangulation.begin_active(),
@@ -1685,7 +1685,8 @@ if (global_error_flag) {
  //  pcout<<"system_rhs.reinit"<<std::endl;
 
  //  std::cout<<rank_mpi<<" memory system_matrix "<<system_matrix.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<" memory system_rhs "<<system_rhs.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
-   pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<system_matrix.m()*system_matrix.n()<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()<<std::endl;
+   pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<system_matrix.m()*system_matrix.n()<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()<<" (perc) "
+   <<system_matrix.n_nonzero_elements()/(system_matrix.m()*system_matrix.n())<<std::endl;
   pcout<<"Ende setup dof"<<std::endl;
 
 /*for (unsigned int row = 0; row < system_matrix.m(); ++row)
@@ -3169,7 +3170,8 @@ std::cout<<"ja"<<std::endl;
   pcout<<"Start compress " <<std::endl;
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
-   pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<system_matrix.m()*system_matrix.n()<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()<<std::endl;
+   pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<system_matrix.m()*system_matrix.n()<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()
+   <<system_matrix.n_nonzero_elements()/(system_matrix.m()*system_matrix.n())<<std::endl;
 }
 
 template <int dim, int dim_omega>

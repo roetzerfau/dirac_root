@@ -14,7 +14,7 @@
 // std::numbers::PI
 
 #define COUPLED 0
-#define VESSEL 1
+#define VESSEL 0
 
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
@@ -50,7 +50,7 @@ constexpr double y_l = is_omega_on_face ? 0.0 : 0.00001;
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.00001;
 constexpr unsigned int geo_conf{0};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
-constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 2: omega constant funktion, ohne fluss, 3: dangelo thesis log, linear funktion on omega
+constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 3: dangelo thesis log, PAPER_SOLUTION funktion on omega
 
 
 
