@@ -1686,7 +1686,7 @@ if (global_error_flag) {
 
  //  std::cout<<rank_mpi<<" memory system_matrix "<<system_matrix.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<" memory system_rhs "<<system_rhs.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
    pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<system_matrix.m()*system_matrix.n()<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()<<" (perc) "
-   <<system_matrix.n_nonzero_elements()/(system_matrix.m()*system_matrix.n())<<std::endl;
+   <<(float)system_matrix.n_nonzero_elements()/(system_matrix.m()*system_matrix.n())<<std::endl;
   pcout<<"Ende setup dof"<<std::endl;
 
 /*for (unsigned int row = 0; row < system_matrix.m(); ++row)
@@ -3170,8 +3170,8 @@ std::cout<<"ja"<<std::endl;
   pcout<<"Start compress " <<std::endl;
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
-   pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<system_matrix.m()*system_matrix.n()<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()
-   <<system_matrix.n_nonzero_elements()/(system_matrix.m()*system_matrix.n())<<std::endl;
+   pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<system_matrix.m()*system_matrix.n()<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()<<" (perc) "
+   <<(float)system_matrix.n_nonzero_elements()/(system_matrix.m()*system_matrix.n())<<std::endl;
 }
 
 template <int dim, int dim_omega>
