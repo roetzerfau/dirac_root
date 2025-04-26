@@ -14,11 +14,11 @@
 // std::numbers::PI
 
 #define COUPLED 0 //wenn coupled = 1, vessel muss = 0
-#define VESSEL 1
+#define VESSEL 0
 
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
-#define GRADEDMESH 1
+#define GRADEDMESH 0
 #define MEMORY_CONSUMPTION 0
 
 #define USE_MPI_ASSEMBLE 1
@@ -48,13 +48,13 @@ enum GeometryConfiguration
 const bool is_omega_on_face = true;
 constexpr double y_l = is_omega_on_face ? 0.0 : 0.00001;
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.00001;
-constexpr unsigned int geo_conf{2};
+constexpr unsigned int geo_conf{0};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
 constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 3: dangelo thesis log, PAPER_SOLUTION funktion on omega
 
 
 
-const unsigned int refinement[7] = {1,2,3,4,5,6,7};//,7,8,9,10
+const unsigned int refinement[15] = {1,2,3,4,5,6,7,8,9,101,11,12,13,14,15};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;

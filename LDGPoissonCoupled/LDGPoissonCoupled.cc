@@ -364,7 +364,7 @@ public:
   double max_diameter_omega;
   unsigned int nof_cells;
   unsigned int nof_cells_omega;
-
+  float nonzero_perc;
 private:
   void make_grid();
 
@@ -447,6 +447,7 @@ private:
   double g;
   bool lumpedAverage;
   std::string folder_name;
+
 
   //parallel::distributed::Triangulation<dim> triangulation_dist;
 
@@ -1248,13 +1249,15 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
  // std::cout<<"sparsity memory block(1, 0)"<<sp_block.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
 //	              << " GB" << std::endl;
  
+
+/*
   Table< 2, DoFTools::Coupling >	cell_integrals_mask_Omega(dim +1, dim +1);
   for (unsigned int c = 0; c < dim + 1; ++c)
   {
     for (unsigned int d = 0; d < dim + 1; ++d)
     {
         if (c == dim || d == dim || c == d) //coupling between scalar values with its test functions (for dimension coupling)
-           cell_integrals_mask_Omega[c][d] = DoFTools::always; //coupling between each entry of vector values and with pressure
+           cell_integrals_mask_Omega[c][d] = DoFTools::nonzero; //coupling between each entry of vector values and with pressure
         else
          cell_integrals_mask_Omega[c][d] = DoFTools::none;
         //std::cout<<cell_integrals_mask_Omega[c][d]<< " ";
@@ -1267,18 +1270,21 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
     for (unsigned int d = 0; d < dim + 1; ++d)
     {
         if (c == dim || d == dim ) //coupling between scalar values with its test functions (for dimension coupling) and with vector values
-           face_integrals_mask_Omega[c][d] = DoFTools::always; 
+           face_integrals_mask_Omega[c][d] = DoFTools::nonzero; 
         else
          face_integrals_mask_Omega[c][d] = DoFTools::none;
         //std::cout<<face_integrals_mask_Omega[c][d]<< " ";
     }
    // std::cout<<std::endl;
   }
+   */
   
-  DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0),cell_integrals_mask_Omega, face_integrals_mask_Omega,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
- // std::cout<<"sparsity memory flx block(0, 0)"<<sp_block.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
+  //DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0),cell_integrals_mask_Omega, face_integrals_mask_Omega,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
+ 
+  DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0));//, constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
+  // std::cout<<"sparsity memory flx block(0, 0)"<<sp_block.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
 	//              << " GB" << std::endl;
-  DoFTools::make_flux_sparsity_pattern(dof_handler_omega, sp_block.block(1,1),constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) );
+  DoFTools::make_flux_sparsity_pattern(dof_handler_omega, sp_block.block(1,1));//,constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) );
  // std::cout <<"sparsity memory flx block(1, 1)"<<sp_block.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
 	//              << " GB" << std::endl;
   sp_block.collect_sizes();
@@ -1687,6 +1693,7 @@ if (global_error_flag) {
  //  std::cout<<rank_mpi<<" memory system_matrix "<<system_matrix.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<" memory system_rhs "<<system_rhs.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
    pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<system_matrix.m()*system_matrix.n()<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()<<" (perc) "
    <<(float)system_matrix.n_nonzero_elements()/(system_matrix.m()*system_matrix.n())<<std::endl;
+   nonzero_perc = (float)system_matrix.n_nonzero_elements()/(system_matrix.m()*system_matrix.n());
   pcout<<"Ende setup dof"<<std::endl;
 
 /*for (unsigned int row = 0; row < system_matrix.m(); ++row)
@@ -4100,7 +4107,7 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
  // memory_consumption("after  make_grid");
  make_dofs();
  //memory_consumption("after make_dofs()");
-  assemble_system();
+  /*assemble_system();
   //memory_consumption("after  assemble_system()");
 
   marked_vertices.clear();
@@ -4116,8 +4123,8 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
 
   std::array<double, 4> results_array = compute_errors();
-  output_results();
-  //std::array<double, 4> results_array;
+  output_results();*/
+  std::array<double, 4> results_array;
   return results_array;
 }
 
@@ -4217,6 +4224,7 @@ int main(int argc, char *argv[]) {
       double max_diameter_omega[p_degree_size][refinement_size];
       double nof_cells[p_degree_size][refinement_size];
       double nof_cells_omega[p_degree_size][refinement_size];
+      double nonzero_perc_arr[p_degree_size][refinement_size];
 
       std::vector<std::string> solution_names = {"U_Omega", "Q_Omega",
                                                  "u_omega", "q_omega"};
@@ -4266,6 +4274,7 @@ int main(int argc, char *argv[]) {
           nof_cells[p][r] = LDGPoissonCoupled.nof_cells;
           max_diameter_omega[p][r] = LDGPoissonCoupled.max_diameter_omega;
           nof_cells_omega[p][r] = LDGPoissonCoupled.nof_cells_omega;
+          nonzero_perc_arr[p][r] = LDGPoissonCoupled.nonzero_perc;
         
 
          if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 && is_not_failed) {
@@ -4369,6 +4378,17 @@ int main(int argc, char *argv[]) {
       } else {
           std::cerr << "Error: Could not copy folder." << std::endl;
       }
+
+
+      for (unsigned int r = 0; r < refinement_size; r++) { 
+        std::cout << r << " ; ";
+      for (unsigned int p = 0; p < p_degree_size; p++) {
+        std::cout  << nonzero_perc_arr[p][r]<< " ; ";
+        }
+        std::cout << std::endl;
+        }
+
+
       }
     }
   }
