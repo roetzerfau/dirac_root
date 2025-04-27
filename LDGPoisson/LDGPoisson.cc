@@ -206,8 +206,8 @@ LDGPoissonProblem(const unsigned int degree,
                 typename Triangulation<dim>::MeshSmoothing
                 (Triangulation<dim>::smoothing_on_refinement |
                  Triangulation<dim>::smoothing_on_coarsening)),
-  fe( FESystem<dim>(FE_DGQ<dim>(degree), dim),        1,
-      FE_DGQ<dim>(degree),                             1),
+  fe( FESystem<dim>(FE_DGP<dim>(degree), dim),        1,
+      FE_DGP<dim>(degree),                             1),
   dof_handler(triangulation),
   pcout(std::cout,
         Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0),
@@ -248,7 +248,7 @@ Point<dim> p1, p2;
 
  //GridGenerator::hyper_cube(triangulation, 0, 1);
 triangulation.refine_global(n_refine);
-  
+  /*
   unsigned int local_refine = 2;
   for (unsigned int i =0; i <local_refine; ++i)
     {
@@ -277,12 +277,14 @@ triangulation.refine_global(n_refine);
       // that we want to refine locally we can go ahead and
       // refine them.
       triangulation.execute_coarsening_and_refinement();
-    }
-    std::cout<<"gridout"<<std::endl;
+    }*/
+
+
+   /* std::cout<<"gridout"<<std::endl;
     std::ofstream out("grid-2.vtk");
     GridOut       grid_out;
     grid_out.write_vtk(triangulation, out);
-    std::cout<<"gridout ende"<<std::endl;
+    std::cout<<"gridout ende"<<std::endl;*/
   // To label the boundary faces of the mesh with their
   // type, i.e. Dirichlet or Neumann,
   // we loop over all the cells in the mesh and then over
@@ -403,21 +405,27 @@ pcout<<"Sparsity_before dist "  <<dsp.n_rows()<<" "<<dsp.n_cols()<<" n_nonzero_e
   // accept block structured matrices and since I was using a
   // distributed direct solver it was unnecessary to explicitly use a
   // block structured matrix.
-  
-  pcout<<"Sparsity "  <<dsp.n_rows()<<" "<<dsp.n_cols()<<" n_nonzero_elements " <<dsp.n_nonzero_elements()<<std::endl;
-     Utilities::System::MemoryStats mem_stats;
-Utilities::System::get_memory_stats(mem_stats);
+  uint64_t yy = uint64_t (dsp.n_cols()) ;
+  pcout<<"Sparsity "  <<dsp.n_rows()<<" "<<dsp.n_cols()<<"="<<yy * yy<<" n_nonzero_elements " <<dsp.n_nonzero_elements()<<" (perc) "
+  <<(float)dsp.n_nonzero_elements()/(yy * yy)<<std::endl;
+    Utilities::System::MemoryStats mem_stats;
+/* Utilities::System::get_memory_stats(mem_stats);
   pcout << "Memory Statistics sparse:" << std::endl
 <<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
 << "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
 << "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
-<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl; 
+<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl; */
   
   system_matrix.reinit(locally_owned_dofs,
                        locally_owned_dofs,
                        dsp,
                        MPI_COMM_WORLD);
-
+  
+                     
+                       uint64_t zz = uint64_t (system_matrix.m()) ;
+                       std::cout<<zz<<std::endl;
+pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<zz * zz<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()<<" (perc) "
+                       <<(float)system_matrix.n_nonzero_elements()/(zz * zz)<<std::endl;
   // The final note that I will make in that this subroutine is that
   // we initialize this processors solution and the
   // right hand side vector the exact same was as we did in step-40.
@@ -443,7 +451,28 @@ Utilities::System::get_memory_stats(mem_stats);
         << dof_handler.n_dofs()
         << " (" << n_vector_field << " + " << n_potential << ")"
         << std::endl;
-        
+
+
+        const unsigned int dofs_per_cell = fe.dofs_per_cell;
+        pcout << "dofs_per_cell " << dofs_per_cell << std::endl;
+  const std::vector<types::global_dof_index> dofs_per_component_Omega =
+        DoFTools::count_dofs_per_fe_component(dof_handler);
+  
+    const unsigned int n_vector_field_Omega = dim * dofs_per_component_Omega[0];
+    const unsigned int n_potential_Omega = dofs_per_component_Omega[dofs_per_component_Omega.size()-1];
+  
+    for (unsigned int i = 0; i < dofs_per_component_Omega.size(); i++)
+      pcout << "dofs_per_component_Omega " << dofs_per_component_Omega[i] << std::endl;
+  
+    pcout <<  "Omega ----------------------------"<<std::endl
+          <<"Number of global active cells: "
+          << triangulation.n_global_active_cells() << std::endl
+          << "Number of degrees of freedom: " << dof_handler.n_dofs() << " ("
+          << n_vector_field_Omega << " + " << n_potential_Omega << ")"<<std::endl
+          <<" triangulation.n_vertices() "<<triangulation.n_vertices()<< std::endl;
+    unsigned int locally_owned_cells = triangulation.n_locally_owned_active_cells();
+    std::cout <<" Number of locally owned active cells: " << locally_owned_cells <<" Number of locally owned DoF: " << dof_handler.n_locally_owned_dofs()<<std::endl;
+      
         Utilities::System::get_memory_stats(mem_stats);
   pcout << "Memory Statistics reinit:" << std::endl
 <<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
@@ -1505,9 +1534,9 @@ run()
   penalty = 1.0;
   make_grid();
   make_dofs();
-  assemble_system();
+ /* assemble_system();
   solve();
-  output_results();
+  output_results();*/
 }
 
 
@@ -1528,6 +1557,35 @@ int main(int argc, char *argv[])
                                                           numbers::invalid_unsigned_int);
  int rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 {
+
+
+for(int i = 1; i < 8; i++)
+{
+  unsigned int degree = 1;
+  unsigned int n_refine = i;
+  std::cout<<"n_refine "<<n_refine<<std::endl;
+  LDGPoissonProblem<3>    Poisson(degree, n_refine);
+  Poisson.run();
+              struct rusage usage;
+getrusage(RUSAGE_SELF, &usage);
+double peak_memory = usage.ru_maxrss / 1024.0; // Convert KB to MB
+
+// Print memory usage for each process
+std::cout << "Rank " << rank_mpi << " Peak Memory Usage: " << peak_memory << " MB" << std::endl;
+
+double max_memory;
+MPI_Reduce(&peak_memory, &max_memory, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+    if (rank_mpi == 0) {
+    std::cout << "Peak Memory Usage Across All Ranks: " << max_memory << " MB" << std::endl;
+}
+
+
+}
+
+
+
+  /*
       unsigned int degree = 1;
       unsigned int n_refine = 2;
       std::cout<<"n_refine "<<n_refine<<std::endl;
@@ -1590,7 +1648,7 @@ double max_memory;
 }
 {
       unsigned int degree = 1;
-      unsigned int n_refine = 5;
+      unsigned int n_refine = 2;
       std::cout<<"n_refine "<<n_refine<<std::endl;
       LDGPoissonProblem<3>    Poisson(degree, n_refine);
       Poisson.run();
@@ -1614,6 +1672,7 @@ double max_memory;
         if (rank_mpi == 0) {
         std::cout << "Peak Memory Usage Across All Ranks: " << max_memory << " MB" << std::endl;
     }
+        */
 }
 
 

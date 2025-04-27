@@ -1668,8 +1668,9 @@ if (global_error_flag) {
   
  // std::ofstream out("sparsity_pattern2.svg");
  // sp_block.block(0,0).print_svg(out);
-
-   pcout<<"Sparsity "  <<sp_block.n_rows()<<" "<<sp_block.n_cols()<<" n_nonzero_elements " <<sp_block.n_nonzero_elements()<<std::endl;
+ uint64_t yy = uint64_t (sp_block.n_cols()) ;
+   pcout<<"Sparsity "  <<sp_block.n_rows()<<"x"<<sp_block.n_cols()<<"="<<yy*yy<<" n_nonzero_elements " <<sp_block.n_nonzero_elements()<<" (perc) "
+   <<(float)sp_block.n_nonzero_elements()/(yy * yy)<<std::endl;
 #if MEMORY_CONSUMPTION
    std::cout<<"mpi_rank "<<rank_mpi<<" sparsity memory "<<sp_block.memory_consumption()/(1024*1024)<<" MB"<<std::endl;
    std::cout<<"mpi_rank "<<rank_mpi<<" dof_handler_Omega "<<dof_handler_Omega.memory_consumption()/(1024*1024)<<" MB"<<std::endl;
@@ -1691,10 +1692,19 @@ if (global_error_flag) {
  //  pcout<<"system_rhs.reinit"<<std::endl;
 
  //  std::cout<<rank_mpi<<" memory system_matrix "<<system_matrix.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<" memory system_rhs "<<system_rhs.memory_consumption()/ (1024.0 * 1024.0 * 1024.0)<<std::endl;
-   pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<system_matrix.m()*system_matrix.n()<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()<<" (perc) "
-   <<(float)system_matrix.n_nonzero_elements()/(system_matrix.m()*system_matrix.n())<<std::endl;
+ uint64_t zz = uint64_t (system_matrix.m()) ;
+ pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<zz * zz<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()<<" (perc) "
+   <<(float)system_matrix.n_nonzero_elements()/(zz * zz)<<std::endl;
    nonzero_perc = (float)system_matrix.n_nonzero_elements()/(system_matrix.m()*system_matrix.n());
   pcout<<"Ende setup dof"<<std::endl;
+
+  Utilities::System::MemoryStats mem_stats;
+          Utilities::System::get_memory_stats(mem_stats);
+  pcout << "Memory Statistics reinit:" << std::endl
+<<"VmPeak: " << mem_stats.VmPeak / 1024.0 << " MB" << std::endl 
+<< "VmSize: " << mem_stats.VmSize / 1024.0 << " MB" << std::endl
+<< "VmHWM: " << mem_stats.VmHWM / 1024.0 << " MB" << std::endl
+<< "VmRSS: " << mem_stats.VmRSS / 1024.0 << " MB" << std::endl; 
 
 /*for (unsigned int row = 0; row < system_matrix.m(); ++row)
 {
@@ -3177,8 +3187,12 @@ std::cout<<"ja"<<std::endl;
   pcout<<"Start compress " <<std::endl;
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
-   pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<system_matrix.m()*system_matrix.n()<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()<<" (perc) "
-   <<(float)system_matrix.n_nonzero_elements()/(system_matrix.m()*system_matrix.n())<<std::endl;
+
+  uint64_t zz = uint64_t (system_matrix.m()) ;
+   pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<zz * zz<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()<<" (perc) "
+   <<(float)system_matrix.n_nonzero_elements()/(zz * zz)<<std::endl;
+
+
 }
 
 template <int dim, int dim_omega>
