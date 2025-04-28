@@ -896,6 +896,20 @@ assemble_system()
   // This was discussed in detail in step-40.
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
+
+unsigned int cnt = 0;
+ uint64_t cnt2 = 0; 
+
+for(TrilinosWrappers::SparseMatrix::const_iterator it = system_matrix.begin(); it != system_matrix.end(); it++)
+{
+  cnt2++;
+  if(std::abs(it->value()) > 1e-12)
+  cnt ++;
+
+}
+pcout << "cnt "<<cnt <<" perc von 0 werten bei nonzero  " <<float (cnt) /system_matrix.n_nonzero_elements()<<  std::endl;
+
+
 }
 
 
@@ -1534,8 +1548,8 @@ run()
   penalty = 1.0;
   make_grid();
   make_dofs();
- /* assemble_system();
-  solve();
+ assemble_system();
+ /*  solve();
   output_results();*/
 }
 

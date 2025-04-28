@@ -537,7 +537,7 @@ LDGPoissonProblem<dim, dim_omega>::LDGPoissonProblem(
       //triangulation_dist(MPI_COMM_WORLD),
       cache(triangulation),
       triangulation_omega(MPI_COMM_WORLD),
-      fe_Omega(FESystem<dim>(FE_DGP<dim>(degree), dim), FE_DGP<dim>(degree)),
+    fe_Omega(FESystem<dim>(FE_DGP<dim>(degree), dim), FE_DGP<dim>(degree)),
       dof_handler_Omega(triangulation),
       fe_omega(FESystem<dim_omega>(FE_DGP<dim_omega>(degree), dim_omega),
                FE_DGP<dim_omega>(degree)),
@@ -1096,8 +1096,8 @@ void LDGPoissonProblem<dim, dim_omega>::make_dofs() {
   pcout << "dofs_per_cell_omega " << dofs_per_cell_omega << std::endl;
 
 #if !COUPLED
- // DoFRenumbering::component_wise(dof_handler_Omega); //uncomment for unput result
- // DoFRenumbering::component_wise(dof_handler_omega); //TODO nochmal kontrollieren
+  //DoFRenumbering::component_wise(dof_handler_Omega); //uncomment for unput result
+  //DoFRenumbering::component_wise(dof_handler_omega); //TODO nochmal kontrollieren
 #endif
 
   const std::vector<types::global_dof_index> dofs_per_component_Omega =
@@ -1250,36 +1250,46 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
 //	              << " GB" << std::endl;
  
 
+  std::cout<<"-----cell_integrals_mask_Omega-----"<<std::endl;
 
+
+  /*
+   P V 
+  Q 1
+  U  1
+  
+  */
   Table< 2, DoFTools::Coupling >	cell_integrals_mask_Omega(dim +1, dim +1);
-  for (unsigned int c = 0; c < dim + 1; ++c)
+  for (unsigned int c = 0; c < dim + 1; c++)
   {
-    for (unsigned int d = 0; d < dim + 1; ++d)
+    for (unsigned int d = 0; d < dim + 1; d++)
     {
-        if (c == dim || d == dim || c == d) //coupling between scalar values with its test functions (for dimension coupling)
+       if ((c < dim && (c == d  || d == dim)) || (c == dim && d < dim)) //coupling between scalar values with its test functions (for dimension coupling)  
+        //if(c == d)  
            cell_integrals_mask_Omega[c][d] = DoFTools::nonzero; //coupling between each entry of vector values and with pressure
-        else
-         cell_integrals_mask_Omega[c][d] = DoFTools::none;
-        //std::cout<<cell_integrals_mask_Omega[c][d]<< " ";
+        //else
+        // cell_integrals_mask_Omega[c][d] = DoFTools::none;
+        std::cout<<cell_integrals_mask_Omega[c][d]<< " ";
     }
-    //std::cout<<std::endl;
+    std::cout<<std::endl;
   }
+  std::cout<<"-----face_integrals_mask_Omega-----"<<std::endl;
   Table< 2, DoFTools::Coupling > 	face_integrals_mask_Omega(dim +1, dim +1);
     for (unsigned int c = 0; c < dim + 1; ++c)
   {
     for (unsigned int d = 0; d < dim + 1; ++d)
     {
         if (c == dim || d == dim ) //coupling between scalar values with its test functions (for dimension coupling) and with vector values
-           face_integrals_mask_Omega[c][d] = DoFTools::nonzero; 
-        else
-         face_integrals_mask_Omega[c][d] = DoFTools::none;
-        //std::cout<<face_integrals_mask_Omega[c][d]<< " ";
+         face_integrals_mask_Omega[c][d] = DoFTools::nonzero; 
+        //else
+         //face_integrals_mask_Omega[c][d] = DoFTools::none;
+        std::cout<<face_integrals_mask_Omega[c][d]<< " ";
     }
-   // std::cout<<std::endl;
+   std::cout<<std::endl;
   }
    
   
-  DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0),cell_integrals_mask_Omega, face_integrals_mask_Omega,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
+ DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0),constraints,true, cell_integrals_mask_Omega, face_integrals_mask_Omega,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
  
  // DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0));//, constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
   // std::cout<<"sparsity memory flx block(0, 0)"<<sp_block.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
@@ -1666,8 +1676,9 @@ if (global_error_flag) {
 
   sp_block.compress();
   
- // std::ofstream out("sparsity_pattern2.svg");
- // sp_block.block(0,0).print_svg(out);
+ std::ofstream out("sparsity_pattern2.txt");
+ sp_block.block(0,0).print(out);
+
  uint64_t yy = uint64_t (sp_block.n_cols()) ;
    pcout<<"Sparsity "  <<sp_block.n_rows()<<"x"<<sp_block.n_cols()<<"="<<yy*yy<<" n_nonzero_elements " <<sp_block.n_nonzero_elements()<<" (perc) "
    <<(float)sp_block.n_nonzero_elements()/(yy * yy)<<std::endl;
@@ -1884,7 +1895,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
                           neighbor_child->get_dof_indices(local_neighbor_dof_indices);
 
                         
-                          distribute_local_flux_to_global(
+                         distribute_local_flux_to_global(
                             vi_ui_matrix,
                             vi_ue_matrix,
                             ve_ui_matrix,
@@ -1921,7 +1932,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
 
                           neighbor->get_dof_indices(local_neighbor_dof_indices);
 
-                          distribute_local_flux_to_global(
+                         distribute_local_flux_to_global(
                             vi_ui_matrix,
                             vi_ue_matrix,
                             ve_ui_matrix,
@@ -3192,18 +3203,39 @@ std::cout<<"ja"<<std::endl;
    pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<zz * zz<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()<<" (perc) "
    <<(float)system_matrix.n_nonzero_elements()/(zz * zz)<<std::endl;
 
+{
 unsigned int cnt = 0;
  uint64_t cnt2 = 0; 
+
 
 for(TrilinosWrappers::BlockSparseMatrix::const_iterator it = system_matrix.begin(); it != system_matrix.end(); it++)
 {
   cnt2++;
-  if(std::abs(it->value()) < 1e-12)
+  if(std::abs(it->value()) > 1e-12)
   cnt ++;
 
 }
-pcout << "cnt "<<cnt <<" perc von 0 werten bei nonzero  " <<float (cnt) /system_matrix.n_nonzero_elements()<<  std::endl;
+pcout << "Block sparse cnt "<<cnt <<" perc von real nonzero werten bei nonzero  " <<float (cnt) /system_matrix.n_nonzero_elements()<<  std::endl;
+}
 
+{
+unsigned int cnt = 0;
+ uint64_t cnt2 = 0; 
+
+std::ofstream myfile;
+myfile.open("nonzero_pattern.txt");
+for(TrilinosWrappers::SparseMatrix::const_iterator it = system_matrix.block(0,0).begin(); it != system_matrix.block(0,0).end(); it++)
+{
+  cnt2++;
+  
+  if(std::abs(it->value()) > 1e-12)
+  {cnt ++;
+  myfile << "("<< it->row()<<","<<it->column()<<") \n";
+  }
+
+}
+pcout << "sparse cnt "<<cnt <<" perc von real nonzero werten bei nonzero  " <<float (cnt) /system_matrix.block(0,0).n_nonzero_elements()<<  std::endl;
+}
 
 }
 
@@ -3259,9 +3291,9 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_cell_terms(
          }
         else{
         cell_matrix(i, j) +=
-            ((psi_i_field * K_inverse_values[q] * psi_j_field) -
-             (div_psi_i_field * psi_j_potential) -
-             (grad_psi_i_potential * psi_j_field)) *
+            ((psi_i_field * K_inverse_values[q] * psi_j_field) 
+             - (div_psi_i_field * psi_j_potential) 
+            - (grad_psi_i_potential * psi_j_field)) *
             cell_fe.JxW(q);
         }
       }
@@ -4140,7 +4172,7 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
 
    malloc_trim(0);
- // solve();
+  solve();
  // memory_consumption("after solve()");
 
 
@@ -4148,9 +4180,9 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
 
 
-  //std::array<double, 4> results_array = compute_errors();
+  std::array<double, 4> results_array = compute_errors();
  // output_results();
-  std::array<double, 4> results_array;
+  //std::array<double, 4> results_array;
   return results_array;
 }
 
