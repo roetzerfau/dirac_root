@@ -1677,7 +1677,7 @@ if (global_error_flag) {
   sp_block.compress();
   
  std::ofstream out("sparsity_pattern2.txt");
- sp_block.block(0,0).print(out);
+ //sp_block.block(0,0).print(out);
 
  uint64_t yy = uint64_t (sp_block.n_cols()) ;
    pcout<<"Sparsity "  <<sp_block.n_rows()<<"x"<<sp_block.n_cols()<<"="<<yy*yy<<" n_nonzero_elements " <<sp_block.n_nonzero_elements()<<" (perc) "
@@ -3202,7 +3202,7 @@ std::cout<<"ja"<<std::endl;
   uint64_t zz = uint64_t (system_matrix.m()) ;
    pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<zz * zz<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()<<" (perc) "
    <<(float)system_matrix.n_nonzero_elements()/(zz * zz)<<std::endl;
-
+/*
 {
 unsigned int cnt = 0;
  uint64_t cnt2 = 0; 
@@ -3236,6 +3236,7 @@ for(TrilinosWrappers::SparseMatrix::const_iterator it = system_matrix.block(0,0)
 }
 pcout << "sparse cnt "<<cnt <<" perc von real nonzero werten bei nonzero  " <<float (cnt) /system_matrix.block(0,0).n_nonzero_elements()<<  std::endl;
 }
+*/
 
 }
 
@@ -4172,7 +4173,7 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
 
    malloc_trim(0);
-  solve();
+ // solve();
  // memory_consumption("after solve()");
 
 
@@ -4180,9 +4181,9 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
 
 
-  std::array<double, 4> results_array = compute_errors();
+ // std::array<double, 4> results_array = compute_errors();
  // output_results();
-  //std::array<double, 4> results_array;
+  std::array<double, 4> results_array;
   return results_array;
 }
 
@@ -4306,8 +4307,9 @@ int main(int argc, char *argv[]) {
            arr = {42,42,42,42};
            is_not_failed = false;
           }
-          
-/* if(rank_mpi == 0)
+
+#if MEMORY_CONSUMPTION       
+if(rank_mpi == 0)
  {
                   struct rusage usage;
           getrusage(RUSAGE_SELF, &usage);
@@ -4321,9 +4323,10 @@ int main(int argc, char *argv[]) {
           << "Memory used by the process: " << memoryUsed << " MB" << std::endl
         << "-------------------------------------------------------------" <<std::endl;
 
-          std::cout << rank_mpi << " Result_ende: U " << arr[0] << " Q " << arr[1]
-                    << " u " << arr[2] << " q " << arr[3] << std::endl;
-}*/
+         // std::cout << rank_mpi << " Result_ende: U " << arr[0] << " Q " << arr[1]
+             //       << " u " << arr[2] << " q " << arr[3] << std::endl;
+}
+#endif
            std::cout << rank_mpi << " Result_ende: U " << arr[0] << " Q " << arr[1]
                     << " u " << arr[2] << " q " << arr[3] << std::endl;
 
