@@ -1250,7 +1250,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
 //	              << " GB" << std::endl;
  
 
-/*
+
   Table< 2, DoFTools::Coupling >	cell_integrals_mask_Omega(dim +1, dim +1);
   for (unsigned int c = 0; c < dim + 1; ++c)
   {
@@ -1277,14 +1277,14 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
     }
    // std::cout<<std::endl;
   }
-   */
+   
   
-  //DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0),cell_integrals_mask_Omega, face_integrals_mask_Omega,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
+  DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0),cell_integrals_mask_Omega, face_integrals_mask_Omega,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
  
-  DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0));//, constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
+ // DoFTools::make_flux_sparsity_pattern(dof_handler_Omega, sp_block.block(0,0));//, constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD));
   // std::cout<<"sparsity memory flx block(0, 0)"<<sp_block.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
 	//              << " GB" << std::endl;
-  DoFTools::make_flux_sparsity_pattern(dof_handler_omega, sp_block.block(1,1));//,constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) );
+  DoFTools::make_flux_sparsity_pattern(dof_handler_omega, sp_block.block(1,1),constraints,false,Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) );
  // std::cout <<"sparsity memory flx block(1, 1)"<<sp_block.memory_consumption()/ (1024.0 * 1024.0 * 1024.0) // Convert to MB
 	//              << " GB" << std::endl;
   sp_block.collect_sizes();
@@ -3192,6 +3192,18 @@ std::cout<<"ja"<<std::endl;
    pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<zz * zz<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()<<" (perc) "
    <<(float)system_matrix.n_nonzero_elements()/(zz * zz)<<std::endl;
 
+unsigned int cnt = 0;
+ uint64_t cnt2 = 0; 
+
+for(TrilinosWrappers::BlockSparseMatrix::const_iterator it = system_matrix.begin(); it != system_matrix.end(); it++)
+{
+  cnt2++;
+  if(std::abs(it->value()) < 1e-12)
+  cnt ++;
+
+}
+pcout << "cnt "<<cnt <<" perc von 0 werten bei nonzero  " <<float (cnt) /system_matrix.n_nonzero_elements()<<  std::endl;
+
 
 }
 
@@ -4121,14 +4133,14 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
  // memory_consumption("after  make_grid");
  make_dofs();
  //memory_consumption("after make_dofs()");
-  /*assemble_system();
+  assemble_system();
   //memory_consumption("after  assemble_system()");
 
   marked_vertices.clear();
 
 
    malloc_trim(0);
-  solve();
+ // solve();
  // memory_consumption("after solve()");
 
 
@@ -4136,8 +4148,8 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
 
 
-  std::array<double, 4> results_array = compute_errors();
-  output_results();*/
+  //std::array<double, 4> results_array = compute_errors();
+ // output_results();
   std::array<double, 4> results_array;
   return results_array;
 }
