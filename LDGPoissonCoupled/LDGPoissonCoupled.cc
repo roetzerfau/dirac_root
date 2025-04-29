@@ -145,6 +145,8 @@ const FEValuesExtractors::Scalar Potential(dimension_Omega);
 const double extent = 1.0;
 const double alpha = 1.0;
 const double half_length =  is_omega_on_face ? std::sqrt(0.5): std::sqrt(0.5);//0.5  -sqrt(2)* 0.001
+const double plane_reduction = 1;
+const double half_length_along_omega =  is_omega_on_face ? std::sqrt(0.5): std::sqrt(0.5);//0.5  -sqrt(2)* 0.001
 const double distance_tolerance = 100;//100
 const unsigned int N_quad_points = 10;
 const double reduction = 1e-8;
@@ -583,36 +585,36 @@ void LDGPoissonProblem<dim, dim_omega>::make_grid() {
     Point<dim> shift_vector;
 
     if (dim == 3) {
-      GridGenerator::cylinder(triangulation, 1, half_length);
-      shift_vector = Point<dim>(half_length, 0 + offset, 0 + offset);
+      GridGenerator::cylinder(triangulation, half_length, half_length_along_omega);
+      shift_vector = Point<dim>(half_length_along_omega, 0 + offset, 0 + offset);
       pcout << "Shift vector " << shift_vector << std::endl;
       // Shift the cylinder by the half-length along the z-axis
       GridTools::shift(shift_vector, triangulation);
     }
     if (dim == 2) {
       Point<dim> center(0, 0);
-      GridGenerator::hyper_ball(triangulation, center, 1);
+      GridGenerator::hyper_ball(triangulation, center, half_length);
     }
 #else
   Point<dim> p1, p2;
 if (dim == 3) {
    p1 =
-      Point<dim>(2*half_length, -half_length + offset, -half_length + offset);
+      Point<dim>(2*half_length_along_omega, -half_length * plane_reduction + offset, -half_length * plane_reduction + offset);
    p2 =
-      Point<dim>(0, half_length + offset, half_length + offset);
+      Point<dim>(0, half_length * plane_reduction + offset, half_length * plane_reduction + offset);
 }
  if (dim == 2 && geo_conf == GeometryConfiguration::TwoD_ZeroD ) {
    p1 =
-      Point<dim>(-half_length + offset, -half_length + offset);	
+      Point<dim>(-half_length * plane_reduction+ offset, -half_length * plane_reduction + offset);	
    p2 =
-      Point<dim>(half_length + offset, half_length + offset);
+      Point<dim>(half_length * plane_reduction+ offset, half_length * plane_reduction + offset);
 
  }
  if (dim == 2 &&  geo_conf == GeometryConfiguration::TwoD_OneD ) {
   p1 =
      Point<dim>(0, -1);	//half_length + offset
   p2 =
-     Point<dim>(2 * half_length + offset, 1);//half_length + offset
+     Point<dim>(2 * half_length_along_omega + offset, 1);//half_length + offset
 
 }
 pcout<<"grid extent, p1:  "<<p1 <<" p2: "<<p2<<std::endl;
@@ -669,8 +671,9 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
  mu = alpha/(degree + 1);
  double delta = 1.0;
  pcout<<"mu "<<mu<<std::endl;
- for (unsigned int i =n_refine; i <n_refine * 3; ++i)
+ for (unsigned int i =n_refine; i <n_refine * 2; ++i)
     {
+      pcout<<"i "<<i<<std::endl;
       typename Triangulation<dim>::active_cell_iterator
       cell = triangulation.begin_active(),
       endc = triangulation.end();
@@ -698,7 +701,7 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
 
 #if ANISO
      // if(r < 2 * half_length/std::pow(2,triangulation.n_global_levels()-1) * 1.1 * std::sqrt(2))//innere Bereich
-     if(r <= delta  * (2 * half_length)/std::pow(2,cell->level()) *  std::sqrt(2))//innere Bereich
+     if(r <= delta  * (2 * half_length * plane_reduction)/std::pow(2,cell->level()) *  std::sqrt(2))//innere Bereich
      //if(r <  0.00001)
 #else
       //if(r <  GridTools::minimal_cell_diameter(triangulation)* 1.1)
@@ -709,7 +712,7 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
         //if(r <= 0.0)
         //std::cout<<"aaaaa "<<cell->level()<<" " <<2 * half_length/std::pow(2,cell->level())* std::sqrt(2)<< " " << std::pow(h_max,1.0/mu)<<std::endl;
 #if ANISO        
-        if(2 * half_length/std::pow(2,cell->level())* std::sqrt(2) > std::pow(h_max,1.0/mu))  
+        if(2 * half_length * plane_reduction/std::pow(2,cell->level())* std::sqrt(2) > std::pow(h_max,1.0/mu))  
 #else
         if(cell->diameter() >  std::pow(h_max,1.0/mu))
 #endif
@@ -728,7 +731,7 @@ else
       else  //äußerer Bereich
       {
 #if ANISO       
-        if(2 * half_length/std::pow(2,cell->level())* std::sqrt(2) > h_max * std::pow(r,1 - mu)) 
+        if(2 * half_length * plane_reduction/std::pow(2,cell->level())* std::sqrt(2) > h_max * std::pow(r,1 - mu)) 
 #else
         if(cell->diameter() > h_max * std::pow(r,1 - mu) )// factor um relation * 1.5
 #endif
@@ -812,7 +815,7 @@ double h = minimal_cell_diameter * 2;
 if(dim == 3)
 {
 corner1 =  Point<dim>(0, - (margin*radius + h), - (margin*radius + h));//2*radius
-corner2 =  Point<dim>(2 * half_length,  (margin*radius + h),  (margin*radius + h));//radius
+corner2 =  Point<dim>(2 * half_length_along_omega,  (margin*radius + h),  (margin*radius + h));//radius
 }
 if (dim == 2 && geo_conf== GeometryConfiguration::TwoD_ZeroD )
 {
@@ -827,7 +830,7 @@ if(dim == 2 && geo_conf== GeometryConfiguration::TwoD_OneD)
   corner1  =
   Point<dim>(0 ,- (margin*radius + h));	
   corner2 =
-  Point<dim>(2 * half_length, (margin*radius + h));
+  Point<dim>(2 * half_length_along_omega, (margin*radius + h));
 
 }
 std::pair<Point<dim>, Point<dim>> corner_pair(corner1, corner2);     
@@ -900,7 +903,7 @@ if( is_repartioned)
       Point<dim> p = cell->face(face_no)->center();
       if (cell->face(face_no)->at_boundary()) {
        double error = 0.000001;
-        if((std::abs(p[0] - 0)< error || std::abs(p[0] - 2 * half_length)<error) && (geo_conf == GeometryConfiguration::ThreeD_OneD || geo_conf == GeometryConfiguration::TwoD_OneD )&& (constructed_solution >= 2)) {//
+        if((std::abs(p[0] - 0)< error || std::abs(p[0] - 2 * half_length_along_omega)<error) && (geo_conf == GeometryConfiguration::ThreeD_OneD || geo_conf == GeometryConfiguration::TwoD_OneD )&& (constructed_solution >= 2)) {//
         cell->face(face_no)->set_boundary_id(Neumann);
          //pcout<<"Neumann"<<std::endl;
         }
@@ -1006,9 +1009,9 @@ if(is_repartioned)
   }
 //---------------omega-------------------------
     if(dim == 2 )
-    GridGenerator::hyper_cube(triangulation_omega, 0 ,  2 * half_length);
+    GridGenerator::hyper_cube(triangulation_omega, 0 ,  2 * half_length_along_omega);
     if(dim == 3)
-    GridGenerator::hyper_cube(triangulation_omega,0 ,  2*half_length);
+    GridGenerator::hyper_cube(triangulation_omega,0 ,  2*half_length_along_omega);
 
   triangulation_omega.refine_global(refine_omega);//level_max
   nof_cells_omega = triangulation_omega.n_global_active_cells();
@@ -1269,11 +1272,11 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
            cell_integrals_mask_Omega[c][d] = DoFTools::nonzero; //coupling between each entry of vector values and with pressure
         //else
         // cell_integrals_mask_Omega[c][d] = DoFTools::none;
-        std::cout<<cell_integrals_mask_Omega[c][d]<< " ";
+        pcout<<cell_integrals_mask_Omega[c][d]<< " ";
     }
-    std::cout<<std::endl;
+    pcout<<std::endl;
   }
-  std::cout<<"-----face_integrals_mask_Omega-----"<<std::endl;
+  pcout<<"-----face_integrals_mask_Omega-----"<<std::endl;
   Table< 2, DoFTools::Coupling > 	face_integrals_mask_Omega(dim +1, dim +1);
     for (unsigned int c = 0; c < dim + 1; ++c)
   {
@@ -1283,9 +1286,9 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
          face_integrals_mask_Omega[c][d] = DoFTools::nonzero; 
         //else
          //face_integrals_mask_Omega[c][d] = DoFTools::none;
-        std::cout<<face_integrals_mask_Omega[c][d]<< " ";
+        pcout<<face_integrals_mask_Omega[c][d]<< " ";
     }
-   std::cout<<std::endl;
+  pcout<<std::endl;
   }
    
   
@@ -4164,7 +4167,7 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
  // memory_consumption("start");
   make_grid();
  // memory_consumption("after  make_grid");
- make_dofs();
+make_dofs();
  //memory_consumption("after make_dofs()");
   assemble_system();
   //memory_consumption("after  assemble_system()");
@@ -4173,7 +4176,7 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
 
    malloc_trim(0);
- // solve();
+   solve();
  // memory_consumption("after solve()");
 
 
@@ -4181,9 +4184,9 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
 
 
- // std::array<double, 4> results_array = compute_errors();
+  std::array<double, 4> results_array = compute_errors();
  // output_results();
-  std::array<double, 4> results_array;
+  //std::array<double, 4> results_array;
   return results_array;
 }
 
