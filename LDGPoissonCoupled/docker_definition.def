@@ -5,7 +5,8 @@ From: ubuntu:latest
   apt-get dist-upgrade
   apt-get update
   apt-get install -y libdeal.ii-dev
-
+  apt-get install -y time build-essential
+  
   mkdir /build && cd build
   cmake .. 
   make 
@@ -18,7 +19,7 @@ Functions.cc
 
 %runscript
 #echo "Running my_program with arguments: $@"
-exec "/build/LDGPoissonCoupled"
+exec /usr/bin/time -v "/build/LDGPoissonCoupled"
 %test
    Test if libdeal.ii-dev was installed successfully by checking for a key file
     if [ -f /usr/include/deal.II/base/config.h ]; then
