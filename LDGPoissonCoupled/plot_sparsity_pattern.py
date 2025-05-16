@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import re
 
 # Load the data
-with open('sparsity_pattern2.txt', 'r') as f:
+with open('sparsity_pattern21.txt', 'r') as f:
 #with open('nonzero_pattern.txt', 'r') as f:
     data = f.read()
 
@@ -13,7 +13,7 @@ cols = [int(c) for r, c in matches]
 
 
 #with open('sparsity_pattern2.txt', 'r') as f:
-with open('nonzero_pattern.txt', 'r') as f:
+with open('nonzero_pattern1.txt', 'r') as f:
     data = f.read()
 
 # Extract (row, column) pairs

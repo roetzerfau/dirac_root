@@ -13,7 +13,7 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 0 //wenn coupled = 1, vessel muss = 0
+#define COUPLED 1 //wenn coupled = 1, vessel muss = 0
 #define VESSEL 0
 
 #define TEST 1
@@ -54,12 +54,12 @@ constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[7] = {1,2,3,4,5,6,7};//,7,8,9,10
+const unsigned int refinement[6] = {1,2,3,4,5,6};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
-const double radii[n_r] = {0.01};
+const double radii[n_r] = {0.001};
 const double D = 1;
 const double penalty_sigma = 10;//10
 

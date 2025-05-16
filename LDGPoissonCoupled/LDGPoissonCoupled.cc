@@ -671,7 +671,7 @@ double  h_max = GridTools::maximal_cell_diameter(triangulation);
  mu = alpha/(degree + 1);
  double delta = 1.0;
  pcout<<"mu "<<mu<<std::endl;
- for (unsigned int i =n_refine; i <n_refine * 2; ++i)
+ for (unsigned int i =n_refine; i <n_refine * 2.5; ++i)
     {
       pcout<<"i "<<i<<std::endl;
       typename Triangulation<dim>::active_cell_iterator
@@ -1679,7 +1679,7 @@ if (global_error_flag) {
 
   sp_block.compress();
   
- std::ofstream out("sparsity_pattern2.txt");
+ std::ofstream out("sparsity_pattern2" +std::to_string(n_refine)+ ".txt");
  //sp_block.block(0,0).print(out);
 
  uint64_t yy = uint64_t (sp_block.n_cols()) ;
@@ -3205,6 +3205,7 @@ std::cout<<"ja"<<std::endl;
   uint64_t zz = uint64_t (system_matrix.m()) ;
    pcout<<"Size "  <<system_matrix.m()<<"x"<<system_matrix.n()<<"="<<zz * zz<<" n_nonzero_elements " <<system_matrix.n_nonzero_elements()<<" (perc) "
    <<(float)system_matrix.n_nonzero_elements()/(zz * zz)<<std::endl;
+
 /*
 {
 unsigned int cnt = 0;
@@ -3226,7 +3227,7 @@ unsigned int cnt = 0;
  uint64_t cnt2 = 0; 
 
 std::ofstream myfile;
-myfile.open("nonzero_pattern.txt");
+myfile.open("nonzero_pattern" +std::to_string(n_refine)+ ".txt");
 for(TrilinosWrappers::SparseMatrix::const_iterator it = system_matrix.block(0,0).begin(); it != system_matrix.block(0,0).end(); it++)
 {
   cnt2++;
@@ -3502,7 +3503,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors(){
                                                       dim + 1);
     const ComponentSelectFunction<dim> vectorfield_mask(std::make_pair(0, dim),
                                                         dim + 1);
-    std::cout<<"h_min "<<h_min<<std::endl;
+    std::cout<<"h_min ausgeschnitten "<<h_min<<std::endl;
     const DistanceWeight<dim> distance_weight(alpha, radius, h_min); //, radius
 
     const ProductFunction<dim> connected_function_potential(potential_mask,
@@ -4186,7 +4187,7 @@ make_dofs();
 
   std::array<double, 4> results_array = compute_errors();
  // output_results();
-  //std::array<double, 4> results_array;
+//std::array<double, 4> results_array;
   return results_array;
 }
 
