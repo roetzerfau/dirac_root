@@ -29,7 +29,7 @@
 #define ANISO 1
 #define PAPER_SOLUTION 1 //1: paper dangelo, O: thesis, 1 funktionert besser 
 
-#define SOLUTION_SPACE 1 //2
+#define SOLUTION_SPACE 2 //2
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
@@ -50,12 +50,12 @@ constexpr double y_l = is_omega_on_face ? 0.0 : 0.00001;
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.00001;
 constexpr unsigned int geo_conf{2};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
-constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 3: dangelo thesis log, PAPER_SOLUTION funktion on omega
+constexpr unsigned int constructed_solution{1};   // 1:sin cos (Kopplung hebt sich auf), 3: dangelo thesis log, PAPER_SOLUTION funktion on omega
 
 
 
 const unsigned int refinement[6] = {1,2,3,4,5,6};//,7,8,9,10
-const unsigned int p_degree[1] = {1};
+const unsigned int p_degree[2] = {1,2};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
@@ -203,7 +203,7 @@ double RightHandSide<dim>::value(const Point<dim> &p,
                                  const unsigned int) const {
   switch (constructed_solution) {
   case 1: {
-   #if SOLUTION_SPACE == 1
+   #if (SOLUTION_SPACE == 1)
      return 0;
    #else
    return -6;
@@ -234,7 +234,7 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
   /* if (dim == 2)
       return std::pow(w, 2) * std::cos(w * p[0]) * std::cos(w * y_l);
     if (dim == 3)*/
-    #if SOLUTION_SPACE
+    #if (SOLUTION_SPACE == 1)
       return 0;
     #else
       return -2;
@@ -460,7 +460,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
      // values(1) = w * std::cos(w * x) * std::sin(w * y);
      // values(2) = std::cos(w * x) * std::cos(w * y);       // U
 
-      #if SOLUTION_SPACE
+      #if (SOLUTION_SPACE == 1)
       values(0) = -1; // Q
       values(1) = 0;
       values(2) = x + 1;     // U
@@ -479,7 +479,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
       values(2) = w * std::cos(w * x) * std::cos(w * y) * std::sin(w * z);
       values(3) = std::cos(w * x) * std::cos(w * y) * std::cos(w * z);     // U
 
-      #if SOLUTION_SPACE
+      #if (SOLUTION_SPACE == 1)
       values(0) = -1; // Q
       values(1) = 0;
       values(2) = 0;
@@ -628,7 +628,7 @@ void TrueSolution_omega<dim>::vector_value(const Point<dim> &p,
       values(0) = w * std::sin(w * x) * std::cos(w * y_l) * std::cos(w * z_l);
       values(1) = std::cos(w * x) * std::cos(w * y_l) * std::cos(w * z_l);
 
-      #if SOLUTION_SPACE
+      #if (SOLUTION_SPACE == 1)
         values(0) = -1;
         values(1) = x+1;
         

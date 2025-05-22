@@ -4,6 +4,6 @@
 #SBATCH --time=24:00:00
 #SBATCH --job-name=testjob
 #SBATCH --export=NONE
-#SBATCH --output=output_16_04.txt
+#SBATCH --output=output_22_05.txt
 #SBATCH --mem=230G
 ./my_container.sif 
