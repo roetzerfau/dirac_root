@@ -1326,11 +1326,11 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
  typename DoFHandler<dim>::active_cell_iterator
         cell_start = dof_handler_Omega.begin_active();
 
-    QGauss<dim> quadrature_formula(fe_Omega.degree + 1);
+    QGauss<dim> quadrature_formula(fe_Omega.degree + 2);
     FEValues<dim> fe_values(fe_Omega, quadrature_formula, update_flags);
     const Mapping<dim> &mapping = fe_values.get_mapping();
 
-    QGauss<dim_omega> quadrature_formula_omega(fe_Omega.degree + 1);
+    QGauss<dim_omega> quadrature_formula_omega(fe_Omega.degree + 2);
     FEValues<dim_omega> fe_values_omega(fe_omega, quadrature_formula_omega,
                                         update_flags);
 
@@ -1566,7 +1566,7 @@ if(geo_conf == GeometryConfiguration::TwoD_ZeroD)  {
   Point<dim> quadrature_point_coupling(y_l, z_l);
   Point<dim> normal_vector(0);
 
-  QGauss<dim> quadrature_formula(fe_Omega.degree + 1);
+  QGauss<dim> quadrature_formula(fe_Omega.degree + 2);//+1
   FEValues<dim> fe_values(fe_Omega, quadrature_formula, update_flags);
   const Mapping<dim> &mapping = fe_values.get_mapping();
 
@@ -1746,8 +1746,8 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
   pcout << "assemble_system" << std::endl;
  typename DoFHandler<dim>::active_cell_iterator
         cell_start = dof_handler_Omega.begin_active();
-  QGauss<dim> quadrature_formula(fe_Omega.degree + 1);
-  QGauss<dim - 1> face_quadrature_formula(fe_Omega.degree + 1);
+  QGauss<dim> quadrature_formula(fe_Omega.degree + 2);
+  QGauss<dim - 1> face_quadrature_formula(fe_Omega.degree + 2);
 
   const unsigned int dofs_per_cell = fe_Omega.dofs_per_cell;
   std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
@@ -1964,8 +1964,8 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
   //system_rhs.compress(VectorOperation::add);
 
   // omega
-  QGauss<dim_omega> quadrature_formula_omega(fe_Omega.degree + 1);
-  QGauss<dim_omega - 1> face_quadrature_formula_omega(fe_Omega.degree + 1);
+  QGauss<dim_omega> quadrature_formula_omega(fe_omega.degree + 2);
+  QGauss<dim_omega - 1> face_quadrature_formula_omega(fe_omega.degree + 2);
 
   FEValues<dim_omega> fe_values_omega(fe_omega, quadrature_formula_omega,
                                       update_flags);
@@ -2200,7 +2200,7 @@ pcout<<"g "<<g<<std::endl;
     auto cell_test_array = GridTools::find_all_active_cells_around_point(
         mapping, dof_handler_Omega, quadrature_point_test, 1e-10, marked_vertices);
     n_te = cell_test_array.size();
- //  std::cout << "cell_test_array " << cell_test_array.size() << std::endl;
+ // std::cout << "cell_test_array " << cell_test_array.size() << std::endl;
 
     for (auto cellpair : cell_test_array)
 #else
@@ -2242,7 +2242,7 @@ pcout<<"g "<<g<<std::endl;
             insideCell_test = false;
               
           }
-
+          //std::cout<<"n_te * n_ftest "<< n_te <<" "<< n_ftest<<std::endl;
           Point<dim> quadrature_point_test_mapped_cell =
           mapping.transform_real_to_unit_cell(cell_test,
                                               quadrature_point_test);
@@ -2272,7 +2272,7 @@ pcout<<"g "<<g<<std::endl;
             auto bounding_box = face_test->bounding_box();
 
             if (bounding_box.point_inside(quadrature_point_test) == true) {
-              //std::cout<<"c "<<cell_test<< " f "<<face_no<<std::endl;
+             // std::cout<<"c "<<cell_test<< " f "<<face_no<<std::endl;
               std::vector<Point<dim - 1>> quadrature_point_test_face = {
                   quadrature_point_test_mapped_face};
               const Quadrature<dim - 1> my_quadrature_formula_test(
@@ -2285,7 +2285,13 @@ pcout<<"g "<<g<<std::endl;
               unsigned int dofs_this_cell =
                   fe_values_coupling_test_face.dofs_per_cell;
               local_vector = 0;
-              
+             // std::cout<<"fe_values_coupling_test_face.get_quadrature_points()[0] "<<fe_values_coupling_test_face.get_quadrature_points()[0]<<std::endl;
+            if(fe_values_coupling_test_face.get_quadrature_points()[0].distance(quadrature_point_test) > 0.0000001 && !insideCell_test)
+            {
+                std::cerr << "quadrature_point_test wrong " <<fe_values_coupling_test_face.get_quadrature_points()[0].distance(quadrature_point_test)<< std::endl;
+                 throw std::runtime_error("Falsch");  
+            }
+           
               for (unsigned int q = 0; q < n_face_points; ++q) {
                // std::cout<< "q " <<q <<std::endl; 
                 for (unsigned int i = 0; i < dofs_this_cell; ++i) {
@@ -2489,7 +2495,7 @@ pcout<<"g "<<g<<std::endl;
                 mapping.project_real_point_to_unit_point_on_face(
                     cell_trial, face_no_trial[ftrial],
                     quadrature_point_trial);
-                    for(unsigned int tf = 0; tf < dim -1; tf++)
+              for(unsigned int tf = 0; tf < dim -1; tf++)
                     quadrature_point_trial_mapped_face[tf] = std::max(0.0,quadrature_point_trial_mapped_face[tf]);
             std::vector<Point<dim - 1>>
                 quadrature_point_trial_face = {
@@ -2588,7 +2594,7 @@ pcout<<"g "<<g<<std::endl;
       for (unsigned int p = 0; p < quadrature_points_omega.size(); p++)
        {
         Point<dim_omega> quadrature_point_omega = quadrature_points_omega[p];
-
+        std::cout<<"quadrature_points_omega.size() "<<quadrature_points_omega.size()<<std::endl;
 
         double z;
           if(SOLUTION_SPACE == 0)
@@ -2600,7 +2606,7 @@ pcout<<"g "<<g<<std::endl;
           else
             z = 0;
 
-
+std::cout<<quadrature_point_omega[0]<<" z "<<z <<std::endl;
         // TODO hier über kreis iterieren
         std::vector<Point<dim>> quadrature_points_circle;
         Point<dim> quadrature_point_coupling;
@@ -3981,6 +3987,9 @@ if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
     data_out_error.attach_triangulation(triangulation);
     data_out_error.add_data_vector(cellwise_errors_Q, "Q");
     data_out_error.add_data_vector(cellwise_errors_U, "U");
+    std::cout<<"max cellwise_errors_U "<<cellwise_errors_U.linfty_norm()<<std::endl;
+    std::cout<<"l1_norm cellwise_errors_U "<<cellwise_errors_U.l1_norm()<<std::endl;
+    std::cout<<"L2_norm  cellwise_errors_U "<<cellwise_errors_U.l2_norm ()<<std::endl;
     data_out_error.build_patches();
 
 
@@ -4160,6 +4169,8 @@ void LDGPoissonProblem<dim, dim_omega>::memory_consumption(std::string _name) {
 template <int dim, int dim_omega>
 std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
   pcout << "******************* REFINE " << n_refine << "  DEGREE  " << degree << " ***********************" <<std::endl;
+  std::cout<<"testing "<<std::log(0)<<std::endl;
+  std::cout<<"testing2 "<<std::numeric_limits<double >::max()<<std::endl;
   dimension_gap = dim - dim_omega;
   pcout << "geometric configuration "<<geo_conf <<"<< dim_Omega: "<< dim <<", dim_omega: "<<dim_omega<< " -> dimension_gap "<<dimension_gap<<std::endl; 
 rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
@@ -4186,7 +4197,7 @@ make_dofs();
 
 
   std::array<double, 4> results_array = compute_errors();
- // output_results();
+  output_results();
 //std::array<double, 4> results_array;
   return results_array;
 }
