@@ -4,7 +4,9 @@ import re
 
 # Read file
 #with open("convergence_results_test_coupled_09_04_finalResults_cons_sol_3_geoconfig_2_gradedMesh_true_coupled_true_paper_solution_true_solution_linear_1_vessel_false_omegaonface_true_LA_false_rad_0.001000_D_1.000000_penalty_10.000000.txt", "r") as f:
-with open("convergence_results_test_coupled_25_05_finalResults_cons_sol_3_geoconfig_2_gradedMesh_true_coupled_true_paper_solution_true_solution_linear_1_vessel_false_omegaonface_true_LA_false_rad_0.001000_D_1.000000_penalty_10.000000.txt", "r") as f:
+#with open("convergence_results_test_coupled_25_05_finalResults_cons_sol_3_geoconfig_2_gradedMesh_true_coupled_true_paper_solution_true_solution_linear_1_vessel_false_omegaonface_true_LA_false_rad_0.001000_D_1.000000_penalty_10.000000.txt", "r") as f:
+with open("convergence_results_test_coupled_21_05_finalResults_cons_sol_3_geoconfig_2_gradedMesh_true_coupled_true_paper_solution_true_solution_linear_1_vessel_false_omegaonface_true_LA_false_rad_0.001000_D_1.000000_penalty_10.000000.txt", "r") as f:
+#with open("convergence_results_test_coupled_22_05_finalResults_cons_sol_1_geoconfig_2_gradedMesh_true_coupled_true_paper_solution_true_solution_linear_2_vessel_false_omegaonface_true_LA_false_rad_0.001000_D_1.000000_penalty_10.000000.txt", "r") as f:
     content = f.read()
 
 # Split by sections
@@ -20,7 +22,7 @@ for section in sections:
     for i,p in enumerate(degrees):
         #print(i,p)
         h_array, error_array = [], []
-        for line in lines[3:]:
+        for j,line in enumerate(lines[3:]):
             p_parts = line.split(",")
         
             part = p_parts[i]
@@ -37,8 +39,9 @@ for section in sections:
                 err = float(part_array[2].split()[0])
             except ValueError:
                 err = np.nan
-            h_array.append(h)
-            error_array.append(err)
+            if(p != 2 or j !=4):
+                h_array.append(h)
+                error_array.append(err)
         if(i == 0):
             data_dict[title]={"h_p" + str(int(p)): np.array(h_array), "error_p"+ str(int(p)): np.array(error_array)}
         else:
@@ -79,16 +82,28 @@ for i, key in enumerate(titles):
 
     # Draw a triangle showing the slope visually
 # Triangle base from x1 to x2
-    x1 = 1e-3
-    x2 = 1e-2
-    y1 = 1e-3
-    y2 = 1e-2
+    if(key == "U_Omega" or key == "u_omega"):
+        x1 = pow(10,-1.5)
+        x2 = pow(10,-1.25)
+        y1 = pow(10,-8)
+        y2 = pow(10,-7.5)
+        # Draw triangle
+        triangle_x = [x1, x2, x2]
+        triangle_y = [y1, y1, y2]
+        ax.plot(triangle_x + [x1], triangle_y + [y1], 'k', lw=1.5)
+        ax.text(x1 * 1.1, y1 * 1.5, r"$\sim h^2$", fontsize=12)
+    else:
+        x1 = pow(10,-1.5)
+        x2 = pow(10,-1.25)
+        y1 = pow(10,-4)
+        y2 = pow(10,-3.75)
+        # Draw triangle
+        triangle_x = [x1, x2, x2]
+        triangle_y = [y1, y1, y2]
+        ax.plot(triangle_x + [x1], triangle_y + [y1], 'k', lw=1.5)
+        ax.text(x1 * 1.1, y1 * 1.5, r"$\sim h^1$", fontsize=12)
 
-    # Draw triangle
-    triangle_x = [x1, x2, x2]
-    triangle_y = [y1, y1, y2]
-    ax.plot(triangle_x + [x1], triangle_y + [y1], 'k', lw=1.5)
-    ax.text(x1 * 1.1, y1 * 1.5, r"$\sim h^1$", fontsize=12)
+
 
 
 
