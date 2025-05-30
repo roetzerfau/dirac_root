@@ -521,13 +521,13 @@ private:
   unsigned int start_Potential_omega;
   unsigned int start_Potential_Omega;
 
-  const UpdateFlags update_flags = update_values | update_gradients |
+  const UpdateFlags update_flags = update_values | update_gradients | update_normal_vectors |
                                    update_quadrature_points | update_JxW_values;
   const UpdateFlags update_flags_coupling = update_values | update_JxW_values| update_quadrature_points | update_normal_vectors ;//|update_gradients
 
   const UpdateFlags face_update_flags = update_values | update_normal_vectors |
                                         update_quadrature_points |
-                                        update_JxW_values;
+                                        update_JxW_values | update_gradients;
 };
 
 template <int dim, int dim_omega>
@@ -2591,10 +2591,11 @@ pcout<<"g "<<g<<std::endl;
  std::vector<Point<dim_omega>> quadrature_points_omega = fe_values_omega.get_quadrature_points();
 //
           //
+      std::cout<<"quadrature_points_omega.size() "<<quadrature_points_omega.size()<<std::endl;
       for (unsigned int p = 0; p < quadrature_points_omega.size(); p++)
        {
         Point<dim_omega> quadrature_point_omega = quadrature_points_omega[p];
-        std::cout<<"quadrature_points_omega.size() "<<quadrature_points_omega.size()<<std::endl;
+        
 
         double z;
           if(SOLUTION_SPACE == 0)
@@ -2606,7 +2607,7 @@ pcout<<"g "<<g<<std::endl;
           else
             z = 0;
 
-std::cout<<quadrature_point_omega[0]<<" z "<<z <<std::endl;
+//std::cout<<quadrature_point_omega[0]<<" z "<<z <<std::endl;
         // TODO hier über kreis iterieren
         std::vector<Point<dim>> quadrature_points_circle;
         Point<dim> quadrature_point_coupling;
@@ -2729,7 +2730,7 @@ std::cout<<quadrature_point_omega[0]<<" z "<<z <<std::endl;
                 insideCell_test = false;
               
               }
-
+       //       std::cout<<" n_te "<< n_te<<" n_ftest "<<n_ftest<<std::endl;
 
 
               Point<dim> quadrature_point_test_mapped_cell =
@@ -2749,7 +2750,7 @@ std::cout<<quadrature_point_omega[0]<<" z "<<z <<std::endl;
               //-------------face -----------------
            
               if (!insideCell_test) {
-            //   pcout << "Omega rhs face " << std::endl;
+               pcout << "Omega rhs face " << std::endl;
              /* Point<dim - 1> quadrature_point_test_mapped_face =
                       mapping.project_real_point_to_unit_point_on_face(
                           cell_test, 0, quadrature_point_test);*/
@@ -2783,7 +2784,7 @@ std::cout<<quadrature_point_omega[0]<<" z "<<z <<std::endl;
                  
                   // if(bounding_box.signed_distance (quadrature_point_test) <= 0.0000001){
                  
-                    //std::cout<<" n_te "<< n_te<<" n_ftest "<<n_ftest<<std::endl;
+                    
                     
                    
                  /*   if(std::abs(fe_values_coupling_test_face.normal_vector(0)[1])> 0.000001)
@@ -2835,7 +2836,7 @@ std::cout<<quadrature_point_omega[0]<<" z "<<z <<std::endl;
 
               if (insideCell_test) {
 
-            //   pcout << "Omega rhs insideCell" << std::endl;
+              //pcout << "Omega rhs insideCell" << std::endl;
                 local_vector = 0;
                 const unsigned int n_q_points = fe_values_coupling_test.n_quadrature_points;
                  for (unsigned int q = 0; q < n_q_points; ++q) {
@@ -3509,6 +3510,9 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors(){
                                                       dim + 1);
     const ComponentSelectFunction<dim> vectorfield_mask(std::make_pair(0, dim),
                                                         dim + 1);
+    const ComponentSelectFunction<dim> vectorfield_x_mask(0,
+                                                        dim + 1);
+
     std::cout<<"h_min ausgeschnitten "<<h_min<<std::endl;
     const DistanceWeight<dim> distance_weight(alpha, radius, h_min); //, radius
 
@@ -3516,7 +3520,8 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors(){
                                                             distance_weight);
     const ProductFunction<dim> connected_function_vectorfield(vectorfield_mask,
                                                               distance_weight);
-
+    const ProductFunction<dim> connected_function_vectorfield_x(vectorfield_x_mask,
+                                                              distance_weight);
 
 /*std::cout<<"grow< "<< triangulation.n_active_cells()<<std::endl;*/
     cellwise_errors_Q.grow_or_shrink(triangulation.n_active_cells());
@@ -3550,7 +3555,7 @@ LDGPoissonProblem<dim, dim_omega>::compute_errors(){
     
     VectorTools::integrate_difference(
         dof_handler_Omega, solution.block(0), true_solution, cellwise_errors_Q, quadrature,
-        VectorTools::L2_norm, &connected_function_vectorfield);
+        VectorTools::L2_norm, &connected_function_vectorfield_x);
 
     vectorfield_l2_error = VectorTools::compute_global_error(
         triangulation, cellwise_errors_Q, VectorTools::L2_norm);

@@ -55,7 +55,7 @@ constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[3] = {1,2,3};//,7,8,9,10
+const unsigned int refinement[4] = {1,2,3,4};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
