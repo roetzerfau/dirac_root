@@ -13,7 +13,7 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 0 //wenn coupled = 1, vessel muss = 0
+#define COUPLED 1 //wenn coupled = 1, vessel muss = 0
 #define VESSEL 0
 
 #define TEST 1
@@ -46,7 +46,7 @@ enum GeometryConfiguration
   ThreeD_OneD = 2 ////constructed solution 1, 2, 3
 
 };
-const bool is_omega_on_face =false;
+const bool is_omega_on_face =true;
 constexpr double y_l = is_omega_on_face ? 0.0 : 0.00001;
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.00001;
 constexpr unsigned int geo_conf{2};
@@ -259,6 +259,12 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
        u_o = std::pow(p[0],2) ;
         f =-2;
       }
+      else if(SOLUTION_SPACE == 3)
+      {
+        u_o = std::sin(2 * numbers::PI * p[0]);
+        f = 4 * std::pow(numbers::PI,2)* std::sin(2 * numbers::PI * p[0]);
+
+      }
       else
       {      
       }
@@ -352,9 +358,14 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
       return  sol_factor  *log_value;
     else if(SOLUTION_SPACE == 2)
     {
-     // std::cout<<"neum1 "<< 2 * x * sol_factor  * log_value<<std::endl;
-      return 2*x * sol_factor  * log_value;
+     //std::cout<<"neum1 "<< 2 * x * sol_factor  * log_value<<std::endl;
+      return (2*p[0]) * sol_factor  * log_value;
     }
+    else if(SOLUTION_SPACE == 3)
+    {
+      return 2 * numbers::PI *  std::cos(2 * numbers::PI * p[0])* sol_factor  * log_value;
+    }
+    else{std::cout<<"non implemented"<<std::endl;}
 
     }
 
@@ -366,9 +377,14 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
          return -sol_factor * log_value;
       }else if(SOLUTION_SPACE == 2)
       {
-       // std::cout<<"neum0 "<<- 2 * x * sol_factor  * log_value<<std::endl;
-        return  - 2*x * sol_factor  *  log_value;
+      // std::cout<<"neum0 "<<- 2 * x * sol_factor  * log_value<<std::endl;
+        return  - (2*p[0]) * sol_factor  *  log_value;
       }
+       else if(SOLUTION_SPACE == 3)
+       {
+        -2 * numbers::PI *  std::cos(2 * numbers::PI * p[0])* sol_factor  * log_value;
+       }
+    else{std::cout<<"non implemented"<<std::endl;}
       
     }
     break;
@@ -453,7 +469,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
       else if(SOLUTION_SPACE == 1)
       {
       
-        u_o = (1 + p[0]);
+        u_o = (1+ p[0]);
         f = 0;
       }
       else if(SOLUTION_SPACE == 2)
@@ -461,8 +477,13 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
        u_o = std::pow(p[0],2);
         f = -2;
       }
+      else if(SOLUTION_SPACE == 3)
+      {
+       u_o = std::sin(2 * numbers::PI * p[0]);
+      }
       else
-      {      
+      {    
+        std::cout<<"nonImplemented"<<std::endl;  
       }
 
 
@@ -543,15 +564,26 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     else if(SOLUTION_SPACE == 2)
     {
        
-        values(0) = 2 * x * sol_factor * log_value; //Q 
+        values(0) = (2 * p[0])* sol_factor * log_value; //Q 
         values(1) = u_o *sol_factor* (y/std::pow(r,2)); // Q
         values(2) =u_o*sol_factor * (z/std::pow(r,2)); //Q
         values(3) = -u_o*sol_factor*  log_value;// U
         // std::cout<<"alllo "<<values(3)<<std::endl;
       
     }
+     else if(SOLUTION_SPACE == 3)
+    {
+       
+        values(0) = 2 * numbers::PI * std::cos(2 * numbers::PI * p[0]) *  sol_factor * log_value; //Q 
+        values(1) = u_o *sol_factor* (y/std::pow(r,2)); // Q
+        values(2) =u_o*sol_factor * (z/std::pow(r,2)); //Q
+        values(3) = -u_o*sol_factor*  log_value;// U
+        // std::cout<<"alllo "<<values(3)<<std::endl;
+      
+    }
+    
     else {}
-
+    break;
      }
     if(dim == 2)//
      {
@@ -561,7 +593,7 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
     values(0) = sol_factor  * (x/std::pow(r,2)); //Q 
     values(1) = sol_factor  * (y/std::pow(r,2)); // Q   
     values(2) = - sol_factor* log_value; // U   
-   
+    break;
     }
   if(GeometryConfiguration::TwoD_OneD == geo_conf)
   {

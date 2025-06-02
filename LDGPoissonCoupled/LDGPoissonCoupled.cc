@@ -1836,10 +1836,12 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_system() {
               assemble_Neumann_boundary_terms(fe_face_values, local_matrix,
                                             local_vector,
                                              Neumann_bc_function, VectorField, Potential);
+              //std::cout<<local_vector<<std::endl;
             } else
             {
-                 //std::cout<<rank_mpi<< " c " <<cell->index()<<" f "<<face->index()<<" Omega, boundary condition not implemented "<<std::endl;
-                //Assert(false, ExcNotImplemented());
+              
+                 std::cout<<rank_mpi<< " c " <<cell->index()<<" f "<<face->index()<<" Omega, boundary condition not implemented "<<std::endl;
+                Assert(false, ExcNotImplemented());
             }
               
           } else 
@@ -2591,7 +2593,7 @@ pcout<<"g "<<g<<std::endl;
  std::vector<Point<dim_omega>> quadrature_points_omega = fe_values_omega.get_quadrature_points();
 //
           //
-      std::cout<<"quadrature_points_omega.size() "<<quadrature_points_omega.size()<<std::endl;
+    //  std::cout<<"quadrature_points_omega.size() "<<quadrature_points_omega.size()<<std::endl;
       for (unsigned int p = 0; p < quadrature_points_omega.size(); p++)
        {
         Point<dim_omega> quadrature_point_omega = quadrature_points_omega[p];
@@ -2604,9 +2606,11 @@ pcout<<"g "<<g<<std::endl;
             z = (1 + quadrature_point_omega[0]);
           else if(SOLUTION_SPACE == 2)
              z = std::pow(quadrature_point_omega[0],2);
+          else if(SOLUTION_SPACE == 3)
+           z = std::sin(2 * numbers::PI * quadrature_point_omega[0]);
           else
             z = 0;
-
+       
 //std::cout<<quadrature_point_omega[0]<<" z "<<z <<std::endl;
         // TODO hier über kreis iterieren
         std::vector<Point<dim>> quadrature_points_circle;
@@ -2750,7 +2754,7 @@ pcout<<"g "<<g<<std::endl;
               //-------------face -----------------
            
               if (!insideCell_test) {
-               pcout << "Omega rhs face " << std::endl;
+              // pcout << "Omega rhs face " << std::endl;
              /* Point<dim - 1> quadrature_point_test_mapped_face =
                       mapping.project_real_point_to_unit_point_on_face(
                           cell_test, 0, quadrature_point_test);*/
@@ -2815,14 +2819,14 @@ pcout<<"g "<<g<<std::endl;
                         fe_values_coupling_test_face.dofs_per_cell;
                     
                     local_vector = 0;
-                   //std::cout<<"n_face_points "<<n_face_points <<" dofs_this_cell "<<dofs_this_cell<<std::endl;
+                 //  std::cout<<"n_face_points "<<n_face_points <<" dofs_this_cell "<<dofs_this_cell<<std::endl;
                     for (unsigned int q = 0; q < n_face_points; ++q) {
                       for (unsigned int i = 0; i < dofs_this_cell; ++i) {
                         local_vector(i) += 
                            g * fe_values_coupling_test_face[Potential].value(i,
                                                                          q) *
                            1.0 / (n_te * n_ftest) *
-                           z *fe_values_omega.JxW(p);
+                           z*fe_values_omega.JxW(p);
                         
 
                       }
@@ -3380,7 +3384,7 @@ void LDGPoissonProblem<dim, dim_omega>::assemble_Neumann_boundary_terms(
         local_matrix(i, j) += psi_i_field * face_fe.normal_vector(q) *
                               psi_j_potential * face_fe.JxW(q);
       }
-
+//std::cout<<Neumann_bc_values[q]<<" "<<face_fe.normal_vector(q)<<std::endl;
       local_vector(i) +=
           -psi_i_potential * Neumann_bc_values[q] * face_fe.JxW(q);
     }
