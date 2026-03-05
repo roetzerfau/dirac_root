@@ -14,7 +14,8 @@
 // std::numbers::PI
 
 #define COUPLED 0 //wenn coupled = 1, vessel muss = 0
-#define VESSEL 1
+#define VESSEL 0
+#define ONEDIM_GAP 1
 
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
@@ -23,7 +24,7 @@
 
 #define USE_MPI_ASSEMBLE 1
 #define FASTER 1 //nur verfügbar bei der aktuellsten dealii version
-#define CYLINDER 0
+#define CYLINDER 0 // bleibt 0
 #define A11SCHUR 0
 
 #define ANISO 1
@@ -43,8 +44,7 @@ enum GeometryConfiguration
 {
   TwoD_ZeroD = 0, //constructed solution 3 (omega wird unabhängig davon auch noch ausgerechnet)
   TwoD_OneD = 1,//constructed solution 1(Coupled)
-  ThreeD_OneD = 2, ////constructed solution 1, 2, 3
-  TwoD_Cylinder = 3
+  ThreeD_OneD = 2 ////constructed solution 1, 2, 3
 };
 const bool is_omega_on_face =true;
 constexpr double y_l = is_omega_on_face ? 0.0 : 0.00001;
@@ -55,12 +55,12 @@ constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[5] = {1,2,3,4,5};//,7,8,9,10
+const unsigned int refinement[4] = {1,2,3,4};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
-const double radii[n_r] = {0.01};
+const double radii[n_r] = {0.4};
 const double D = 1;
 const double penalty_sigma = 5;//10
 
@@ -184,7 +184,16 @@ Point<dim> nearest_point_on_singularity(const Point<dim> &p)
   
   if(GeometryConfiguration::TwoD_ZeroD == geo_conf )
   {
+#if ONEDIM_GAP     
+      double vx = p[0] - y_l;
+      double vy = p[1] - z_l;
+
+      double d_vp =  std::sqrt(vx * vx + vy * vy);
+      nearest_singularity_point =  Point<dim>(y_l + radii[0] * vx/ d_vp,z_l + radii[0] * vy/ d_vp);
+
+#else
      nearest_singularity_point = Point<dim>( y_l,z_l);//center
+#endif
   }
   return  nearest_singularity_point;
 }
@@ -195,6 +204,36 @@ double distance_to_singularity(const Point<dim> &p)
   double r;
 
   r = distance(p, nearest_point_on_singularity(p));
+  return r;
+}
+
+template <int dim>
+Point<dim> nearest_point_to_root_center(const Point<dim> &p)
+{
+  double x = p[0];
+  
+  Point<dim> nearest_singularity_point;
+  if (GeometryConfiguration::TwoD_OneD == geo_conf )
+    nearest_singularity_point = Point<dim>(x, y_l); //nearest point on line
+  if (GeometryConfiguration::ThreeD_OneD == geo_conf) 
+  {
+   nearest_singularity_point = Point<dim>(x, y_l, z_l);
+  }
+  
+  
+  if(GeometryConfiguration::TwoD_ZeroD == geo_conf )
+  {
+     nearest_singularity_point = Point<dim>( y_l,z_l);//center
+  }
+  return  nearest_singularity_point;
+}
+template <int dim>
+double distance_to_root_center(const Point<dim> &p)
+{
+  
+  double r;
+
+  r = distance(p, nearest_point_to_root_center(p));
   return r;
 }
 
@@ -328,14 +367,25 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
   double x;//, y, z;
   x = p[0];
   //y = p[1];
-  double r = distance_to_singularity<dim>(p);
+  double r = distance_to_root_center<dim>(p);
 
   double log_value;
   
   if (r != 0) 
-  {log_value = std::log(r);}
-  else 
-  {std::cout<<"std::log(0)"<<std::endl; log_value = std::numeric_limits<double>::min();}
+  {
+#if ONEDIM_GAP
+  log_value = std::log(r/radii[0]);
+#else
+    log_value = std::log(r);
+#endif
+}else 
+  {
+#if ONEDIM_GAP
+  std::cout<<"std::log(r/radius)"<<std::endl; log_value =1;
+#else
+std::cout<<"std::log(0)"<<std::endl; log_value = std::numeric_limits<double>::min();
+#endif
+}
 
   switch (constructed_solution) {
 
@@ -453,14 +503,25 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
   if(dim ==3)
     z = p[2];
   values = 0;
-  double r =  distance_to_singularity<dim>(p);
+  double r =  distance_to_root_center<dim>(p);
 
   double log_value;
   
   if (r != 0) 
-  {log_value = std::log(r);}
-  else 
-  {log_value = std::numeric_limits<double>::min();}
+  {
+#if ONEDIM_GAP
+  log_value = std::log(r/radii[0]);
+#else
+    log_value = std::log(r);
+#endif 
+  }else 
+  {
+#if ONEDIM_GAP
+  std::cout<<"std::log(r/radius) = 1"<<std::endl; log_value =1;
+#else
+std::cout<<"std::log(0)"<<std::endl; log_value = std::numeric_limits<double>::min();
+#endif
+}
 
       double f,u_o;
        if(SOLUTION_SPACE == 0)
@@ -589,11 +650,25 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
      {
       if(GeometryConfiguration::TwoD_ZeroD == geo_conf)
       {
-   
+#if ONEDIM_GAP
+if (r > radii[0])
+{
+    values(0) = sol_factor  * (x/std::pow(r,2)); //Q 
+    values(1) = sol_factor  * (y/std::pow(r,2)); // Q   
+    values(2) =  (1 - radii[0] *  log_value) ; // U     //  ;sol_factor *
+}
+else
+{
+  values(0) = sol_factor  * (x/std::pow(r,2)); //Q 
+    values(1) = sol_factor  * (y/std::pow(r,2)); // Q   
+    values(2) =   1; // U   sol_factor *
+}
+#else
     values(0) = sol_factor  * (x/std::pow(r,2)); //Q 
     values(1) = sol_factor  * (y/std::pow(r,2)); // Q   
     values(2) = - sol_factor* log_value; // U   
     break;
+#endif
     }
   if(GeometryConfiguration::TwoD_OneD == geo_conf)
   {
@@ -750,7 +825,7 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
   values = 1;
 
   
-  r = distance_to_singularity<dim>(p);
+  r = distance_to_root_center<dim>(p);
 
   if(constructed_solution == 1)
   {

@@ -1304,7 +1304,7 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
   //malloc_trim(0);  // Force memory release
 
   int error_flag = 0, global_error_flag = 0;
-  AVERAGE = radius != 0 && !lumpedAverage && (COUPLED || VESSEL);// &&(constructed_solution == 3 || constructed_solution == 2) && geo_conf == GeometryConfiguration::ThreeD_OneD;//||constructed_solution == 2
+  AVERAGE = radius != 0 && !lumpedAverage && (COUPLED || VESSEL || ONEDIM_GAP);// &&(constructed_solution == 3 || constructed_solution == 2) && geo_conf == GeometryConfiguration::ThreeD_OneD;//||constructed_solution == 2
 pcout << "AVERAGE (use circel) " << AVERAGE << " radius "<<radius << " lumpedAverage "<<lumpedAverage<<std::endl;
 // weight
 if (AVERAGE) {
@@ -1573,7 +1573,7 @@ if(geo_conf == GeometryConfiguration::TwoD_ZeroD)  {
   bool insideCell_test = true;
   bool insideCell_trial = true;
   
-  Point<dim> quadrature_point_trial;
+  Point<dim> quadrature_point_trial, quadrature_point_test;
   Point<dim> quadrature_point_coupling(y_l, z_l);
   Point<dim> normal_vector(0);
 
@@ -1586,7 +1586,8 @@ if(geo_conf == GeometryConfiguration::TwoD_ZeroD)  {
   quadrature_points_circle = equidistant_points_on_circle<dim>(
       quadrature_point_coupling, radius, normal_vector,
       nof_quad_points);
-  Point<dim> quadrature_point_test = quadrature_point_coupling;
+
+  
 
 
   std::vector<types::global_dof_index> local_dof_indices_test(dofs_per_cell);
@@ -1594,8 +1595,14 @@ if(geo_conf == GeometryConfiguration::TwoD_ZeroD)  {
   // test function
   std::vector<double> my_quadrature_weights = {1};
   unsigned int n_te;
-
-  
+#if ONEDIM_GAP
+ for (unsigned int q_avag = 0; q_avag < quadrature_points_circle.size();//nof_quad_points;
+                 q_avag++) {
+     // Quadrature weights and points
+      quadrature_point_test = quadrature_points_circle[q_avag];
+#else
+    quadrature_point_test = quadrature_point_coupling;
+#endif
 #if TEST
   auto cell_test_array = GridTools::find_all_active_cells_around_point(
       mapping, dof_handler_Omega, quadrature_point_test, 1e-10, marked_vertices);
@@ -1674,10 +1681,13 @@ if(geo_conf == GeometryConfiguration::TwoD_ZeroD)  {
 
       
 
-      }//nof_quad_points
+      }//nof_quad_points trial circle
  } //if cell_test
 //#endif
       }// for cell_test_array
+#if ONEDIM_GAP
+}// for nof_quad_points test
+#endif
   }
 
 
@@ -2168,11 +2178,16 @@ else
 #else
     g = (2 * numbers::PI) / (2 * numbers::PI + std::log(radius));
 #endif
-#if (!COUPLED && !VESSEL) || (1 == geo_conf)
+#if (!COUPLED && !VESSEL) || (1 == geo_conf)  
    g =1;
 #endif
 if(1 == geo_conf)
 g = 1;
+
+
+#if ONEDIM_GAP
+g = 1;//1/(2 * numbers::PI * radius);
+#endif 
 pcout<<"g "<<g<<std::endl;
 #if 1// USE_MPI_ASSEMBLE
 // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
@@ -2188,12 +2203,17 @@ pcout<<"g "<<g<<std::endl;
 #else
     double beta = (2 * numbers::PI)/(2 * numbers::PI + std::log( radius));
 #endif*/
+  
+
+
+
+
 
     FullMatrix<double> V_U_matrix_coupling(dofs_per_cell, dofs_per_cell);
     bool insideCell_test = true;
     bool insideCell_trial = true;
     
-    Point<dim> quadrature_point_trial;
+    Point<dim> quadrature_point_trial, quadrature_point_test;
     Point<dim> quadrature_point_coupling(y_l, z_l);
     Point<dim> normal_vector(0);
   
@@ -2202,7 +2222,6 @@ pcout<<"g "<<g<<std::endl;
     quadrature_points_circle = equidistant_points_on_circle<dim>(
         quadrature_point_coupling, radius, normal_vector,
         nof_quad_points);
-    Point<dim> quadrature_point_test = quadrature_point_coupling;
    // std::cout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
 
 
@@ -2211,6 +2230,52 @@ pcout<<"g "<<g<<std::endl;
     // test function
     std::vector<double> my_quadrature_weights = {1};
     unsigned int n_te;
+
+#if ONEDIM_GAP
+std::cout<<"quadrature_points_circle.size() "<<quadrature_points_circle.size()<<std::endl;
+ for (unsigned int q_avag = 0; q_avag < quadrature_points_circle.size();//nof_quad_points;
+                 q_avag++) {
+     // Quadrature weights and points
+      quadrature_point_test = quadrature_points_circle[q_avag];
+      std::cout<<"ONEDIM_GAP"<<std::endl;
+
+
+      double weight;
+        double C_avag;
+        if (AVERAGE) {
+          double perimeter = 2.0 * numbers::PI * radius;
+          double h_avag = perimeter / (nof_quad_points);
+
+          double weights_odd = 4.0 / 3.0 * h_avag;
+          double weights_even = 2.0 / 3.0 * h_avag;
+          double weights_first_last = h_avag / 3.0;
+
+          C_avag = 1.0 / (2.0 * numbers::PI);
+      
+          if (q_avag == 0)
+            weight = 2 * weights_first_last;
+          else {
+
+            if (q_avag % 2 == 0)
+              weight = weights_even;
+            else
+              weight = weights_odd;
+          }
+          //weight = ((2.0 * numbers::PI * radius) / (nof_quad_points));
+        } else {
+          weight = 1.0;
+          C_avag = 1.0;
+        }
+        //weight = 1.0;
+        C_avag = 1.0;
+        weight = 1.0 / nof_quad_points;
+        // C_avag = 1.0;
+#else
+    quadrature_point_test = quadrature_point_coupling;
+    double weight = 1;
+    double C_avag  =1;
+#endif
+
 #if TEST
     auto cell_test_array = GridTools::find_all_active_cells_around_point(
         mapping, dof_handler_Omega, quadrature_point_test, 1e-10, marked_vertices);
@@ -2257,7 +2322,7 @@ pcout<<"g "<<g<<std::endl;
             insideCell_test = false;
               
           }
-          //std::cout<<"n_te * n_ftest "<< n_te <<" "<< n_ftest<<std::endl;
+          std::cout<<"n_te * n_ftest "<< n_te <<" "<< n_ftest<<std::endl;
           Point<dim> quadrature_point_test_mapped_cell =
           mapping.transform_real_to_unit_cell(cell_test,
                                               quadrature_point_test);
@@ -2311,9 +2376,9 @@ pcout<<"g "<<g<<std::endl;
                // std::cout<< "q " <<q <<std::endl; 
                 for (unsigned int i = 0; i < dofs_this_cell; ++i) {
                   //std::cout<< "q " <<q <<" i "<<i<<std::endl; 
-#if VESSEL
+#if VESSEL || ONEDIM_GAP
    
-              local_vector(i) += g *
+              local_vector(i) += g * C_avag * weight * // 2.5*
                   fe_values_coupling_test_face[Potential].value(i, q) * 1 /
                   (n_te * n_ftest);
     
@@ -2354,12 +2419,12 @@ pcout<<"g "<<g<<std::endl;
              for (unsigned int i = 0; i < dofs_per_cell; i++) {
             
               //std::cout<<"fe_values_coupling_test[Potential].value(i, 0) "<<fe_values_coupling_test[Potential].value(i, 0)<<std::endl;
-#if VESSEL
-             local_vector(i) +=g *
+#if VESSEL || ONEDIM_GAP
+             local_vector(i) += g * C_avag * weight * // *2.5
               fe_values_coupling_test[Potential].value(i, 0);
 #else
               local_vector(i) +=
-              fe_values_coupling_test[Potential].value(i, 0) ;
+                       fe_values_coupling_test[Potential].value(i, 0) ;// 1/(2 * numbers::PI * radius)
 #endif              
               
               
@@ -2378,7 +2443,6 @@ pcout<<"g "<<g<<std::endl;
        // Quadrature weights and points
         quadrature_point_trial = quadrature_points_circle[q_avag];
         //std::cout<<"quadrature_point_trial "<<quadrature_point_trial<<std::endl;
-
 
         double weight;
         double C_avag;
@@ -2410,6 +2474,7 @@ pcout<<"g "<<g<<std::endl;
         C_avag = 1.0;
         weight = 1.0 / nof_quad_points;
         // C_avag = 1.0;
+
         unsigned int n_tr;
         //std::cout<<"C_avag " << C_avag << " weight " <<weight <<std::endl;
 #if TEST
@@ -2568,12 +2633,15 @@ pcout<<"g "<<g<<std::endl;
 
         
 
-        }
-   }
+        }//for (auto cellpair : cell_trial_array)
+   } // q_avag < quadrature_points_circle.size()
 #endif
-        }
-    }
-  }
+        }// if (cell_test != dof_handler_Omega.end())    if (cell_test->is_locally_owned())
+    }//auto cellpair : cell_test_array
+#if ONEDIM_GAP
+ } 
+#endif
+  } //geo 2D/0D
   
   if (geo_conf == GeometryConfiguration::TwoD_OneD || geo_conf == GeometryConfiguration::ThreeD_OneD) {
     pcout<<"2D/1D  3D/1D"<<std::endl;
@@ -4280,11 +4348,12 @@ int main(int argc, char *argv[]) {
       std::string paperSolution_string = PAPER_SOLUTION ==1 ? "true" : "false";
       std::string vessel_string = VESSEL ==1 ? "true" : "false";
       std::string solution_linear_string = std::to_string(SOLUTION_SPACE);
+      std::string onedim_gap_string = ONEDIM_GAP == 1 ? "true" : "false";;
 
-      std::string name =  "_22_05_finalResults_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
+      std::string name =  "_05_03_finalResults_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
       "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_paper_solution_" + paperSolution_string +"_solution_linear_" + solution_linear_string +
        "_vessel_" + vessel_string +  "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + 
-       "_rad_" + radius_string + "_D_" + D_string + "_penalty_" + std::to_string(penalty_sigma);
+       "_rad_" + radius_string + "_D_" + D_string + "_penalty_" + std::to_string(penalty_sigma) + "_onedim_gap_"+ onedim_gap_string;
       
       std::string folderName =name +"/";
      std::cout<<folderName<<std::endl;
