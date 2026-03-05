@@ -13,8 +13,8 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 1 //wenn coupled = 1, vessel muss = 0
-#define VESSEL 0
+#define COUPLED 0 //wenn coupled = 1, vessel muss = 0
+#define VESSEL 1
 
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
@@ -43,19 +43,19 @@ enum GeometryConfiguration
 {
   TwoD_ZeroD = 0, //constructed solution 3 (omega wird unabhängig davon auch noch ausgerechnet)
   TwoD_OneD = 1,//constructed solution 1(Coupled)
-  ThreeD_OneD = 2 ////constructed solution 1, 2, 3
-
+  ThreeD_OneD = 2, ////constructed solution 1, 2, 3
+  TwoD_Cylinder = 3
 };
 const bool is_omega_on_face =true;
 constexpr double y_l = is_omega_on_face ? 0.0 : 0.00001;
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.00001;
-constexpr unsigned int geo_conf{2};
+constexpr unsigned int geo_conf{0};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
 constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 3: dangelo thesis log, PAPER_SOLUTION funktion on omega
 
 
 
-const unsigned int refinement[4] = {1,2,3,4};//,7,8,9,10
+const unsigned int refinement[5] = {1,2,3,4,5};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
@@ -739,8 +739,13 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
   Assert(values.size() == dim +1,
          ExcDimensionMismatch(values.size(), dim + 1));
   unsigned int n_components = values.size();
-  double r;
-
+  double r,radius_not_evaluated;
+  if(GRADEDMESH == 1)
+  {
+    radius_not_evaluated = cell_size;
+  }
+  else
+  radius_not_evaluated = radius * 0.5;
  // y = p[1];
   values = 1;
 
@@ -754,18 +759,26 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
 
   for(unsigned int i = 0; i < n_components; i++)
   {
-  
-    if(r <= cell_size * 1.1)//
-    {
-      
-       values(i) = 0;
-       if(geo_conf == 1 && (i == 2 || i == 0))
-        values(i) = 1;
-    }
-    else
-    {
+
      if(GRADEDMESH == 1)
+     {
       values(i) = std::pow(r,2*alpha);
+      /*if(r == radius_not_evaluated)
+      {
+         values(i) = 0;       
+      }*/
+
+     }else
+      {
+        if(r < radius_not_evaluated)// radius_not_evaluated
+        {
+          
+          values(i) = 0;
+          if(geo_conf == 1 && (i == 2 || i == 0))
+            values(i) = 1;
+        }
+        else
+          values(i) = 1;
     }
   }
 

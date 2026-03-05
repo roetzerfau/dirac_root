@@ -1320,7 +1320,7 @@ pcout<<"nof_quad_points "<<nof_quad_points<<std::endl;
 std::cout <<"std::sqrt(2)/2.0 "<<std::sqrt(2)/2.0<<std::endl;
 #if COUPLED || VESSEL
 
-if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
+if(geo_conf == GeometryConfiguration::TwoD_OneD || geo_conf == GeometryConfiguration::ThreeD_OneD )  {//|| geo_conf == GeometryConfiguration::TwoD_Cylinder
     // coupling
   pcout<<"Sparsity Coupling 3D/1D 2D/1D"<<std::endl;
  typename DoFHandler<dim>::active_cell_iterator
@@ -1504,6 +1504,17 @@ if(geo_conf != GeometryConfiguration::TwoD_ZeroD)  {
                                   local_dof_indices_trial[j]);
                         }
                       }
+                    /*if(geo_conf == GeometryConfiguration::TwoD_Cylinder)
+                     {
+                      for (unsigned int i = 0;
+                           i < local_dof_indices_trial.size(); i++) {
+                        for (unsigned int j = 0;
+                             j < local_dof_indices_trial.size(); j++) {
+                          sp_block.add(local_dof_indices_trial[i],
+                                  local_dof_indices_trial[j]);
+                        }
+                      }    
+                     }*/
 #if COUPLED
                       for (unsigned int i = 0;
                            i < local_dof_indices_omega.size(); i++) {
@@ -1583,6 +1594,8 @@ if(geo_conf == GeometryConfiguration::TwoD_ZeroD)  {
   // test function
   std::vector<double> my_quadrature_weights = {1};
   unsigned int n_te;
+
+  
 #if TEST
   auto cell_test_array = GridTools::find_all_active_cells_around_point(
       mapping, dof_handler_Omega, quadrature_point_test, 1e-10, marked_vertices);
