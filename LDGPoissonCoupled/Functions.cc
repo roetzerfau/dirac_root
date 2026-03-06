@@ -28,9 +28,9 @@
 #define A11SCHUR 0
 
 #define ANISO 1
-#define PAPER_SOLUTION 1 //1: paper dangelo, O: thesis, 1 funktionert besser 
+#define PAPER_SOLUTION 0 //1: paper dangelo, O: thesis, 1 funktionert besser 
 
-#define SOLUTION_SPACE 2//2
+#define SOLUTION_SPACE 1//2
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
@@ -49,13 +49,13 @@ enum GeometryConfiguration
 const bool is_omega_on_face =true;
 constexpr double y_l = is_omega_on_face ? 0.0 : 0.00001;
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.00001;
-constexpr unsigned int geo_conf{0};
+constexpr unsigned int geo_conf{2};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
 constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 3: dangelo thesis log, PAPER_SOLUTION funktion on omega
 
 
 
-const unsigned int refinement[7] = {1,2,3,4,5,6,7};//,7,8,9,10
+const unsigned int refinement[5] = {1,2,3,4,5};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
@@ -64,10 +64,14 @@ const double radii[n_r] = {0.4};
 const double D = 1;
 const double penalty_sigma = 5;//10
 
+#if ONEDIM_GAP
+const double sol_factor = D/(D+1);
+#else 
 #if !PAPER_SOLUTION || (!COUPLED && !VESSEL)
 const double sol_factor =  1/(2*numbers::PI);
 #else
 const double sol_factor = D * radii[0]/(1- D * radii[0]*  std::log(radii[0]));
+#endif 
 #endif
 
 
@@ -369,19 +373,30 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
   //y = p[1];
   double r = distance_to_root_center<dim>(p);
 
-  double log_value;
+    double log_value, q_factor;
   
-  if (r != 0) 
+if (r != 0) 
   {
 #if ONEDIM_GAP
-  log_value = std::log(r/radii[0]);
+if (r > radii[0])
+{
+  log_value = -(1- radii[0] * std::log(r/radii[0]));
+  q_factor = radii[0];
+}
+else
+{
+  log_value = -1;
+  q_factor = 0;
+}
 #else
     log_value = std::log(r);
-#endif
-}else 
+    q_factor = 1;
+#endif 
+  }else 
   {
 #if ONEDIM_GAP
-  std::cout<<"std::log(r/radius)"<<std::endl; log_value =1;
+ // std::cout<<"std::log(r/radius) = 1"<<std::endl; 
+ log_value =-1;q_factor = 0;
 #else
 std::cout<<"std::log(0)"<<std::endl; log_value = std::numeric_limits<double>::min();
 #endif
@@ -505,19 +520,30 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
   values = 0;
   double r =  distance_to_root_center<dim>(p);
 
-  double log_value;
+  double log_value, q_factor;
   
   if (r != 0) 
   {
 #if ONEDIM_GAP
-  log_value = std::log(r/radii[0]);
+if (r > radii[0])
+{
+  log_value = -(1- radii[0] * std::log(r/radii[0]));
+  q_factor = radii[0];
+}
+else
+{
+  log_value = -1;
+  q_factor = 0;
+}
 #else
     log_value = std::log(r);
+    q_factor = 1;
 #endif 
   }else 
   {
 #if ONEDIM_GAP
-  std::cout<<"std::log(r/radius) = 1"<<std::endl; log_value =1;
+ // std::cout<<"std::log(r/radius) = 1"<<std::endl;
+  log_value =-1;q_factor = 0;
 #else
 std::cout<<"std::log(0)"<<std::endl; log_value = std::numeric_limits<double>::min();
 #endif
@@ -609,8 +635,8 @@ std::cout<<"std::log(0)"<<std::endl; log_value = std::numeric_limits<double>::mi
     if(SOLUTION_SPACE == 0)
     {
         values(0) =0; //Q 
-         values(1) = sol_factor * (y/std::pow(r,2)); // Q
-        values(2) =  sol_factor * (z/std::pow(r,2)); //Q
+         values(1) = sol_factor * q_factor* (y/std::pow(r,2)); // Q
+        values(2) =  sol_factor * q_factor * (z/std::pow(r,2)); //Q
         values(3) = - sol_factor * log_value; // U  
       
     }
@@ -650,26 +676,10 @@ std::cout<<"std::log(0)"<<std::endl; log_value = std::numeric_limits<double>::mi
      {
       if(GeometryConfiguration::TwoD_ZeroD == geo_conf)
       {
-#if ONEDIM_GAP
-if (r > radii[0])
-    {
-        values(0) = D/(D+1) *radii[0]* (x/std::pow(r,2)); //Q 
-        values(1) = D/(D+1) * radii[0]*(y/std::pow(r,2)); // Q   
-        values(2) = D/(D+1) * (1 - radii[0] *  log_value) ; // U     //  ;sol_factor *
-    }
-    else
-    {
-      values(0) = 0; //Q 
-        values(1) = 0; // Q   
-        values(2) =  D/(D+1) * 1; // U   sol_factor *
-    }
-    break;
-#else
-    values(0) = sol_factor  * (x/std::pow(r,2)); //Q 
-    values(1) = sol_factor  * (y/std::pow(r,2)); // Q   
+    values(0) = sol_factor  * q_factor * (x/std::pow(r,2)); //Q 
+    values(1) = sol_factor  * q_factor * (y/std::pow(r,2)); // Q   
     values(2) = - sol_factor* log_value; // U   
     break;
-#endif
     }
   if(GeometryConfiguration::TwoD_OneD == geo_conf)
   {
@@ -820,6 +830,8 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
   {
     radius_not_evaluated = cell_size;
   }
+ // else if( ONEDIM_GAP==1)
+  //   radius_not_evaluated=0;
   else
   radius_not_evaluated = radius * 0.5;
  // y = p[1];
@@ -850,7 +862,7 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
         {
           
           values(i) = 0;
-          if(geo_conf == 1 && (i == 2 || i == 0))
+          if((geo_conf == 1 && (i == 2 || i == 0)))
             values(i) = 1;
         }
         else
