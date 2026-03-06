@@ -2186,7 +2186,7 @@ g = 1;
 
 
 #if ONEDIM_GAP
-g = 1;//1/(2 * numbers::PI * radius);
+g = D * 2 * numbers::PI * D * radius;//1/(2 * numbers::PI * radius);
 #endif 
 pcout<<"g "<<g<<std::endl;
 #if 1// USE_MPI_ASSEMBLE
@@ -2232,12 +2232,12 @@ pcout<<"g "<<g<<std::endl;
     unsigned int n_te;
 
 #if ONEDIM_GAP
-std::cout<<"quadrature_points_circle.size() "<<quadrature_points_circle.size()<<std::endl;
+//std::cout<<"quadrature_points_circle.size() "<<quadrature_points_circle.size()<<std::endl;
  for (unsigned int q_avag = 0; q_avag < quadrature_points_circle.size();//nof_quad_points;
                  q_avag++) {
      // Quadrature weights and points
       quadrature_point_test = quadrature_points_circle[q_avag];
-      std::cout<<"ONEDIM_GAP"<<std::endl;
+     // std::cout<<"ONEDIM_GAP"<<std::endl;
 
 
       double weight;
@@ -2322,7 +2322,7 @@ std::cout<<"quadrature_points_circle.size() "<<quadrature_points_circle.size()<<
             insideCell_test = false;
               
           }
-          std::cout<<"n_te * n_ftest "<< n_te <<" "<< n_ftest<<std::endl;
+          //std::cout<<"n_te * n_ftest "<< n_te <<" "<< n_ftest<<std::endl;
           Point<dim> quadrature_point_test_mapped_cell =
           mapping.transform_real_to_unit_cell(cell_test,
                                               quadrature_point_test);
@@ -2378,7 +2378,7 @@ std::cout<<"quadrature_points_circle.size() "<<quadrature_points_circle.size()<<
                   //std::cout<< "q " <<q <<" i "<<i<<std::endl; 
 #if VESSEL || ONEDIM_GAP
    
-              local_vector(i) += g * C_avag * weight * // 2.5*
+              local_vector(i) += g * C_avag * weight * // 1.0/radius *  
                   fe_values_coupling_test_face[Potential].value(i, q) * 1 /
                   (n_te * n_ftest);
     
@@ -2420,7 +2420,7 @@ std::cout<<"quadrature_points_circle.size() "<<quadrature_points_circle.size()<<
             
               //std::cout<<"fe_values_coupling_test[Potential].value(i, 0) "<<fe_values_coupling_test[Potential].value(i, 0)<<std::endl;
 #if VESSEL || ONEDIM_GAP
-             local_vector(i) += g * C_avag * weight * // *2.5
+             local_vector(i) += g * C_avag * weight * // *2.5  
               fe_values_coupling_test[Potential].value(i, 0);
 #else
               local_vector(i) +=
@@ -2544,7 +2544,7 @@ std::cout<<"quadrature_points_circle.size() "<<quadrature_points_circle.size()<<
           insideCell_trial = false;
         }
       //  std::cout<<"cell_trial "<< cell_test <<" insideCell_test "<<insideCell_test <<" n_ftest "<<n_ftest<<" n_te "<<n_te<< 
-        //" cell_trial "<< cell_trial <<" insideCell_trial "<<insideCell_trial <<" n_ftrial "<<n_ftrial<<" n_tr "<<n_tr<<std::endl;
+       // " cell_trial "<< cell_trial <<" insideCell_trial "<<insideCell_trial <<" n_ftrial "<<n_ftrial<<" n_tr "<<n_tr<<std::endl;
 
  //std::cout<<"n_tr "<<n_tr <<" n_ftrial "<<n_ftrial<<" n_te "<< n_te <<" n_ftest "<< n_ftest<<std::endl;
         for (unsigned int ftest = 0; ftest < n_ftest; ftest++) {
@@ -2601,9 +2601,7 @@ std::cout<<"quadrature_points_circle.size() "<<quadrature_points_circle.size()<<
                     fe_values_coupling_test[Potential].value(i,
                                                              0);
               else
-                psi_potential_test =
-                    fe_values_coupling_test_face[Potential].value(
-                        i, 0);
+                psi_potential_test = fe_values_coupling_test_face[Potential].value( i, 0);
 
               for (unsigned int j = 0; j < dofs_per_cell; j++) {
                 if (insideCell_trial)
@@ -2614,9 +2612,10 @@ std::cout<<"quadrature_points_circle.size() "<<quadrature_points_circle.size()<<
                   psi_potential_trial =
                       fe_values_coupling_trial_face[Potential]
                           .value(j, 0);
-                V_U_matrix_coupling(i, j) +=  g *
+                V_U_matrix_coupling(i, j) += g * 
                     psi_potential_test * psi_potential_trial *
-                    C_avag * weight * 1 /
+                    C_avag * weight *   C_avag * weight * 
+                      1 /
                     (n_tr * n_ftrial) * 1 / (n_te * n_ftest);
               }
             }
@@ -2635,11 +2634,11 @@ std::cout<<"quadrature_points_circle.size() "<<quadrature_points_circle.size()<<
 
         }//for (auto cellpair : cell_trial_array)
    } // q_avag < quadrature_points_circle.size()
-#endif
+#endif //Vessel
         }// if (cell_test != dof_handler_Omega.end())    if (cell_test->is_locally_owned())
     }//auto cellpair : cell_test_array
 #if ONEDIM_GAP
- } 
+ } //q_avag < quadrature_points_circle.size() ONEDIM_GAP
 #endif
   } //geo 2D/0D
   

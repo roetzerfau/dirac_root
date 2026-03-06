@@ -14,12 +14,12 @@
 // std::numbers::PI
 
 #define COUPLED 0 //wenn coupled = 1, vessel muss = 0
-#define VESSEL 0
+#define VESSEL 1
 #define ONEDIM_GAP 1
 
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
-#define GRADEDMESH 1
+#define GRADEDMESH 0
 #define MEMORY_CONSUMPTION 1
 
 #define USE_MPI_ASSEMBLE 1
@@ -55,7 +55,7 @@ constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[4] = {1,2,3,4};//,7,8,9,10
+const unsigned int refinement[7] = {1,2,3,4,5,6,7};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
@@ -652,17 +652,18 @@ std::cout<<"std::log(0)"<<std::endl; log_value = std::numeric_limits<double>::mi
       {
 #if ONEDIM_GAP
 if (r > radii[0])
-{
-    values(0) = sol_factor  * (x/std::pow(r,2)); //Q 
-    values(1) = sol_factor  * (y/std::pow(r,2)); // Q   
-    values(2) =  (1 - radii[0] *  log_value) ; // U     //  ;sol_factor *
-}
-else
-{
-  values(0) = sol_factor  * (x/std::pow(r,2)); //Q 
-    values(1) = sol_factor  * (y/std::pow(r,2)); // Q   
-    values(2) =   1; // U   sol_factor *
-}
+    {
+        values(0) = D/(D+1) *radii[0]* (x/std::pow(r,2)); //Q 
+        values(1) = D/(D+1) * radii[0]*(y/std::pow(r,2)); // Q   
+        values(2) = D/(D+1) * (1 - radii[0] *  log_value) ; // U     //  ;sol_factor *
+    }
+    else
+    {
+      values(0) = 0; //Q 
+        values(1) = 0; // Q   
+        values(2) =  D/(D+1) * 1; // U   sol_factor *
+    }
+    break;
 #else
     values(0) = sol_factor  * (x/std::pow(r,2)); //Q 
     values(1) = sol_factor  * (y/std::pow(r,2)); // Q   
@@ -883,7 +884,7 @@ equidistant_points_on_circle(const Point<dim> &center, double radius,
     if(geo_conf ==  GeometryConfiguration::TwoD_ZeroD)
     {
     for (int i = 0; i < num_points; ++i) {
-      double angle = i * angle_step;
+      double angle = i * angle_step + 0.1;
       double x = center[0] + radius * std::cos(angle);
       double y = center[1] + radius * std::sin(angle);
       points.push_back(Point<dim>(x, y));
