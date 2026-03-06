@@ -2240,8 +2240,8 @@ pcout<<"g "<<g<<std::endl;
      // std::cout<<"ONEDIM_GAP"<<std::endl;
 
 
-      double weight;
-        double C_avag;
+      double weight_test;
+        double C_avag_test;
         if (AVERAGE) {
           double perimeter = 2.0 * numbers::PI * radius;
           double h_avag = perimeter / (nof_quad_points);
@@ -2250,30 +2250,30 @@ pcout<<"g "<<g<<std::endl;
           double weights_even = 2.0 / 3.0 * h_avag;
           double weights_first_last = h_avag / 3.0;
 
-          C_avag = 1.0 / (2.0 * numbers::PI);
+          C_avag_test = 1.0 / (2.0 * numbers::PI);
       
           if (q_avag == 0)
-            weight = 2 * weights_first_last;
+            weight_test = 2 * weights_first_last;
           else {
 
             if (q_avag % 2 == 0)
-              weight = weights_even;
+              weight_test = weights_even;
             else
-              weight = weights_odd;
+              weight_test = weights_odd;
           }
-          //weight = ((2.0 * numbers::PI * radius) / (nof_quad_points));
+          //weight_test = ((2.0 * numbers::PI * radius) / (nof_quad_points));
         } else {
-          weight = 1.0;
-          C_avag = 1.0;
+          weight_test = 1.0;
+          C_avag_test = 1.0;
         }
-        //weight = 1.0;
-        C_avag = 1.0;
-        weight = 1.0 / nof_quad_points;
-        // C_avag = 1.0;
+        //weight_test = 1.0;
+        C_avag_test = 1.0;
+        weight_test = 1.0 / nof_quad_points;
+        // C_avag_test = 1.0;
 #else
     quadrature_point_test = quadrature_point_coupling;
-    double weight = 1;
-    double C_avag  =1;
+    double weight_test = 1;
+    double C_avag_test  =1;
 #endif
 
 #if TEST
@@ -2378,7 +2378,7 @@ pcout<<"g "<<g<<std::endl;
                   //std::cout<< "q " <<q <<" i "<<i<<std::endl; 
 #if VESSEL || ONEDIM_GAP
    
-              local_vector(i) += g * C_avag * weight * // 1.0/radius *  
+              local_vector(i) += g * C_avag_test * weight_test * // 1.0/radius *  
                   fe_values_coupling_test_face[Potential].value(i, q) * 1 /
                   (n_te * n_ftest);
     
@@ -2420,7 +2420,7 @@ pcout<<"g "<<g<<std::endl;
             
               //std::cout<<"fe_values_coupling_test[Potential].value(i, 0) "<<fe_values_coupling_test[Potential].value(i, 0)<<std::endl;
 #if VESSEL || ONEDIM_GAP
-             local_vector(i) += g * C_avag * weight * // *2.5  
+             local_vector(i) += g * C_avag_test * weight_test * // *2.5  
               fe_values_coupling_test[Potential].value(i, 0);
 #else
               local_vector(i) +=
@@ -2614,7 +2614,7 @@ pcout<<"g "<<g<<std::endl;
                           .value(j, 0);
                 V_U_matrix_coupling(i, j) += g * 
                     psi_potential_test * psi_potential_trial *
-                    C_avag * weight *   C_avag * weight * 
+                    C_avag * weight *   C_avag_test * weight_test * 
                       1 /
                     (n_tr * n_ftrial) * 1 / (n_te * n_ftest);
               }
