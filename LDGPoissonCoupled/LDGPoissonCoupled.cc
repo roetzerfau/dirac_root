@@ -1397,6 +1397,19 @@ if(geo_conf == GeometryConfiguration::TwoD_OneD || geo_conf == GeometryConfigura
 #endif
      //  pcout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
 
+
+
+#if ONEDIM_GAP
+ for (unsigned int q_avag = 0; q_avag < quadrature_points_circle.size();//nof_quad_points;
+                 q_avag++) {
+     // Quadrature weights and points
+      quadrature_point_test = quadrature_points_circle[q_avag];
+#else
+    quadrature_point_test = quadrature_point_coupling;
+#endif
+
+
+
 //pcout <<"stat "<<std::endl;
    auto start = std::chrono::high_resolution_clock::now();  //Start time
     auto cell_test_first = GridTools::find_active_cell_around_point(
@@ -2320,6 +2333,7 @@ pcout<<"g "<<g<<std::endl;
             face_no_test.push_back(0);
           } else {
             insideCell_test = false;
+           // std::cout<< "insideCell_test = false;"<<std::endl;
               
           }
           //std::cout<<"n_te * n_ftest "<< n_te <<" "<< n_ftest<<std::endl;
@@ -2542,8 +2556,12 @@ pcout<<"g "<<g<<std::endl;
 
         } else {
           insideCell_trial = false;
+          //::cout<< "insideCell_trial = false;"<<std::endl;
+              std::cout<<"cell_trial "<< cell_test <<" insideCell_test "<<insideCell_test <<" n_ftest "<<n_ftest<<" n_te "<<n_te<< 
+        " cell_trial "<< cell_trial <<" insideCell_trial "<<insideCell_trial <<" n_ftrial "<<n_ftrial<<" n_tr "<<n_tr<<std::endl;
+
         }
-      //  std::cout<<"cell_trial "<< cell_test <<" insideCell_test "<<insideCell_test <<" n_ftest "<<n_ftest<<" n_te "<<n_te<< 
+       // std::cout<<"cell_trial "<< cell_test <<" insideCell_test "<<insideCell_test <<" n_ftest "<<n_ftest<<" n_te "<<n_te<< 
        // " cell_trial "<< cell_trial <<" insideCell_trial "<<insideCell_trial <<" n_ftrial "<<n_ftrial<<" n_tr "<<n_tr<<std::endl;
 
  //std::cout<<"n_tr "<<n_tr <<" n_ftrial "<<n_ftrial<<" n_te "<< n_te <<" n_ftest "<< n_ftest<<std::endl;
@@ -2719,9 +2737,52 @@ pcout<<"g "<<g<<std::endl;
         
         // test function
         std::vector<double> my_quadrature_weights = {1};
-        quadrature_point_test = quadrature_point_coupling;
+       // quadrature_point_test = quadrature_point_coupling;
        //pcout<<"quadrature_point_coupling "<<quadrature_point_coupling<<std::endl;
-   
+   #if ONEDIM_GAP
+//std::cout<<"quadrature_points_circle.size() "<<quadrature_points_circle.size()<<std::endl;
+ for (unsigned int q_avag = 0; q_avag < quadrature_points_circle.size();//nof_quad_points;
+                 q_avag++) {
+     // Quadrature weights and points
+      quadrature_point_test = quadrature_points_circle[q_avag];
+     // std::cout<<"ONEDIM_GAP"<<std::endl;
+
+
+      double weight_test;
+        double C_avag_test;
+        if (AVERAGE) {
+          double perimeter = 2.0 * numbers::PI * radius;
+          double h_avag = perimeter / (nof_quad_points);
+
+          double weights_odd = 4.0 / 3.0 * h_avag;
+          double weights_even = 2.0 / 3.0 * h_avag;
+          double weights_first_last = h_avag / 3.0;
+
+          C_avag_test = 1.0 / (2.0 * numbers::PI);
+      
+          if (q_avag == 0)
+            weight_test = 2 * weights_first_last;
+          else {
+
+            if (q_avag % 2 == 0)
+              weight_test = weights_even;
+            else
+              weight_test = weights_odd;
+          }
+          //weight_test = ((2.0 * numbers::PI * radius) / (nof_quad_points));
+        } else {
+          weight_test = 1.0;
+          C_avag_test = 1.0;
+        }
+        //weight_test = 1.0;
+        C_avag_test = 1.0;
+        weight_test = 1.0 / nof_quad_points;
+        // C_avag_test = 1.0;
+#else
+    quadrature_point_test = quadrature_point_coupling;
+    double weight_test = 1;
+    double C_avag_test  =1;
+#endif
     
         unsigned int n_te;
 #if ONEDIM_GAP
