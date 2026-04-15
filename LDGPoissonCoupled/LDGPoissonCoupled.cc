@@ -142,11 +142,11 @@ const FEValuesExtractors::Vector VectorField(0);
 const FEValuesExtractors::Scalar Potential(dimension_Omega);
 
 
-const double extent = 1.0;
+
 const double alpha = 1.0;
-const double half_length =  is_omega_on_face ? std::sqrt(0.5): std::sqrt(0.5);//0.5  -sqrt(2)* 0.001
+const double half_length =  is_omega_on_face ? extent/2: extent/2;//0.5  -sqrt(2)* 0.001
 const double plane_reduction = 1;
-const double half_length_along_omega =  is_omega_on_face ? std::sqrt(0.5): std::sqrt(0.5);//0.5  -sqrt(2)* 0.001
+const double half_length_along_omega =  is_omega_on_face ? extent/2: extent/2;//0.5  -sqrt(2)* 0.001
 const double distance_tolerance = 100;//100
 const unsigned int N_quad_points = 10;
 const double reduction = 1e-8;
@@ -1003,7 +1003,7 @@ if(is_repartioned)
 
   pcout<<"max_diameter "<<max_diameter<<" radius "<<radius<<std::endl;
   if (radius > max_diameter && !lumpedAverage) {
-    pcout << "!!!!!!!!!!!!!! MAX DIAMETER > RADIUS !!!!!!!!!!!!!!!!"
+    pcout << "!!!!!!!!!!!!!! MAX DIAMETER < RADIUS !!!!!!!!!!!!!!!!"
               << max_diameter << radius << std::endl;
     //throw std::invalid_argument("MAX DIAMETER > RADIUS");
   }
@@ -1307,16 +1307,18 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
   AVERAGE = radius != 0 && !lumpedAverage && (COUPLED || VESSEL || ONEDIM_GAP);// &&(constructed_solution == 3 || constructed_solution == 2) && geo_conf == GeometryConfiguration::ThreeD_OneD;//||constructed_solution == 2
 pcout << "AVERAGE (use circel) " << AVERAGE << " radius "<<radius << " lumpedAverage "<<lumpedAverage<<std::endl;
 // weight
+ unsigned int n = 2 * numbers::PI * radius/ maximal_cell_diameter_2D;
+ unsigned int n_1 = std::pow(2,n_refine);
 if (AVERAGE) {
-  unsigned int n = std::ceil(radius/(pow(2,minimal_cell_diameter_2D/std::sqrt(2)))) + 1;
- // std::cout<<"n "<<n <<" "<< minimal_cell_diameter_2D<<" "<<minimal_cell_diameter_2D/std::sqrt(2)<<std::endl;
-  nof_quad_points = 25 * n_refine;// std::pow(2,n);
+  //std::ceil(radius/(pow(2,minimal_cell_diameter_2D/std::sqrt(2)))) + 1;
+  //std::cout<<"n "<<n <<" "<< minimal_cell_diameter_2D<<" "<<minimal_cell_diameter_2D/std::sqrt(2)<<std::endl;
+  nof_quad_points = n;//std::max(n_1, n);//std::pow(2,n_refine);//std::pow(2,n); //std::pow(2,n_refine); // 25 * n_refine;// 
   if(geo_conf ==  GeometryConfiguration::TwoD_OneD)
     nof_quad_points = 2;
 } else {
   nof_quad_points = 1;
 }
-pcout<<"nof_quad_points "<<nof_quad_points<<std::endl;
+pcout<<"std::pow(2,n_refine) " << std::pow(2,n_refine) <<" n "<<n <<" ---> nof_quad_points "<<nof_quad_points<<std::endl;
 std::cout <<"std::sqrt(2)/2.0 "<<std::sqrt(2)/2.0<<std::endl;
 #if COUPLED || VESSEL
 
@@ -1385,7 +1387,14 @@ if(geo_conf == GeometryConfiguration::TwoD_OneD || geo_conf == GeometryConfigura
 
         // test function
         std::vector<double> my_quadrature_weights = {1};
-        quadrature_point_test = quadrature_point_coupling;
+#if ONEDIM_GAP
+ for (unsigned int q_avag = 0; q_avag < quadrature_points_circle.size();//nof_quad_points;
+                 q_avag++) {
+     // Quadrature weights and points
+      quadrature_point_test = quadrature_points_circle[q_avag];
+#else
+    quadrature_point_test = quadrature_point_coupling;
+#endif
      //  pcout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
 
 //pcout <<"stat "<<std::endl;
@@ -1550,21 +1559,24 @@ if(geo_conf == GeometryConfiguration::TwoD_OneD || geo_conf == GeometryConfigura
                   error_flag = 1;
                  //throw std::runtime_error("cell coupling error");
                 // MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-                  }
-                  }
+                  } //cell_trial->is_locally_owned() && cell_test->is_locally_owned()
+                  }//cell_trial != dof_handler_Omega.end()
                // else
                  // std::cout<<"düdüm2"<<std::endl;
-                }
-              }
-            }
+                }//auto cellpair_trial : cell_trial_array
+              }//q_avag < quadrature_points_circle.size()
+            }//cell_test->is_locally_owned()
          //  else
           // std::cout<<"düdüm3"<<std::endl;
-        }
+        }//auto cellpair : cell_test_array
         // std::cout<<std::endl;
-      }
-    }
-    }
-  }
+        #if ONEDIM_GAP
+        }
+      #endif
+      }//quadrature_points_omega.size()
+    }//cell_omega->is_locally_owned()
+    }//; cell_omega != endc_omega; ++cell_omega
+  }//geo_conf == GeometryConfiguration::TwoD_OneD || geo_conf == GeometryConfiguration::ThreeD_OneD 
 
 if(geo_conf == GeometryConfiguration::TwoD_ZeroD)  {
   
@@ -1593,8 +1605,7 @@ if(geo_conf == GeometryConfiguration::TwoD_ZeroD)  {
   std::vector<types::global_dof_index> local_dof_indices_test(dofs_per_cell);
   std::vector<types::global_dof_index> local_dof_indices_trial(dofs_per_cell);
   // test function
-  std::vector<double> my_quadrature_weights = {1};
-  unsigned int n_te;
+
 #if ONEDIM_GAP
  for (unsigned int q_avag = 0; q_avag < quadrature_points_circle.size();//nof_quad_points;
                  q_avag++) {
@@ -1606,14 +1617,11 @@ if(geo_conf == GeometryConfiguration::TwoD_ZeroD)  {
 #if TEST
   auto cell_test_array = GridTools::find_all_active_cells_around_point(
       mapping, dof_handler_Omega, quadrature_point_test, 1e-10, marked_vertices);
-  n_te = cell_test_array.size();
-  //std::cout << "cell_test_array " << cell_test_array.size() << std::endl;
-
   for (auto cellpair : cell_test_array)
 #else
   auto cell_test = GridTools::find_active_cell_around_point(
       dof_handler_Omega, quadrature_point_test);
-  n_te = 1;
+
 #endif
 
   {
@@ -1636,14 +1644,11 @@ if(geo_conf == GeometryConfiguration::TwoD_ZeroD)  {
 #if TEST
   auto cell_trial_array = GridTools::find_all_active_cells_around_point(
       mapping, dof_handler_Omega, quadrature_point_trial, 1e-10, marked_vertices);
-  n_te = cell_test_array.size();
-  //std::cout << "cell_trial_array " << cell_trial_array.size() << std::endl;
 
   for (auto cellpair : cell_trial_array)
 #else
   auto cell_trial = GridTools::find_active_cell_around_point(
       dof_handler_Omega, quadrature_point_trial);
-  n_te = 1;
 #endif
  {
 #if TEST
@@ -1676,11 +1681,6 @@ if(geo_conf == GeometryConfiguration::TwoD_ZeroD)  {
         }
       
     }//cell_trial
-
-
-
-      
-
       }//nof_quad_points trial circle
  } //if cell_test
 //#endif
@@ -2174,7 +2174,7 @@ else
 #if 1
 {
 #if PAPER_SOLUTION
-    g = 2 * numbers::PI * D * radius;
+    g = D * 2 * numbers::PI *  radius;
 #else
     g = (2 * numbers::PI) / (2 * numbers::PI + std::log(radius));
 #endif
@@ -2186,7 +2186,7 @@ g = 1;
 
 
 #if ONEDIM_GAP
-g = D * 2 * numbers::PI * D * radius;//1/(2 * numbers::PI * radius);
+g = D * 2 * numbers::PI * radius;//1/(2 * numbers::PI * radius); *D
 #endif 
 pcout<<"g "<<g<<std::endl;
 #if 1// USE_MPI_ASSEMBLE
@@ -2724,6 +2724,52 @@ pcout<<"g "<<g<<std::endl;
    
     
         unsigned int n_te;
+#if ONEDIM_GAP
+      //std::cout<<"quadrature_points_circle.size() "<<quadrature_points_circle.size()<<std::endl;
+      for (unsigned int q_avag_test = 0; q_avag_test < quadrature_points_circle.size();//nof_quad_points;
+                      q_avag_test++) {
+     // Quadrature weights and points
+      quadrature_point_test = quadrature_points_circle[q_avag_test];
+     // std::cout<<"ONEDIM_GAP"<<std::endl;
+
+
+      double weight_test;
+        double C_avag_test;
+        if (AVERAGE) {
+          double perimeter = 2.0 * numbers::PI * radius;
+          double h_avag = perimeter / (nof_quad_points);
+
+          double weights_odd = 4.0 / 3.0 * h_avag;
+          double weights_even = 2.0 / 3.0 * h_avag;
+          double weights_first_last = h_avag / 3.0;
+
+          C_avag_test = 1.0 / (2.0 * numbers::PI);
+      
+          if (q_avag_test == 0)
+            weight_test = 2 * weights_first_last;
+          else {
+
+            if (q_avag_test % 2 == 0)
+              weight_test = weights_even;
+            else
+              weight_test = weights_odd;
+          }
+          //weight_test = ((2.0 * numbers::PI * radius) / (nof_quad_points));
+        } else {
+          weight_test = 1.0;
+          C_avag_test = 1.0;
+        }
+        //weight_test = 1.0;
+        C_avag_test = 1.0;
+        weight_test = 1.0 / nof_quad_points;
+        // C_avag_test = 1.0;
+#else
+    quadrature_point_test = quadrature_point_coupling;
+    double weight_test = 1;
+    double C_avag_test  =1;
+    unsigned int q_avag_test = 0;
+#endif
+
 #if TEST
     auto cell_test_first = GridTools::find_active_cell_around_point(
           cache, quadrature_point_test, cell_start, marked_vertices);
@@ -2739,7 +2785,7 @@ pcout<<"g "<<g<<std::endl;
 
 
         n_te = cell_test_array.size();    
-        //pcout << "quadrature_point_omega "<<quadrature_point_omega<<" cell_test_array " << cell_test_array.size() << std::endl;
+      //  pcout << "quadrature_point_omega "<<quadrature_point_omega<<" "<<q_avag_test<< " cell_test_array " << cell_test_array.size() << std::endl;
         for (auto cellpair : cell_test_array)
 #else
         auto cell_test = GridTools::find_active_cell_around_point(
@@ -2814,6 +2860,8 @@ pcout<<"g "<<g<<std::endl;
                 insideCell_test = false;
               
               }
+              if(insideCell_test == false)
+                      std::cout<<cell_omega<<" " <<q_avag_test<< " insideCell_test == false"<<std::endl;
        //       std::cout<<" n_te "<< n_te<<" n_ftest "<<n_ftest<<std::endl;
 
 
@@ -2904,7 +2952,7 @@ pcout<<"g "<<g<<std::endl;
                       for (unsigned int i = 0; i < dofs_this_cell; ++i) {
                         local_vector(i) += 
                            g * fe_values_coupling_test_face[Potential].value(i,
-                                                                         q) *
+                                                                         q) * C_avag_test * weight_test * 
                            1.0 / (n_te * n_ftest) *
                            z*fe_values_omega.JxW(p);
                         
@@ -2925,8 +2973,8 @@ pcout<<"g "<<g<<std::endl;
                 const unsigned int n_q_points = fe_values_coupling_test.n_quadrature_points;
                  for (unsigned int q = 0; q < n_q_points; ++q) {
                 for (unsigned int i = 0; i < dofs_per_cell; i++) {
-                  local_vector(i) +=
-                  g *  fe_values_coupling_test[Potential].value(i, q) * z *fe_values_omega.JxW(p);
+                  local_vector(i) += 
+                  g *  fe_values_coupling_test[Potential].value(i, q) * C_avag_test * weight_test * z *fe_values_omega.JxW(p);
                 }
                 constraints.distribute_local_to_global(
                     local_vector, local_dof_indices_test, system_rhs);
@@ -3077,7 +3125,9 @@ pcout<<"g "<<g<<std::endl;
                       std::cout<<kk<<" ";
                       std::cout <<std::endl;*/
                       
-                      
+                    //  if(insideCell_trial == false)
+                     // std::cout<<"insideCell_trial == false"<<std::endl;
+
                       for (unsigned int ftest = 0; ftest < n_ftest; ftest++) {
                         //std::cout<<"ftest "<<ftest<<std::endl; 
                         //std::cout<<" face_no_test[ftest] "<< face_no_test[ftest]<<std::endl; 
@@ -3176,7 +3226,7 @@ pcout<<"g "<<g<<std::endl;
                            //     std::cout<<"psi_potential_trial " <<psi_potential_trial<< std::endl;
                               V_U_matrix_coupling(i, j) +=
                                   g * psi_potential_test * psi_potential_trial *
-                                  C_avag * weight  * 1 /
+                                  C_avag * weight * C_avag_test * weight_test  * 1 /
                                   (n_tr * n_ftrial) * 1 / (n_te * n_ftest) * fe_values_omega.JxW(p);
                             }
                           }
@@ -3196,13 +3246,16 @@ pcout<<"g "<<g<<std::endl;
                                 psi_potential_trial =
                                     fe_values_coupling_trial_face[Potential]
                                         .value(j, 0);
-
-                              v_U_matrix_coupling(i, j) +=
+                              if(q_avag_test == 0)
+                              {
+                              v_U_matrix_coupling(i, j) += 
                                   -g *
                                   fe_values_omega[Potential_omega].value(i, p) *
                                   C_avag * weight * psi_potential_trial *
                                   fe_values_omega.JxW(p) * 1 /
                                   (n_tr * n_ftrial) * 1 / (n_te * n_ftest);
+                                
+                              }
                             }
                           }
                           constraints.distribute_local_to_global(
@@ -3221,13 +3274,21 @@ pcout<<"g "<<g<<std::endl;
                                       i, 0);
 
                             for (unsigned int j = 0; j < dofs_per_cell_omega;
-                                 j++) {
-                              if(q_avag == 0)
+                                 j++) 
+                         // unsigned int j = 0;
+                          {
+                          
+                              if(q_avag ==0 )
+                              {
                               V_u_matrix_coupling(i, j) +=
-                                  -g * psi_potential_test *
-                                  fe_values_omega[Potential_omega].value(j, p) *
+                                 -g * 
+                                  psi_potential_test *
+                                  C_avag_test * weight_test * 
+                                 fe_values_omega[Potential_omega].value(j, p) *
                                   fe_values_omega.JxW(p) * 1 /
                                   (n_tr * n_ftrial) * 1 / (n_te * n_ftest);
+                                
+                                }
                                   
                             }
                           }
@@ -3240,8 +3301,8 @@ pcout<<"g "<<g<<std::endl;
                                i++) {
                             for (unsigned int j = 0; j < dofs_per_cell_omega;
                                  j++) {
-                              if(q_avag == 0)
-                              v_u_matrix_coupling(i, j) +=
+                              if(q_avag_test == 0 && q_avag == 0)
+                              v_u_matrix_coupling(i, j) += 
                                   g *
                                   fe_values_omega[Potential_omega].value(j, p) *
                                   fe_values_omega[Potential_omega].value(i, p) *
@@ -3268,6 +3329,9 @@ pcout<<"g "<<g<<std::endl;
 #endif
 }//if cell_test->is_locally_owned()
 }//for cellpair : cell_test_array
+#if ONEDIM_GAP
+}
+#endif
 }//for quadrature_points_omega
 //}//if (cell_omega->is_locally_owned())
 }//for cell_omega
@@ -4268,7 +4332,7 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
  // memory_consumption("start");
   make_grid();
  // memory_consumption("after  make_grid");
-make_dofs();
+  make_dofs();
  //memory_consumption("after make_dofs()");
   assemble_system();
   //memory_consumption("after  assemble_system()");
@@ -4287,7 +4351,7 @@ make_dofs();
 
   std::array<double, 4> results_array = compute_errors();
   output_results();
-//std::array<double, 4> results_array;
+  //std::array<double, 4> results_array;
   return results_array;
 }
 
@@ -4349,7 +4413,7 @@ int main(int argc, char *argv[]) {
       std::string solution_linear_string = std::to_string(SOLUTION_SPACE);
       std::string onedim_gap_string = ONEDIM_GAP == 1 ? "true" : "false";;
 
-      std::string name =  "_05_03_finalResults_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
+      std::string name =  "_09_04_finalResults_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
       "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_paper_solution_" + paperSolution_string +"_solution_linear_" + solution_linear_string +
        "_vessel_" + vessel_string +  "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + 
        "_rad_" + radius_string + "_D_" + D_string + "_penalty_" + std::to_string(penalty_sigma) + "_onedim_gap_"+ onedim_gap_string;

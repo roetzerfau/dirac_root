@@ -13,8 +13,8 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 0 //wenn coupled = 1, vessel muss = 0
-#define VESSEL 1
+#define COUPLED 1 //wenn coupled = 1, vessel muss = 0
+#define VESSEL 0
 #define ONEDIM_GAP 1
 
 #define TEST 1
@@ -30,7 +30,8 @@
 #define ANISO 1
 #define PAPER_SOLUTION 1 //1: paper dangelo, O: thesis, 1 funktionert besser 
 
-#define SOLUTION_SPACE 2//2
+#define SOLUTION_SPACE 3//2
+
 
 using namespace dealii;
 const double w = numbers::PI * 3 / 2;
@@ -39,7 +40,7 @@ const double w = numbers::PI * 3 / 2;
 // ThreeD_OneD: GRADEDMESH 0, SOLUTION_SPACE 0, lumpedAverages[n_LA] = {true}
 //
 
-
+const double extent = 1;//std::sqrt(2);
 enum GeometryConfiguration
 {
   TwoD_ZeroD = 0, //constructed solution 3 (omega wird unabhängig davon auch noch ausgerechnet)
@@ -49,7 +50,7 @@ enum GeometryConfiguration
 const bool is_omega_on_face =true;
 constexpr double y_l = is_omega_on_face ? 0.0 : 0.00001;
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.00001;
-constexpr unsigned int geo_conf{0};
+constexpr unsigned int geo_conf{2};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
 constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 3: dangelo thesis log, PAPER_SOLUTION funktion on omega
 
@@ -60,14 +61,14 @@ const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
-const double radii[n_r] = {0.4};
+const double radii[n_r] = {0.05};
 const double D = 1;
 const double penalty_sigma = 5;//10
 
 #if !PAPER_SOLUTION || (!COUPLED && !VESSEL)
 const double sol_factor =  1/(2*numbers::PI);
 #else
-const double sol_factor = D * radii[0]/(1- D * radii[0]*  std::log(radii[0]));
+const double sol_factor = D * radii[0]/(1- radii[0]*  std::log(radii[0])); // *D
 #endif
 
 
@@ -176,9 +177,21 @@ Point<dim> nearest_point_on_singularity(const Point<dim> &p)
   Point<dim> nearest_singularity_point;
   if (GeometryConfiguration::TwoD_OneD == geo_conf )
     nearest_singularity_point = Point<dim>(x, y_l); //nearest point on line
+
   if (GeometryConfiguration::ThreeD_OneD == geo_conf) 
   {
-   nearest_singularity_point = Point<dim>(x, y_l, z_l);
+#if ONEDIM_GAP     
+      double vx = p[1] - y_l;
+      double vy = p[2] - z_l;
+
+      double d_vp =  std::sqrt(vx * vx + vy * vy);
+      nearest_singularity_point =  Point<dim>(x, y_l + radii[0] * vx/ d_vp, z_l + radii[0] * vy/ d_vp);
+
+#else
+      nearest_singularity_point = Point<dim>(x, y_l, z_l);;//center
+#endif
+
+ 
   }
   
   
@@ -241,6 +254,20 @@ double distance_to_root_center(const Point<dim> &p)
 template <int dim>
 double RightHandSide<dim>::value(const Point<dim> &p,
                                  const unsigned int) const {
+  double r = distance_to_root_center<dim>(p);
+  double log_value;
+  
+
+#if ONEDIM_GAP
+  log_value = std::log(r/radii[0]);
+#else
+    log_value = std::log(r);
+#endif
+
+
+if(dim == 2)
+return 0;
+
   switch (constructed_solution) {
   case 1: {
    #if (SOLUTION_SPACE == 1)
@@ -256,9 +283,35 @@ double RightHandSide<dim>::value(const Point<dim> &p,
      //        std::cos(w * p[2]);
     break;
   }
-  case 3: {
-    return 0;
-    break;
+  case 3: { 
+if(SOLUTION_SPACE == 0 || SOLUTION_SPACE == 1)
+return 0;
+else if(SOLUTION_SPACE == 2)
+{
+#if ONEDIM_GAP
+if (r > radii[0])
+ return -D/(D+1) * (1 - radii[0] *  log_value) * 2; /// (2* numbers::PI * radii[0]);
+else
+ return -D/(D+1) * 2;// / (2 *numbers::PI * radii[0]);
+#else
+   return 0;
+#endif
+
+}else if(SOLUTION_SPACE == 3)
+{
+#if ONEDIM_GAP
+if (r > radii[0])
+ return -D/(D+1) * (1 - radii[0] *  log_value) * -4 * std::pow(numbers::PI,2)* std::sin(2 * numbers::PI * p[0]); /// (2* numbers::PI * radii[0]);
+else
+ return -D/(D+1) * -4 * std::pow(numbers::PI,2)* std::sin(2 * numbers::PI * p[0]);// / (2 *numbers::PI * radii[0]);
+#else
+   return 0;
+#endif
+}
+else
+return 0;
+   // 4 * std::pow(numbers::PI,2)* std::sin(2 * numbers::PI * p[0]);
+break;
   }
   default:
     return 0;
@@ -324,14 +377,20 @@ double RightHandSide_omega<dim>::value(const Point<dim> &p,
       
     }
 
+    
 
     if(COUPLED == 1)
     {
+#if ONEDIM_GAP
+      //return 1+ 2 * numbers::PI * radii[0] * D/(D+1);//0.5;
+      return f + 2 * numbers::PI * radii[0] * D/(D+1) * u_o;
+#else
       //if(PAPER_SOLUTION == 1)  
       return  u_o* 2 * numbers::PI* sol_factor + f;//TODO oerscauen
       //else
       //return  u_o + 2 * f;
       //  return (1 + p[0]) * 2 * numbers::PI* sol_factor - (1 + p[0]);
+#endif
      }
      else
       return f;
@@ -381,9 +440,9 @@ double NeumannBoundaryValues<dim>::value(const Point<dim> &p,
 }else 
   {
 #if ONEDIM_GAP
-  std::cout<<"std::log(r/radius)"<<std::endl; log_value =1;
+  //std::cout<<"std::log(r/radius)"<<std::endl; log_value =1;
 #else
-std::cout<<"std::log(0)"<<std::endl; log_value = std::numeric_limits<double>::min();
+ // std::cout<<"std::log(0)"<<std::endl; log_value = std::numeric_limits<double>::min();
 #endif
 }
 
@@ -394,45 +453,89 @@ std::cout<<"std::log(0)"<<std::endl; log_value = std::numeric_limits<double>::mi
      return 0;
     if(SOLUTION_SPACE == 1 && GeometryConfiguration::TwoD_OneD == geo_conf)
     {
-      if (p[0] > 1)
+      if (p[0] >= extent/2)
         return -0.5 * std::abs(r);
-      if (p[0] < 1)
+      else
       return 0.5* std::abs(r);
     }
 
 
-    if (p[0] > 1)
+    if (p[0] > extent/2)
     {
     //std::cout<<"neum1 "<<p[0]<<std::endl;
     if(SOLUTION_SPACE == 1)
-      return  sol_factor  *log_value;
+    {
+#if ONEDIM_GAP 
+if (r > radii[0])
+      return  -D/(D+1) * (1 - radii[0] *  log_value);
+else
+      return -D/(D+1);
+#else 
+      return sol_factor  *log_value;
+#endif
+    }
     else if(SOLUTION_SPACE == 2)
     {
-     //std::cout<<"neum1 "<< 2 * x * sol_factor  * log_value<<std::endl;
+#if ONEDIM_GAP 
+if (r > radii[0])
+      return  - (2*p[0]) * D/(D+1) * (1 - radii[0] *  log_value) ;
+else 
+      return  - (2*p[0]) * D/(D+1);
+#else 
       return (2*p[0]) * sol_factor  * log_value;
+#endif
+     //std::cout<<"neum1 "<< 2 * x * sol_factor  * log_value<<std::endl;
     }
     else if(SOLUTION_SPACE == 3)
     {
-      return 2 * numbers::PI *  std::cos(2 * numbers::PI * p[0])* sol_factor  * log_value;
+#if ONEDIM_GAP
+if (r > radii[0])
+    return -2 * numbers::PI *  std::cos(2 * numbers::PI * p[0]) * D/(D+1)* (1 - radii[0] *  log_value) ;
+else
+    return -2 * numbers::PI *  std::cos(2 * numbers::PI * p[0])* D/(D+1);
+#else
+return 2 * numbers::PI *  std::cos(2 * numbers::PI * p[0])* sol_factor  * log_value;
+#endif
     }
     else{std::cout<<"non implemented"<<std::endl;}
 
     }
 
-    if (p[0] < 1)
+    else //(p[0] <= extent/2)
     {
      // std::cout<<"neum0 "<<p[0]<<std::endl;
       if(SOLUTION_SPACE == 1)
       {
+#if ONEDIM_GAP 
+if (r > radii[0])
+         return D/(D+1) * (1 - radii[0] *  log_value);
+else
+        return D/(D+1);
+#else
          return -sol_factor * log_value;
+#endif
       }else if(SOLUTION_SPACE == 2)
       {
+#if ONEDIM_GAP 
+if (r > radii[0])
+         return (2*p[0]) * D/(D+1) * (1 - radii[0] *  log_value);
+else
+         return (2*p[0]) * D/(D+1);
+#else
+         return  - (2*p[0]) * sol_factor  *  log_value;
+#endif
       // std::cout<<"neum0 "<<- 2 * x * sol_factor  * log_value<<std::endl;
-        return  - (2*p[0]) * sol_factor  *  log_value;
       }
        else if(SOLUTION_SPACE == 3)
        {
-        -2 * numbers::PI *  std::cos(2 * numbers::PI * p[0])* sol_factor  * log_value;
+#if ONEDIM_GAP 
+if (r > radii[0])
+         return  2 * numbers::PI *  std::cos(2 * numbers::PI * p[0]) * D/(D+1) * (1 - radii[0] *  log_value);
+else
+         return 2 * numbers::PI *  std::cos(2 * numbers::PI * p[0]) * D/(D+1);
+#else
+         return  -2 * numbers::PI *  std::cos(2 * numbers::PI * p[0])* sol_factor  * log_value;
+#endif
        }
     else{std::cout<<"non implemented"<<std::endl;}
       
@@ -517,13 +620,13 @@ void TrueSolution<dim>::vector_value(const Point<dim> &p,
   }else 
   {
 #if ONEDIM_GAP
-  std::cout<<"std::log(r/radius) = 1"<<std::endl; log_value =1;
+  //std::cout<<"std::log(r/radius) = 1"<<std::endl; log_value =1;
 #else
 std::cout<<"std::log(0)"<<std::endl; log_value = std::numeric_limits<double>::min();
 #endif
 }
 
-      double f,u_o;
+      double f,u_o, du_o;
        if(SOLUTION_SPACE == 0)
        { u_o = 1;
         f  = 0;}
@@ -541,6 +644,8 @@ std::cout<<"std::log(0)"<<std::endl; log_value = std::numeric_limits<double>::mi
       else if(SOLUTION_SPACE == 3)
       {
        u_o = std::sin(2 * numbers::PI * p[0]);
+       du_o =  2* numbers::PI* std::cos(2 * numbers::PI * p[0]);
+
       }
       else
       {    
@@ -548,8 +653,8 @@ std::cout<<"std::log(0)"<<std::endl; log_value = std::numeric_limits<double>::mi
       }
 
 
-  if(r > (1 + 0.01))
-  std::cout<<"FALSCH!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!   "<<r<<std::endl;
+  //if(r > (1 + 0.01))
+  //std::cout<<"FALSCH!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!   "<<r<<std::endl;
   switch (constructed_solution) {
 
   case 1: {
@@ -606,6 +711,79 @@ std::cout<<"std::log(0)"<<std::endl; log_value = std::numeric_limits<double>::mi
     if(dim==3)
     {
 
+#if ONEDIM_GAP
+    if(SOLUTION_SPACE == 0)
+    {
+if (r > radii[0])
+    {
+        values(0) = 0;
+        values(1) = D/(D+1) *radii[0]* (y/std::pow(r,2)); //Q 
+        values(2) = D/(D+1) * radii[0]*(z/std::pow(r,2)); // Q   
+        values(3) = D/(D+1) * (1 - radii[0] *  log_value) ; // U     //  ;sol_factor *
+    }
+    else
+    {
+        values(0) = 0; //Q 
+        values(1) = 0; // Q  
+        values(2) = 0; // Q   
+        values(3) =  D/(D+1) * 1; // U   sol_factor *
+    }
+  }
+    if(SOLUTION_SPACE == 1)
+    {
+if (r > radii[0])
+    {
+        values(0) = -D/(D+1) * (1 - radii[0] *  log_value) ;
+        values(1) = u_o *  D/(D+1) *radii[0]* (y/std::pow(r,2)); //Q 
+        values(2) = u_o *  D/(D+1) * radii[0]*(z/std::pow(r,2)); // Q   
+        values(3) = u_o *  D/(D+1) * (1 - radii[0] *  log_value) ; // U     //  ;sol_factor *
+    }
+    else
+    {
+        values(0) = -D/(D+1); //Q 
+        values(1) = 0; // Q  
+        values(2) = 0; // Q   
+        values(3) =  D/(D+1) * u_o ; // U   sol_factor *
+    }
+  }
+   if(SOLUTION_SPACE == 2)
+    {
+if (r > radii[0])
+    {
+        values(0) = -(2 * p[0])*D/(D+1) * (1 - radii[0] *  log_value) ;
+        values(1) = u_o *  D/(D+1) *radii[0]* (y/std::pow(r,2)); //Q 
+        values(2) = u_o *  D/(D+1) * radii[0]*(z/std::pow(r,2)); // Q   
+        values(3) = u_o *  D/(D+1) * (1 - radii[0] *  log_value) ; // U     //  ;sol_factor *
+    }
+    else
+    {
+        values(0) = - (2 * p[0])* D/(D+1); //Q 
+        values(1) = 0; // Q  
+        values(2) = 0; // Q   
+        values(3) =  D/(D+1) * u_o ; // U   sol_factor *
+    }
+  } 
+    if(SOLUTION_SPACE == 3)
+    {
+if (r > radii[0])
+    {
+        values(0) = - du_o * D/(D+1)  * (1 - radii[0] *  log_value) ;
+        values(1) = u_o *  D/(D+1) *radii[0]* (y/std::pow(r,2)); //Q 
+        values(2) = u_o *  D/(D+1) * radii[0]*(z/std::pow(r,2)); // Q   
+        values(3) = u_o *  D/(D+1) * (1 - radii[0] *  log_value) ; // U     //  ;sol_factor *
+    }
+    else
+    {
+        values(0) = - du_o* D/(D+1); //Q 
+        values(1) = 0; // Q  
+        values(2) = 0; // Q   
+        values(3) =  D/(D+1) * u_o ; // U   sol_factor *
+    }
+  } 
+  
+  break;
+
+#else
     if(SOLUTION_SPACE == 0)
     {
         values(0) =0; //Q 
@@ -642,9 +820,9 @@ std::cout<<"std::log(0)"<<std::endl; log_value = std::numeric_limits<double>::mi
         // std::cout<<"alllo "<<values(3)<<std::endl;
       
     }
-    
     else {}
     break;
+#endif
      }
     if(dim == 2)//
      {
@@ -774,6 +952,12 @@ void TrueSolution_omega<dim>::vector_value(const Point<dim> &p,
     values(0) = -2*x;
     values(1) = std::pow(x,2);//u
   }
+   else if(SOLUTION_SPACE == 3)
+  {
+    
+    values(0) =  -2* numbers::PI* std::cos(2 * numbers::PI * p[0]);
+    values(1) =  std::sin(2 * numbers::PI * p[0]);//u
+  }
   else{}
     break;
   }
@@ -821,7 +1005,7 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
     radius_not_evaluated = cell_size;
   }
   else
-  radius_not_evaluated = radius * 0.5;
+  radius_not_evaluated = 0 ;//radius * 0.5;
  // y = p[1];
   values = 1;
 
@@ -839,10 +1023,10 @@ void DistanceWeight<dim>::vector_value(const Point<dim> &p,
      if(GRADEDMESH == 1)
      {
       values(i) = std::pow(r,2*alpha);
-      /*if(r == radius_not_evaluated)
+      if(r == radius_not_evaluated)
       {
          values(i) = 0;       
-      }*/
+      }
 
      }else
       {
@@ -919,7 +1103,7 @@ equidistant_points_on_circle(const Point<dim> &center, double radius,
     Point<dim> v = cross_product(norm, u);
 
     for (int i = 0; i < num_points; ++i) {
-      double angle = i * angle_step;
+      double angle = i * angle_step + 0.1;
       double x = center[0] +
                  radius * (u[0] * std::cos(angle) + v[0] * std::sin(angle));
       double y = center[1] +
