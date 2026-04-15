@@ -1,0 +1,10 @@
+/home/am1member/Documents/dirac_root/LDGPoissonCoupled/CMakeFiles/LDGPoissonCoupled.dir
+/home/am1member/Documents/dirac_root/LDGPoissonCoupled/CMakeFiles/run.dir
+/home/am1member/Documents/dirac_root/LDGPoissonCoupled/CMakeFiles/debug.dir
+/home/am1member/Documents/dirac_root/LDGPoissonCoupled/CMakeFiles/release.dir
+/home/am1member/Documents/dirac_root/LDGPoissonCoupled/CMakeFiles/runclean.dir
+/home/am1member/Documents/dirac_root/LDGPoissonCoupled/CMakeFiles/distclean.dir
+/home/am1member/Documents/dirac_root/LDGPoissonCoupled/CMakeFiles/strip_comments.dir
+/home/am1member/Documents/dirac_root/LDGPoissonCoupled/CMakeFiles/info.dir
+/home/am1member/Documents/dirac_root/LDGPoissonCoupled/CMakeFiles/edit_cache.dir
+/home/am1member/Documents/dirac_root/LDGPoissonCoupled/CMakeFiles/rebuild_cache.dir
