@@ -1309,10 +1309,11 @@ pcout << "AVERAGE (use circel) " << AVERAGE << " radius "<<radius << " lumpedAve
 // weight
  unsigned int n = 2 * numbers::PI * radius/ maximal_cell_diameter_2D;
  unsigned int n_1 = std::pow(2,n_refine);
+ unsigned int n_min = 2;
 if (AVERAGE) {
   //std::ceil(radius/(pow(2,minimal_cell_diameter_2D/std::sqrt(2)))) + 1;
   //std::cout<<"n "<<n <<" "<< minimal_cell_diameter_2D<<" "<<minimal_cell_diameter_2D/std::sqrt(2)<<std::endl;
-  nof_quad_points = n;//std::max(n_1, n);//std::pow(2,n_refine);//std::pow(2,n); //std::pow(2,n_refine); // 25 * n_refine;// 
+  nof_quad_points = std::max(n,n_min);//std::max(n_1, n);//std::pow(2,n_refine);//std::pow(2,n); //std::pow(2,n_refine); // 25 * n_refine;// 
   if(geo_conf ==  GeometryConfiguration::TwoD_OneD)
     nof_quad_points = 2;
 } else {
@@ -1397,16 +1398,19 @@ if(geo_conf == GeometryConfiguration::TwoD_OneD || geo_conf == GeometryConfigura
 #endif
      //  pcout<<"quadrature_point_test "<<quadrature_point_test<<std::endl;
 
+
+  
+
+
+#if TEST         
 //pcout <<"stat "<<std::endl;
-   auto start = std::chrono::high_resolution_clock::now();  //Start time
+ auto start = std::chrono::high_resolution_clock::now();  //Start time
     auto cell_test_first = GridTools::find_active_cell_around_point(
           cache, quadrature_point_test, cell_start, marked_vertices);
        //   pcout<<"###+++# " <<cell_test_first.first<<" "<<cell_test_first.second<<std::endl;
     auto end = std::chrono::high_resolution_clock::now();    // End time
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-
 //pcout << "Time taken to execute find_all_active_cells_around_point: " << duration << " ms" << std::endl;      
-          
 	#if FASTER
    auto cell_test_array = find_all_active_cells_around_point<dim, dim>(
                        mapping, triangulation, quadrature_point_test,1e-10 ,cell_test_first, &cache.get_vertex_to_cell_map());//, cache.get_vertex_to_cell_map()
@@ -1416,8 +1420,13 @@ if(geo_conf == GeometryConfiguration::TwoD_OneD || geo_conf == GeometryConfigura
    #endif
  //pcout<<"cell_test_array.size() "<<cell_test_array.size()<<std::endl;
         for (auto cellpair : cell_test_array)
+#else
+        auto cell_test = GridTools::find_active_cell_around_point(
+            dof_handler_Omega, quadrature_point_test);
+#endif
         {
 
+#if TEST
           auto cell_test_tri = cellpair.first;
          typename DoFHandler<dim>::active_cell_iterator
         cell_test = dof_handler_Omega.begin_active(cell_test_tri->level()),
@@ -1434,7 +1443,7 @@ if(geo_conf == GeometryConfiguration::TwoD_OneD || geo_conf == GeometryConfigura
         cell_start =cell_test;  
         if(cell_test_tri->index() != cell_test->index())
         pcout<<"cellcomp " <<cell_test_tri->index()<<" " <<cell_test_tri<<" : "<<cell_test<<std::endl;
-
+#endif
 #if USE_MPI_ASSEMBLE
          if (cell_test != dof_handler_Omega.end())
             if (cell_test->is_locally_owned())
@@ -1475,7 +1484,7 @@ if(geo_conf == GeometryConfiguration::TwoD_OneD || geo_conf == GeometryConfigura
     for (auto cellpair_trial : cell_trial_array)
 #else
               auto cell_trial = GridTools::find_active_cell_around_point(
-                  dof_handler_Omega, quadrature_point_trial);
+                  dof_handler_Omega, quadrature_point_trial );
 #endif
 
                 {

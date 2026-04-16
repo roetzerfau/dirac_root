@@ -17,7 +17,7 @@
 #define VESSEL 0
 #define ONEDIM_GAP 1
 
-#define TEST 1
+#define TEST 0
 #define SOLVE_BLOCKWISE 1
 #define GRADEDMESH 0
 #define MEMORY_CONSUMPTION 1
@@ -47,7 +47,7 @@ enum GeometryConfiguration
   TwoD_OneD = 1,//constructed solution 1(Coupled)
   ThreeD_OneD = 2 ////constructed solution 1, 2, 3
 };
-const bool is_omega_on_face =true;
+const bool is_omega_on_face = true;
 constexpr double y_l = is_omega_on_face ? 0.0 : 0.00001;
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.00001;
 constexpr unsigned int geo_conf{2};
@@ -56,7 +56,7 @@ constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt si
 
 
 
-const unsigned int refinement[5] = {1,2,3,4,5};//,7,8,9,10
+const unsigned int refinement[6] = {1,2,3,4,5,6};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
