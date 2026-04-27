@@ -122,6 +122,7 @@
 #include <numeric> 
 
 #include "Functions.cc"
+#include "HDG_postprocessing.cc"
 
 using namespace dealii;
 
@@ -361,7 +362,7 @@ public:
 
   ~LDGPoissonProblem();
 
-  std::array<double, 4> run();
+  std::array<double, 5> run();
   double max_diameter;
   double max_diameter_omega;
   unsigned int nof_cells;
@@ -464,7 +465,7 @@ private:
   BoundingBox<dim> bbox;
 
   TrilinosWrappers::BlockSparseMatrix system_matrix;
-  TrilinosWrappers::MPI::BlockVector solution;
+  TrilinosWrappers::MPI::BlockVector  solution;
   TrilinosWrappers::MPI::BlockVector system_rhs;
 
   FESystem<dim> fe_Omega;
@@ -1313,7 +1314,7 @@ pcout << "AVERAGE (use circel) " << AVERAGE << " radius "<<radius << " lumpedAve
 if (AVERAGE) {
   //std::ceil(radius/(pow(2,minimal_cell_diameter_2D/std::sqrt(2)))) + 1;
   //std::cout<<"n "<<n <<" "<< minimal_cell_diameter_2D<<" "<<minimal_cell_diameter_2D/std::sqrt(2)<<std::endl;
-  nof_quad_points = std::max(n,n_min);//std::max(n_1, n);//std::pow(2,n_refine);//std::pow(2,n); //std::pow(2,n_refine); // 25 * n_refine;// 
+  nof_quad_points = std::max(n_1,n_min);//std::max(n_1, n);//std::pow(2,n_refine);//std::pow(2,n); //std::pow(2,n_refine); // 25 * n_refine;// 
   if(geo_conf ==  GeometryConfiguration::TwoD_OneD)
     nof_quad_points = 2;
 } else {
@@ -2197,6 +2198,8 @@ g = 1;
 #if ONEDIM_GAP
 g = D * 2 * numbers::PI * radius;//1/(2 * numbers::PI * radius); *D
 #endif 
+if(dim == 2 && constructed_solution == 1)
+g = 0;
 pcout<<"g "<<g<<std::endl;
 #if 1// USE_MPI_ASSEMBLE
 // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
@@ -2242,10 +2245,10 @@ pcout<<"g "<<g<<std::endl;
 
 #if ONEDIM_GAP
 //std::cout<<"quadrature_points_circle.size() "<<quadrature_points_circle.size()<<std::endl;
- for (unsigned int q_avag = 0; q_avag < quadrature_points_circle.size();//nof_quad_points;
-                 q_avag++) {
+ for (unsigned int q_avag_test = 0; q_avag_test < quadrature_points_circle.size();//nof_quad_points;
+                 q_avag_test++) {
      // Quadrature weights and points
-      quadrature_point_test = quadrature_points_circle[q_avag];
+      quadrature_point_test = quadrature_points_circle[q_avag_test];
      // std::cout<<"ONEDIM_GAP"<<std::endl;
 
 
@@ -2261,11 +2264,11 @@ pcout<<"g "<<g<<std::endl;
 
           C_avag_test = 1.0 / (2.0 * numbers::PI);
       
-          if (q_avag == 0)
+          if (q_avag_test == 0)
             weight_test = 2 * weights_first_last;
           else {
 
-            if (q_avag % 2 == 0)
+            if (q_avag_test % 2 == 0)
               weight_test = weights_even;
             else
               weight_test = weights_odd;
@@ -2331,7 +2334,10 @@ pcout<<"g "<<g<<std::endl;
             insideCell_test = false;
               
           }
-          //std::cout<<"n_te * n_ftest "<< n_te <<" "<< n_ftest<<std::endl;
+          if(insideCell_test == false)
+                  std::cout<<q_avag_test<< " insideCell_test == false"<<std::endl;
+          
+         //std::cout<<"n_te * n_ftest "<< n_te <<" "<< n_ftest<<std::endl;
           Point<dim> quadrature_point_test_mapped_cell =
           mapping.transform_real_to_unit_cell(cell_test,
                                               quadrature_point_test);
@@ -2408,7 +2414,7 @@ pcout<<"g "<<g<<std::endl;
 
           if (insideCell_test) {
          //   std::cout<<"cell"<<std::endl;
-            Point<dim> quadrature_point_test_mapped_cell =
+         /*   Point<dim> quadrature_point_test_mapped_cell =
                 mapping.transform_real_to_unit_cell(cell_test,
                                                     quadrature_point_test);
            // std::cout << "quadrature_point_test_mapped_cell "
@@ -2422,7 +2428,7 @@ pcout<<"g "<<g<<std::endl;
                 update_flags_coupling); // hier ist der fehler. wenn zweimal in
                                         // einer Cell integriert wird, stimmt es
                                         // nicht
-            fe_values_coupling_test.reinit(cell_test);
+            fe_values_coupling_test.reinit(cell_test);*/
             
               local_vector = 0;
              for (unsigned int i = 0; i < dofs_per_cell; i++) {
@@ -2552,6 +2558,9 @@ pcout<<"g "<<g<<std::endl;
         } else {
           insideCell_trial = false;
         }
+
+        if(insideCell_trial == false)
+             std::cout<<q_avag<< " insideCell_trial == false"<<std::endl;
       //  std::cout<<"cell_trial "<< cell_test <<" insideCell_test "<<insideCell_test <<" n_ftest "<<n_ftest<<" n_te "<<n_te<< 
        // " cell_trial "<< cell_trial <<" insideCell_trial "<<insideCell_trial <<" n_ftrial "<<n_ftrial<<" n_tr "<<n_tr<<std::endl;
 
@@ -2642,7 +2651,7 @@ pcout<<"g "<<g<<std::endl;
         
 
         }//for (auto cellpair : cell_trial_array)
-   } // q_avag < quadrature_points_circle.size()
+   } // q_avag_test < quadrature_points_circle.size()
 #endif //Vessel
         }// if (cell_test != dof_handler_Omega.end())    if (cell_test->is_locally_owned())
     }//auto cellpair : cell_test_array
@@ -4014,6 +4023,10 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
     Assert(false, ExcNotImplemented());
   }
   std::string ref_p_array = "_r_" + Utilities::int_to_string(n_refine,2) + "_p_" + Utilities::int_to_string(degree,2);
+  
+  
+  
+  
   DataOut<dim> data_out;
   data_out.attach_dof_handler(dof_handler_Omega);
   
@@ -4030,20 +4043,81 @@ void LDGPoissonProblem<dim, dim_omega>::output_results() const {
                                     triangulation.locally_owned_subdomain(),4));
   std::ofstream output((folder_name + filename + ".vtu").c_str());
   data_out.write_vtu(output);
-    if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
-      {
-        std::vector<std::string>    filenames;
-        for (unsigned int i=0;
-             i < Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
-             i++)
-          {
-            filenames.push_back("solution" + ref_p_array  +"."+
-                                Utilities::int_to_string(i,4) +
-                                ".vtu");
-          }
-        std::ofstream master_output(folder_name +"solution" + ref_p_array+".pvtu");
-        data_out.write_pvtu_record(master_output, filenames);
-      }
+  if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
+    {
+      std::vector<std::string>    filenames;
+      for (unsigned int i=0;
+            i < Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
+            i++)
+        {
+          filenames.push_back("solution" + ref_p_array  +"."+
+                              Utilities::int_to_string(i,4) +
+                              ".vtu");
+        }
+      std::ofstream master_output(folder_name +"solution" + ref_p_array+".pvtu");
+      data_out.write_pvtu_record(master_output, filenames);
+    }
+
+
+
+{//output rhs
+std::cout<<"output rhs system_rhs.block(0) "<<system_rhs.block(0).size()<<" solution.block(0) "<< solution.block(0).size()<<std::endl;
+
+
+   FE_DGQ<dim> fe_u_star(degree);
+    DoFHandler<dim> dof_handler_u_star(triangulation);
+    dof_handler_u_star.distribute_dofs(fe_u_star);
+
+  DataOut<dim> data_out;
+  data_out.attach_dof_handler(dof_handler_Omega);
+  
+  std::vector<std::string> solution_names_rhs;
+    solution_names_rhs.push_back("rhs");
+
+  data_out.add_data_vector(system_rhs.block(0), solution_names); //, DataOut<dim>::type_cell_data  
+ std::cout<<"output rhs1"<<std::endl;
+  data_out.build_patches(degree);
+  std::cout<<"output rhs2"<<std::endl;
+    const std::string filename = ("system_rhs"  + ref_p_array  +"."+
+                                  Utilities::int_to_string(
+                                    triangulation.locally_owned_subdomain(),4));
+  std::ofstream output((folder_name + filename + ".vtu").c_str());
+  std::cout<<"Halo"<<std::endl;
+  data_out.write_vtu(output);
+  std::cout<<"test1"<<std::endl;
+  if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
+    {
+      std::vector<std::string>    filenames;
+      for (unsigned int i=0;
+            i < Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
+            i++)
+        {
+          filenames.push_back("system_rhs" + ref_p_array  +"."+
+                              Utilities::int_to_string(i,4) +
+                              ".vtu");
+        }
+      std::ofstream master_output(folder_name +"system_rhs" + ref_p_array+".pvtu");
+      data_out.write_pvtu_record(master_output, filenames);
+    }
+
+
+
+
+
+
+
+
+
+
+
+}
+
+
+
+
+
+
+
 
  // ------analytical solution--------
 /*
@@ -4329,7 +4403,7 @@ void LDGPoissonProblem<dim, dim_omega>::memory_consumption(std::string _name) {
 
 }
 template <int dim, int dim_omega>
-std::array<double, 4> LDGPoissonProblem<dim, dim_omega>::run() {
+std::array<double, 5> LDGPoissonProblem<dim, dim_omega>::run() {
   pcout << "******************* REFINE " << n_refine << "  DEGREE  " << degree << " ***********************" <<std::endl;
   std::cout<<"testing "<<std::log(0)<<std::endl;
   std::cout<<"testing2 "<<std::numeric_limits<double >::max()<<std::endl;
@@ -4353,15 +4427,26 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
    solve();
  // memory_consumption("after solve()");
 
+  
 
+  double errorU_postprocessed = post_process<dim>(triangulation, degree, update_flags, fe_Omega, dof_handler_Omega, solution.block(0),
+  VectorField, Potential,
+  alpha, radius, h_min);
 
 
 
 
   std::array<double, 4> results_array = compute_errors();
+ std::array<double, 5> results_array_post;
+  //results_array[0] = errorU_postprocessed;
   output_results();
   //std::array<double, 4> results_array;
-  return results_array;
+results_array_post[0] = results_array[0];
+results_array_post[1] = errorU_postprocessed;
+results_array_post[2] = results_array[1];
+results_array_post[3] = results_array[2];
+results_array_post[4] = results_array[3];
+  return results_array_post;
 }
 
 
@@ -4422,7 +4507,7 @@ int main(int argc, char *argv[]) {
       std::string solution_linear_string = std::to_string(SOLUTION_SPACE);
       std::string onedim_gap_string = ONEDIM_GAP == 1 ? "true" : "false";;
 
-      std::string name =  "_09_04_finalResults_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
+      std::string name =  "_24_04_finalResults_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
       "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_paper_solution_" + paperSolution_string +"_solution_linear_" + solution_linear_string +
        "_vessel_" + vessel_string +  "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + 
        "_rad_" + radius_string + "_D_" + D_string + "_penalty_" + std::to_string(penalty_sigma) + "_onedim_gap_"+ onedim_gap_string;
@@ -4456,14 +4541,14 @@ int main(int argc, char *argv[]) {
       constexpr unsigned int refinement_size =
           sizeof(refinement) / sizeof(refinement[0]);
 
-      std::array<double, 4> results[p_degree_size][refinement_size];
+      std::array<double, 5> results[p_degree_size][refinement_size];
       double max_diameter[p_degree_size][refinement_size];
       double max_diameter_omega[p_degree_size][refinement_size];
       double nof_cells[p_degree_size][refinement_size];
       double nof_cells_omega[p_degree_size][refinement_size];
       double nonzero_perc_arr[p_degree_size][refinement_size];
 
-      std::vector<std::string> solution_names = {"U_Omega", "Q_Omega",
+      std::vector<std::string> solution_names = {"U_Omega","U_star_Omega", "Q_Omega",
                                                  "u_omega", "q_omega"};
                                          
       for (unsigned int r = 0; r < refinement_size; r++) {
@@ -4472,7 +4557,7 @@ int main(int argc, char *argv[]) {
           LDGPoissonProblem<dimension_Omega, 1> LDGPoissonCoupled =
               LDGPoissonProblem<dimension_Omega, 1>(p_degree[p], refinement[r],
                                                     parameters);
-          std::array<double, 4> arr;
+          std::array<double, 5> arr;
           bool is_not_failed =true;
           try
           {
@@ -4482,7 +4567,7 @@ int main(int argc, char *argv[]) {
           catch(const std::exception& e)
           {
            std::cout  << e.what() << std::endl;
-           arr = {42,42,42,42};
+           arr = {42,42,42,42,42};
            is_not_failed = false;
           }
 
@@ -4505,8 +4590,8 @@ if(rank_mpi == 0)
              //       << " u " << arr[2] << " q " << arr[3] << std::endl;
 }
 #endif
-           std::cout << rank_mpi << " Result_ende: U " << arr[0] << " Q " << arr[1]
-                    << " u " << arr[2] << " q " << arr[3] << std::endl;
+           std::cout << rank_mpi << " Result_ende: U " << arr[0] <<" U_star " << arr[1]<< " Q " << arr[2]
+                    << " u " << arr[3] << " q " << arr[4] << std::endl;
 
           results[p][r] = arr;
           max_diameter[p][r] = LDGPoissonCoupled.max_diameter;
@@ -4569,7 +4654,7 @@ if(rank_mpi == 0)
             for (unsigned int p = 0; p < p_degree_size; p++) {
               const double error = results[p][r][f];
 
-              if(f < 2 )
+              if(f < 3  )
               {
               myfile  << max_diameter[p][r] << ";" <<nof_cells[p][r]<< ";";
               csvfile << max_diameter[p][r]  << ";" <<nof_cells[p][r]<< ";";
