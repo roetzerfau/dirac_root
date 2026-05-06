@@ -113,6 +113,9 @@
 #include <deal.II/fe/mapping_q1_eulerian.h>
 #include <deal.II/lac/vector_memory.h>
 
+#include "Functions.cc"
+#include "HDG_postprocessing.cc"
+
 #if INTEGRAL_HULL
 #include <deal.II/non_matching/fe_immersed_values.h>
 #include <deal.II/base/function_signed_distance.h>
@@ -129,8 +132,7 @@
 #include <sys/resource.h>
 #include <numeric> 
 
-#include "Functions.cc"
-//#include "HDG_postprocessing.cc"
+
 
 using namespace dealii;
 
@@ -4712,7 +4714,7 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
   
 
-  //double errorU_postprocessed = post_process<dim>(triangulation, degree, update_flags, fe_Omega, dof_handler_Omega, solution.block(0),VectorField, Potential,  alpha, radius, h_min);
+  double errorU_postprocessed = post_process<dim>(triangulation, degree, update_flags, fe_Omega, dof_handler_Omega, solution.block(0),VectorField, Potential,  alpha, radius, h_min);
 
 
 
@@ -4723,7 +4725,7 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
   output_results();
   //std::array<double, 4> results_array;
 results_array_post[0] = results_array[0];
-results_array_post[1] =0;
+results_array_post[1] = errorU_postprocessed;
 results_array_post[2] = results_array[1];
 results_array_post[3] = results_array[2];
 results_array_post[4] = results_array[3];
