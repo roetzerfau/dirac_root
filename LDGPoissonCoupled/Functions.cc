@@ -16,6 +16,7 @@
 #define COUPLED 0 //wenn coupled = 1, vessel muss = 0
 #define VESSEL 1
 #define ONEDIM_GAP 1
+#define INTEGRAL_HULL 1
 
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
@@ -56,12 +57,12 @@ constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt si
 
 //Todo https://dealii.org/current/doxygen/deal.II/classNonMatching_1_1ImmersedSurfaceQuadrature.html
 
-const unsigned int refinement[5] = {2,3,4,5,6};//,7,8,9,10
+const unsigned int refinement[7] = {2,3,4,5,6,7,8};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
-const double radii[n_r] = {0.05};//0.4
+const double radii[n_r] = {0.4};//0.4   0.2 //0.5
 const double D = 1;
 const double penalty_sigma = 5;//10
 
@@ -1070,7 +1071,7 @@ equidistant_points_on_circle(const Point<dim> &center, double radius,
     if(geo_conf ==  GeometryConfiguration::TwoD_ZeroD)
     {
     for (int i = 0; i < num_points; ++i) {
-      double angle = i * angle_step + 0.000;
+      double angle = i * angle_step + 0.0;
       double x = center[0] + radius * std::cos(angle);
       double y = center[1] + radius * std::sin(angle);
       points.push_back(Point<dim>(x, y));

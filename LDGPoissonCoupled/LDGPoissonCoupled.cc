@@ -114,6 +114,13 @@
 #include <deal.II/lac/vector_memory.h>
 
 
+#include <deal.II/non_matching/fe_immersed_values.h>
+#include <deal.II/base/function_signed_distance.h>
+ 
+#include <deal.II/non_matching/fe_immersed_values.h>
+#include <deal.II/non_matching/fe_values.h>
+#include <deal.II/non_matching/mesh_classifier.h>
+
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -1615,7 +1622,95 @@ if(geo_conf == GeometryConfiguration::TwoD_ZeroD)  {
   std::vector<types::global_dof_index> local_dof_indices_test(dofs_per_cell);
   std::vector<types::global_dof_index> local_dof_indices_trial(dofs_per_cell);
   // test function
+#if INTEGRAL_HULL 
+DoFHandler<dim> dof_handler_Omega_level_set(triangulation);
+const FE_Q<dim> fe_level_set(degree);
+  
+ dof_handler_Omega_level_set.distribute_dofs(fe_level_set);
+    Vector<double>  level_set;
+ 
+    hp::FECollection<dim> fe_collection;
+    fe_collection.push_back(FE_DGP<dim>(degree));
 
+
+    level_set.reinit(dof_handler_Omega.n_dofs());
+ std::array< double, dim > radii_ell = {radii[0],radii[0]};
+
+    const Functions::SignedDistance::Ellipsoid<dim> signed_distance_sphere(Point<dim>(0,0),radii_ell); 
+    VectorTools::interpolate(dof_handler_Omega_level_set,
+                             signed_distance_sphere,
+                             level_set);
+
+NonMatching::MeshClassifier<dim> mesh_classifier(dof_handler_Omega_level_set, level_set);
+mesh_classifier.reclassify();
+  const QGauss<1> quadrature_1D(degree + 1);
+  
+      NonMatching::RegionUpdateFlags region_update_flags;
+      region_update_flags.inside = update_values | update_gradients |
+                                   update_JxW_values | update_quadrature_points;
+     region_update_flags.outside = update_values | update_gradients |
+                                   update_JxW_values | update_quadrature_points;                             
+      region_update_flags.surface = update_values | update_gradients |
+                                    update_JxW_values | update_quadrature_points |
+                                    update_normal_vectors;
+
+
+
+ NonMatching::FEValues<dim> non_matching_fe_values(fe_collection, quadrature_1D, region_update_flags, mesh_classifier,
+                                                        dof_handler_Omega_level_set, level_set);
+ NonMatching::FEValues<dim> non_matching_fe_values_trial(fe_collection, quadrature_1D, region_update_flags, mesh_classifier,
+                                                        dof_handler_Omega_level_set, level_set);
+
+for (const auto &cell_test : dof_handler_Omega.active_cell_iterators())
+{
+
+
+        cell_test->get_dof_indices(local_dof_indices_test);
+
+
+        non_matching_fe_values.reinit(cell_test);
+
+        const std::optional<NonMatching::FEImmersedSurfaceValues<dim>>
+          &surface_fe_values = non_matching_fe_values.get_surface_fe_values();
+
+      
+
+        if (surface_fe_values)
+          {
+             
+            for (const unsigned int q_test :
+                 surface_fe_values->quadrature_point_indices())
+              {
+          for (const auto &cell_trial: dof_handler_Omega.active_cell_iterators())
+          {
+              cell_trial->get_dof_indices(local_dof_indices_trial);
+              non_matching_fe_values_trial.reinit(cell_trial);
+              const std::optional<NonMatching::FEImmersedSurfaceValues<dim>>
+                &surface_fe_values_trial = non_matching_fe_values_trial.get_surface_fe_values();
+      
+        if (surface_fe_values_trial)
+          {
+       
+            for (const unsigned int q_trial :
+                 surface_fe_values->quadrature_point_indices())
+              {
+
+        for (unsigned int i = 0; i < dofs_per_cell; i++) {
+                    for (unsigned int j = 0; j < dofs_per_cell; j++) {
+                      sp_block.add(local_dof_indices_test[i],
+                        local_dof_indices_trial[j]);
+                    
+                    }
+                  }
+              }
+            }
+          }//(const auto &cell_trial: dof_handler_Omega.active_cell_iterators())*/
+    
+             } // for (const unsigned int q : surface_fe_values->quadrature_point_indices())
+              
+            }// if (surface_fe_values)
+}//for (const auto &cell_test : dof_handler_Omega.active_cell_iterators())
+#else
 #if ONEDIM_GAP
  for (unsigned int q_avag = 0; q_avag < quadrature_points_circle.size();//nof_quad_points;
                  q_avag++) {
@@ -1698,6 +1793,7 @@ if(geo_conf == GeometryConfiguration::TwoD_ZeroD)  {
 #if ONEDIM_GAP
 }// for nof_quad_points test
 #endif
+#endif //INTEGRAL_HULL 
   }
 
 
@@ -2200,6 +2296,10 @@ g = D * 2 * numbers::PI * radius;//1/(2 * numbers::PI * radius); *D
 #endif 
 if(dim == 2 && constructed_solution == 1)
 g = 0;
+#if INTEGRAL_HULL
+g = 1;
+#endif
+//  g = 1;
 pcout<<"g "<<g<<std::endl;
 #if 1// USE_MPI_ASSEMBLE
 // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 )
@@ -2207,7 +2307,8 @@ pcout<<"g "<<g<<std::endl;
   TimerOutput::Scope t(computing_timer, "assembly - coupling");
   // coupling
   pcout << "assemble Coupling" << std::endl;
-  
+  double system_rhs_before = system_rhs.l1_norm();
+  std::cout << "RHS sum before: " << system_rhs.l1_norm() << " 2piR " <<  2*numbers::PI * radius<<std::endl;
   if (geo_conf == GeometryConfiguration::TwoD_ZeroD) {
     pcout << "2D/0D" << std::endl;
 /*#if COUPLED 
@@ -2216,6 +2317,7 @@ pcout<<"g "<<g<<std::endl;
     double beta = (2 * numbers::PI)/(2 * numbers::PI + std::log( radius));
 #endif*/
   
+
 
 
 
@@ -2242,7 +2344,179 @@ pcout<<"g "<<g<<std::endl;
     // test function
     std::vector<double> my_quadrature_weights = {1};
     unsigned int n_te;
+#if INTEGRAL_HULL
+pcout<<"INTEGRAL_HULL"<<std::endl;
 
+DoFHandler<dim> dof_handler_Omega_level_set(triangulation);
+const FE_Q<dim> fe_level_set(degree);
+  
+ dof_handler_Omega_level_set.distribute_dofs(fe_level_set);
+    Vector<double>  level_set;
+ 
+    hp::FECollection<dim> fe_collection;
+    //fe_collection.push_back(FE_DGP<dim>(degree));
+    fe_collection.push_back(FE_DGP<dim>(degree));
+
+
+//for (auto &cell : dof_handler_Omega_level_set.active_cell_iterators())
+ //   cell->set_active_fe_index(0);
+//dof_handler_Omega_level_set.distribute_dofs(fe_collection);
+
+    level_set.reinit(dof_handler_Omega.n_dofs());
+ std::array< double, dim > radii_ell = {radii[0],radii[0]};
+
+    const Functions::SignedDistance::Ellipsoid<dim> signed_distance_sphere(Point<dim>(0,0),radii_ell); 
+    //const Functions::SignedDistance::Rectangle<dim> signed_distance_sphere(Point<dim>(0.1,-0.1),Point<dim>(-0.1,0.1)); //TODO eigene function für cylinder bauen
+    VectorTools::interpolate(dof_handler_Omega_level_set,
+                             signed_distance_sphere,
+                             level_set);
+  //level_set.print(std::cout);
+  double min_ls = *std::min_element(level_set.begin(), level_set.end());
+double max_ls = *std::max_element(level_set.begin(), level_set.end());
+
+std::cout << "Level set range: " << min_ls << " " << max_ls << std::endl;
+
+NonMatching::MeshClassifier<dim> mesh_classifier(dof_handler_Omega_level_set, level_set);
+mesh_classifier.reclassify();
+  const QGauss<1> quadrature_1D(degree + 1);
+  
+      NonMatching::RegionUpdateFlags region_update_flags;
+      region_update_flags.inside = update_values | update_gradients |
+                                   update_JxW_values | update_quadrature_points;
+     region_update_flags.outside = update_values | update_gradients |
+                                   update_JxW_values | update_quadrature_points;                             
+      region_update_flags.surface = update_values | update_gradients |
+                                    update_JxW_values | update_quadrature_points |
+                                    update_normal_vectors;
+
+
+
+ NonMatching::FEValues<dim> non_matching_fe_values(fe_collection, quadrature_1D, region_update_flags, mesh_classifier,
+                                                        dof_handler_Omega_level_set, level_set);
+ NonMatching::FEValues<dim> non_matching_fe_values_trial(fe_collection, quadrature_1D, region_update_flags, mesh_classifier,
+                                                        dof_handler_Omega_level_set, level_set);
+
+for (const auto &cell_test : dof_handler_Omega.active_cell_iterators())
+{
+
+
+        cell_test->get_dof_indices(local_dof_indices_test);
+
+
+        non_matching_fe_values.reinit(cell_test);
+
+        const std::optional<NonMatching::FEImmersedSurfaceValues<dim>>
+          &surface_fe_values = non_matching_fe_values.get_surface_fe_values();
+
+          /*        const std::optional<FEValues<dim>> &inside_fe_values =
+          non_matching_fe_values.get_inside_fe_values();
+
+      
+                  const std::optional<FEValues<dim>> &outside_fe_values =
+          non_matching_fe_values.get_outside_fe_values();*/
+
+        if (surface_fe_values)
+          {
+            local_vector = 0;
+       
+            for (const unsigned int q_test :
+                 surface_fe_values->quadrature_point_indices())
+              {
+
+
+          Point<dim> quadrature_point_test_mapped_cell =
+          mapping.transform_real_to_unit_cell(cell_test,
+                                              surface_fe_values->quadrature_point(q_test));
+
+      std::vector<Point<dim>> my_quadrature_points_test = {
+          quadrature_point_test_mapped_cell};
+      const Quadrature<dim> my_quadrature_formula_test(
+          my_quadrature_points_test, my_quadrature_weights);
+      FEValues<dim> fe_values_coupling_test(
+          fe_Omega, my_quadrature_formula_test, update_flags_coupling);
+      fe_values_coupling_test.reinit(cell_test);
+
+
+
+                  //for (const unsigned int i : surface_fe_values->dof_indices())
+                  for (const unsigned int i : fe_values_coupling_test.dof_indices())
+                  {
+                          //double aa = surface_fe_values->shape_value_component(i, q, 0);
+                          //double bb = surface_fe_values->JxW(q);
+                         // std::cout<<i << " aa "<< aa<< " bb "<<bb<<std::endl;
+                        //  std::cout<<"fe_values_coupling_test[Potential].value(i, 0); "<<fe_values_coupling_test[Potential].value(i, 0)<<" surface_fe_values->JxW(q) "<<surface_fe_values->JxW(q)<<std::endl;
+                          local_vector(i) +=  g * fe_values_coupling_test[Potential].value(i, 0)*surface_fe_values->JxW(q_test);//surface_fe_values->shape_value_component(i, q, dim) *surface_fe_values->JxW(q);
+                  }
+
+
+
+
+
+         
+          for (const auto &cell_trial: dof_handler_Omega.active_cell_iterators())
+          {
+              cell_trial->get_dof_indices(local_dof_indices_trial);
+              non_matching_fe_values_trial.reinit(cell_trial);
+              const std::optional<NonMatching::FEImmersedSurfaceValues<dim>>
+                &surface_fe_values_trial = non_matching_fe_values_trial.get_surface_fe_values();
+        
+
+
+        if (surface_fe_values_trial)
+          {
+       
+            for (const unsigned int q_trial :
+                 surface_fe_values->quadrature_point_indices())
+              {
+
+          Point<dim> quadrature_point_trial_mapped_cell =
+          mapping.transform_real_to_unit_cell(cell_trial,
+                                              surface_fe_values_trial->quadrature_point(q_trial));
+
+      std::vector<Point<dim>> my_quadrature_points_trial = {
+          quadrature_point_trial_mapped_cell};
+      const Quadrature<dim> my_quadrature_formula_trial(
+          my_quadrature_points_trial, my_quadrature_weights);
+      FEValues<dim> fe_values_coupling_trial(
+          fe_Omega, my_quadrature_formula_trial, update_flags_coupling);
+      fe_values_coupling_trial.reinit(cell_trial);
+
+                V_U_matrix_coupling = 0;   
+                for (const unsigned int i : fe_values_coupling_test.dof_indices())
+                {
+                  for (const unsigned int j : fe_values_coupling_trial.dof_indices())
+                  { 
+               V_U_matrix_coupling(i, j) += g * 1/(2 * numbers::PI* radii[0] )* fe_values_coupling_trial[Potential].value(j, 0) * surface_fe_values_trial->JxW(q_trial) * 
+                fe_values_coupling_test[Potential].value(i, 0)*surface_fe_values->JxW(q_test);
+
+              //  std::cout<<V_U_matrix_coupling(i, j)<<std::endl;
+                  }
+                }
+               /* for(unsigned int bb = 0 ; bb < dofs_per_cell; bb++)
+                {
+                  std::cout<< local_dof_indices_test[bb]<< " "<<local_dof_indices_trial[bb]<<std::endl;
+                }*/
+                           constraints.distribute_local_to_global(
+                V_U_matrix_coupling, local_dof_indices_test,
+                local_dof_indices_trial, system_matrix);
+
+
+
+
+
+
+              }
+            }
+          }//(const auto &cell_trial: dof_handler_Omega.active_cell_iterators())*/
+    
+             } // for (const unsigned int q : surface_fe_values->quadrature_point_indices())
+                  constraints.distribute_local_to_global(
+                  local_vector, local_dof_indices_test, system_rhs);
+            }// if (surface_fe_values)
+}//for (const auto &cell_test : dof_handler_Omega.active_cell_iterators())
+
+
+#else
 #if ONEDIM_GAP
 //std::cout<<"quadrature_points_circle.size() "<<quadrature_points_circle.size()<<std::endl;
  for (unsigned int q_avag_test = 0; q_avag_test < quadrature_points_circle.size();//nof_quad_points;
@@ -2335,9 +2609,10 @@ pcout<<"g "<<g<<std::endl;
               
           }
           if(insideCell_test == false)
-                  std::cout<<q_avag_test<< " insideCell_test == false"<<std::endl;
-          
-         //std::cout<<"n_te * n_ftest "<< n_te <<" "<< n_ftest<<std::endl;
+          {
+              std::cout<<q_avag_test<< " insideCell_test == false"<<std::endl;
+              std::cout<<"n_te * n_ftest "<< n_te <<" "<< n_ftest<<std::endl;
+          }
           Point<dim> quadrature_point_test_mapped_cell =
           mapping.transform_real_to_unit_cell(cell_test,
                                               quadrature_point_test);
@@ -2559,12 +2834,16 @@ pcout<<"g "<<g<<std::endl;
           insideCell_trial = false;
         }
 
-        if(insideCell_trial == false)
+       if(insideCell_trial == false)
+       {
              std::cout<<q_avag<< " insideCell_trial == false"<<std::endl;
-      //  std::cout<<"cell_trial "<< cell_test <<" insideCell_test "<<insideCell_test <<" n_ftest "<<n_ftest<<" n_te "<<n_te<< 
+             std::cout<<"n_tr "<<n_tr <<" n_ftrial "<<n_ftrial<<" n_te "<< n_te <<" n_ftest "<< n_ftest<<std::endl;
+        }
+     
+             //  std::cout<<"cell_trial "<< cell_test <<" insideCell_test "<<insideCell_test <<" n_ftest "<<n_ftest<<" n_te "<<n_te<< 
        // " cell_trial "<< cell_trial <<" insideCell_trial "<<insideCell_trial <<" n_ftrial "<<n_ftrial<<" n_tr "<<n_tr<<std::endl;
 
- //std::cout<<"n_tr "<<n_tr <<" n_ftrial "<<n_ftrial<<" n_te "<< n_te <<" n_ftest "<< n_ftest<<std::endl;
+ 
         for (unsigned int ftest = 0; ftest < n_ftest; ftest++) {
 
           //std::cout<<"face_no_test[ftest] "<<face_no_test[ftest] <<std::endl;
@@ -2658,6 +2937,8 @@ pcout<<"g "<<g<<std::endl;
 #if ONEDIM_GAP
  } //q_avag < quadrature_points_circle.size() ONEDIM_GAP
 #endif
+#endif // INTEGRAL_HULL
+std::cout << "system_rhs_before "<<system_rhs_before<< " system_rhs_after "<< system_rhs.l1_norm()<<" RHS sum: " << system_rhs.l1_norm()- system_rhs_before  << " 2piR " <<  2*numbers::PI * radius<< " 2pihoch2R " <<  numbers::PI *2*numbers::PI * radius<<std::endl;
   } //geo 2D/0D
   
   if (geo_conf == GeometryConfiguration::TwoD_OneD || geo_conf == GeometryConfiguration::ThreeD_OneD) {
@@ -2879,9 +3160,10 @@ pcout<<"g "<<g<<std::endl;
               
               }
               if(insideCell_test == false)
-                      std::cout<<cell_omega<<" " <<q_avag_test<< " insideCell_test == false"<<std::endl;
-       //       std::cout<<" n_te "<< n_te<<" n_ftest "<<n_ftest<<std::endl;
-
+              {
+                  std::cout<<cell_omega<<" " <<q_avag_test<< " insideCell_test == false"<<std::endl;
+                  std::cout<<" n_te "<< n_te<<" n_ftest "<<n_ftest<<std::endl;
+              }
 
               Point<dim> quadrature_point_test_mapped_cell =
                   mapping.transform_real_to_unit_cell(cell_test,
