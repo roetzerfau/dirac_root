@@ -113,13 +113,14 @@
 #include <deal.II/fe/mapping_q1_eulerian.h>
 #include <deal.II/lac/vector_memory.h>
 
-
+#if INTEGRAL_HULL
 #include <deal.II/non_matching/fe_immersed_values.h>
 #include <deal.II/base/function_signed_distance.h>
  
 #include <deal.II/non_matching/fe_immersed_values.h>
 #include <deal.II/non_matching/fe_values.h>
 #include <deal.II/non_matching/mesh_classifier.h>
+#endif 
 
 #include <fstream>
 #include <iostream>
@@ -129,7 +130,7 @@
 #include <numeric> 
 
 #include "Functions.cc"
-#include "HDG_postprocessing.cc"
+//#include "HDG_postprocessing.cc"
 
 using namespace dealii;
 
@@ -1815,8 +1816,8 @@ if (global_error_flag) {
    pcout<<"Sparsity "  <<sp_block.n_rows()<<"x"<<sp_block.n_cols()<<"="<<yy*yy<<" n_nonzero_elements " <<sp_block.n_nonzero_elements()<<" (perc) "
    <<(float)sp_block.n_nonzero_elements()/(yy * yy)<<std::endl;
 #if MEMORY_CONSUMPTION
-   std::cout<<"mpi_rank "<<rank_mpi<<" sparsity memory "<<sp_block.memory_consumption()/(1024*1024)<<" MB"<<std::endl;
-   std::cout<<"mpi_rank "<<rank_mpi<<" dof_handler_Omega "<<dof_handler_Omega.memory_consumption()/(1024*1024)<<" MB"<<std::endl;
+  // std::cout<<"mpi_rank "<<rank_mpi<<" sparsity memory "<<sp_block.memory_consumption()/(1024*1024)<<" MB"<<std::endl;
+  // std::cout<<"mpi_rank "<<rank_mpi<<" dof_handler_Omega "<<dof_handler_Omega.memory_consumption()/(1024*1024)<<" MB"<<std::endl;
 #endif
    //pcout<<"start reinit"<<std::endl;
   // memory_consumption("before system_matrix reinit");
@@ -4711,9 +4712,7 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
   
 
-  double errorU_postprocessed = post_process<dim>(triangulation, degree, update_flags, fe_Omega, dof_handler_Omega, solution.block(0),
-  VectorField, Potential,
-  alpha, radius, h_min);
+  //double errorU_postprocessed = post_process<dim>(triangulation, degree, update_flags, fe_Omega, dof_handler_Omega, solution.block(0),VectorField, Potential,  alpha, radius, h_min);
 
 
 
@@ -4724,7 +4723,7 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
   output_results();
   //std::array<double, 4> results_array;
 results_array_post[0] = results_array[0];
-results_array_post[1] = errorU_postprocessed;
+results_array_post[1] =0;
 results_array_post[2] = results_array[1];
 results_array_post[3] = results_array[2];
 results_array_post[4] = results_array[3];

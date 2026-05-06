@@ -13,10 +13,10 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 0 //wenn coupled = 1, vessel muss = 0
-#define VESSEL 1
+#define COUPLED 1 //wenn coupled = 1, vessel muss = 0
+#define VESSEL 0
 #define ONEDIM_GAP 1
-#define INTEGRAL_HULL 1
+#define INTEGRAL_HULL 0
 
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
@@ -31,7 +31,7 @@
 #define ANISO 1
 #define PAPER_SOLUTION 1 //1: paper dangelo, O: thesis, 1 funktionert besser 
 
-#define SOLUTION_SPACE 1//2
+#define SOLUTION_SPACE 3//2
 
 
 using namespace dealii;
@@ -41,7 +41,7 @@ const double w = numbers::PI * 3 / 2;
 // ThreeD_OneD: GRADEDMESH 0, SOLUTION_SPACE 0, lumpedAverages[n_LA] = {true}
 //
 
-const double extent = std::sqrt(0.5)*2;//std::sqrt(0.5)*2;                 2D/0D: extent=std::sqrt(0.5)*2, r = 0.4
+const double extent = 1;//std::sqrt(0.5)*2;//std::sqrt(0.5)*2;                 2D/0D: extent=std::sqrt(0.5)*2, r = 0.4
 enum GeometryConfiguration
 {
   TwoD_ZeroD = 0, //constructed solution 3 (omega wird unabhängig davon auch noch ausgerechnet)
@@ -51,18 +51,18 @@ enum GeometryConfiguration
 const bool is_omega_on_face = true;
 constexpr double y_l = is_omega_on_face ? 0.0 : 0.05;//0.00001   0.002
 constexpr double z_l =  is_omega_on_face ? 0.0 : 0.05; //0.00001  0.002
-constexpr unsigned int geo_conf{0};
+constexpr unsigned int geo_conf{2};
 constexpr unsigned int dimension_Omega = geo_conf == ThreeD_OneD ? 3 : 2;
 constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt sich auf), 3: dangelo thesis log, PAPER_SOLUTION funktion on omega
 
 //Todo https://dealii.org/current/doxygen/deal.II/classNonMatching_1_1ImmersedSurfaceQuadrature.html
 
-const unsigned int refinement[7] = {2,3,4,5,6,7,8};//,7,8,9,10
+const unsigned int refinement[3] = {5,6,7};//,7,8,9,10
 const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
-const double radii[n_r] = {0.4};//0.4   0.2 //0.5
+const double radii[n_r] = {0.05};//0.4   0.2 //0.5
 const double D = 1;
 const double penalty_sigma = 5;//10
 
