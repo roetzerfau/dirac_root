@@ -113,17 +113,13 @@
 #include <deal.II/fe/mapping_q1_eulerian.h>
 #include <deal.II/lac/vector_memory.h>
 
-#include "Functions.cc"
-#include "HDG_postprocessing.cc"
 
-#if INTEGRAL_HULL
 #include <deal.II/non_matching/fe_immersed_values.h>
 #include <deal.II/base/function_signed_distance.h>
  
 #include <deal.II/non_matching/fe_immersed_values.h>
 #include <deal.II/non_matching/fe_values.h>
 #include <deal.II/non_matching/mesh_classifier.h>
-#endif 
 
 #include <fstream>
 #include <iostream>
@@ -132,7 +128,8 @@
 #include <sys/resource.h>
 #include <numeric> 
 
-
+#include "Functions.cc"
+#include "HDG_postprocessing.cc"
 
 using namespace dealii;
 
@@ -902,18 +899,19 @@ if( is_repartioned)
 
    // if (cell->is_locally_owned()) //weil mpi danach nochmal sortiert wird das hier auskommentieren
     {
-  
+
     double cell_diameter = cell->diameter(); 
     
     if (cell_diameter > max_diameter) {
       max_diameter = cell_diameter;
     }
    
-    for (unsigned int face_no = 0; face_no < GeometryInfo<dim>::faces_per_cell;
+    for (unsigned int face_no = 0; face_no <GeometryInfo<dim>::faces_per_cell;// 
          face_no++) {
       Point<dim> p = cell->face(face_no)->center();
       if (cell->face(face_no)->at_boundary()) {
        double error = 0.000001;
+         
         if((std::abs(p[0] - 0)< error || std::abs(p[0] - 2 * half_length_along_omega)<error) && (geo_conf == GeometryConfiguration::ThreeD_OneD || geo_conf == GeometryConfiguration::TwoD_OneD )&& (constructed_solution >= 2)) {//
         cell->face(face_no)->set_boundary_id(Neumann);
          //pcout<<"Neumann"<<std::endl;
@@ -1639,7 +1637,7 @@ const FE_Q<dim> fe_level_set(degree);
     level_set.reinit(dof_handler_Omega.n_dofs());
  std::array< double, dim > radii_ell = {radii[0],radii[0]};
 
-    const Functions::SignedDistance::Ellipsoid<dim> signed_distance_sphere(Point<dim>(0,0),radii_ell); 
+    const Functions::SignedDistance::Ellipsoid<dim> signed_distance_sphere(quadrature_point_coupling,radii_ell); 
     VectorTools::interpolate(dof_handler_Omega_level_set,
                              signed_distance_sphere,
                              level_set);
@@ -1818,8 +1816,8 @@ if (global_error_flag) {
    pcout<<"Sparsity "  <<sp_block.n_rows()<<"x"<<sp_block.n_cols()<<"="<<yy*yy<<" n_nonzero_elements " <<sp_block.n_nonzero_elements()<<" (perc) "
    <<(float)sp_block.n_nonzero_elements()/(yy * yy)<<std::endl;
 #if MEMORY_CONSUMPTION
-  // std::cout<<"mpi_rank "<<rank_mpi<<" sparsity memory "<<sp_block.memory_consumption()/(1024*1024)<<" MB"<<std::endl;
-  // std::cout<<"mpi_rank "<<rank_mpi<<" dof_handler_Omega "<<dof_handler_Omega.memory_consumption()/(1024*1024)<<" MB"<<std::endl;
+   std::cout<<"mpi_rank "<<rank_mpi<<" sparsity memory "<<sp_block.memory_consumption()/(1024*1024)<<" MB"<<std::endl;
+   std::cout<<"mpi_rank "<<rank_mpi<<" dof_handler_Omega "<<dof_handler_Omega.memory_consumption()/(1024*1024)<<" MB"<<std::endl;
 #endif
    //pcout<<"start reinit"<<std::endl;
   // memory_consumption("before system_matrix reinit");
@@ -2300,7 +2298,7 @@ g = D * 2 * numbers::PI * radius;//1/(2 * numbers::PI * radius); *D
 if(dim == 2 && constructed_solution == 1)
 g = 0;
 #if INTEGRAL_HULL
-g = 1;
+g = 1 * D;
 #endif
 //  g = 1;
 pcout<<"g "<<g<<std::endl;
@@ -2368,7 +2366,7 @@ const FE_Q<dim> fe_level_set(degree);
     level_set.reinit(dof_handler_Omega.n_dofs());
  std::array< double, dim > radii_ell = {radii[0],radii[0]};
 
-    const Functions::SignedDistance::Ellipsoid<dim> signed_distance_sphere(Point<dim>(0,0),radii_ell); 
+    const Functions::SignedDistance::Ellipsoid<dim> signed_distance_sphere(quadrature_point_coupling,radii_ell); 
     //const Functions::SignedDistance::Rectangle<dim> signed_distance_sphere(Point<dim>(0.1,-0.1),Point<dim>(-0.1,0.1)); //TODO eigene function für cylinder bauen
     VectorTools::interpolate(dof_handler_Omega_level_set,
                              signed_distance_sphere,
@@ -2438,8 +2436,14 @@ for (const auto &cell_test : dof_handler_Omega.active_cell_iterators())
       FEValues<dim> fe_values_coupling_test(
           fe_Omega, my_quadrature_formula_test, update_flags_coupling);
       fe_values_coupling_test.reinit(cell_test);
-
-
+     
+     
+    /* std::cout<<fe_values_coupling_test.get_quadrature_points()[0]<< " "<<surface_fe_values->quadrature_point(q_test)<<std::endl;  
+      if(fe_values_coupling_test.get_quadrature_points()[0].distance(surface_fe_values->quadrature_point(q_test)) > 0.00000001)
+      {
+          std::cerr << "quadrature_point_test wrong " <<fe_values_coupling_test.get_quadrature_points()[0].distance(surface_fe_values->quadrature_point(q_test))<< std::endl;
+            throw std::runtime_error("Falsch");  
+      }*/
 
                   //for (const unsigned int i : surface_fe_values->dof_indices())
                   for (const unsigned int i : fe_values_coupling_test.dof_indices())
@@ -4714,7 +4718,9 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
   
 
-  double errorU_postprocessed = post_process<dim>(triangulation, degree, update_flags, fe_Omega, dof_handler_Omega, solution.block(0),VectorField, Potential,  alpha, radius, h_min);
+  double errorU_postprocessed = post_process<dim>(triangulation, degree, update_flags, fe_Omega, dof_handler_Omega, solution.block(0),
+  VectorField, Potential,
+  alpha, radius, h_min);
 
 
 

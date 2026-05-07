@@ -41,7 +41,7 @@ const double w = numbers::PI * 3 / 2;
 // ThreeD_OneD: GRADEDMESH 0, SOLUTION_SPACE 0, lumpedAverages[n_LA] = {true}
 //
 
-const double extent = std::sqrt(0.5)*2;//std::sqrt(0.5)*2;                 2D/0D: extent=std::sqrt(0.5)*2, r = 0.4
+const double extent = 2;//std::sqrt(0.5)*2;//std::sqrt(0.5)*2;                 2D/0D: extent=std::sqrt(0.5)*2, r = 0.4
 enum GeometryConfiguration
 {
   TwoD_ZeroD = 0, //constructed solution 3 (omega wird unabhängig davon auch noch ausgerechnet)
@@ -62,8 +62,8 @@ const unsigned int p_degree[1] = {1};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
-const double radii[n_r] = {0.4};//0.4   0.2 //0.5
-const double D = 1;
+const double radii[n_r] = {0.25};//0.4   0.2 //0.5
+const double D = 0.1;
 const double penalty_sigma = 5;//10
 
 #if !PAPER_SOLUTION || (!COUPLED && !VESSEL)
