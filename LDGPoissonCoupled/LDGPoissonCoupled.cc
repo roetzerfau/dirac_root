@@ -4796,7 +4796,7 @@ int main(int argc, char *argv[]) {
       std::string solution_linear_string = std::to_string(SOLUTION_SPACE);
       std::string onedim_gap_string = ONEDIM_GAP == 1 ? "true" : "false";;
 
-      std::string name =  "_24_04_finalResults_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
+      std::string name =  "_13_05_finalResults_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
       "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_paper_solution_" + paperSolution_string +"_solution_linear_" + solution_linear_string +
        "_vessel_" + vessel_string +  "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + 
        "_rad_" + radius_string + "_D_" + D_string + "_penalty_" + std::to_string(penalty_sigma) + "_onedim_gap_"+ onedim_gap_string;
@@ -4896,14 +4896,15 @@ if(rank_mpi == 0)
 	  std::string filename = "cvg_res_unsrtd" + name + "_r_" + std::to_string(refinement[r]) + "_p_" + std::to_string(p_degree[p]);
 	  csvfile_unsrtd.open(folderName + filename + ".csv");
             
-            csvfile_unsrtd<<name<<";r "<<refinement[r]<<";h " <<max_diameter[r]<<";#c "<<nof_cells[r]<< ";p "<<p_degree[p]<< ";U " << arr[0] << ";Q " << arr[1]
-                    << ";u " << arr[2] << ";q " << arr[3] << "; \n";
+            csvfile_unsrtd<<name<<";r "<<refinement[r]<<";h " <<max_diameter[p][r]<<";#c "<<nof_cells[p][r]<< ";p "<<p_degree[p]<< 
+            ";U " << arr[0] << ";U_star " << arr[1] << ";Q " << arr[2] << ";u " << arr[3] << ";q " 
+            << arr[4]<< ";h_omega " <<max_diameter_omega[p][r]<<";#c_omega "<<nof_cells_omega[p][r]<< "; \n";
             csvfile_unsrtd.close();
             std::cout<<"file written"<<std::endl;
           }
         
-        }
-      }
+        // } // for (unsigned int p = 0; p < p_degree_size; p++)
+     // } //  for (unsigned int r = 0; r < refinement_size; r++)
 
       if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
         
@@ -5002,9 +5003,13 @@ if(rank_mpi == 0)
         }
 
 
-      }
-    }
-  }
+      } // if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) 
+         } // for (unsigned int p = 0; p < p_degree_size; p++)
+      } //  for (unsigned int r = 0; r < refinement_size; r++)
+
+      
+    } // for (unsigned int LA = 0; LA < n_LA; LA++) {
+  } //  for (unsigned int rad = 0; rad < n_r; rad++) 
 
 
   return 0;

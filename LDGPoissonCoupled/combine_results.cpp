@@ -26,7 +26,7 @@ void read_csvfile_unsrtd(const fs::path &file_path, std::vector<ResultData> &res
         std::cerr << "Error opening file: " << file_path << std::endl;
         return;
     }
-
+std::cout<<file_path<<std::endl;
     std::string line;
     while (std::getline(file, line)) {
         ResultData data;
@@ -42,11 +42,21 @@ void read_csvfile_unsrtd(const fs::path &file_path, std::vector<ResultData> &res
         data.refinement = std::stoi(line.substr(0, pos).substr(2)); // skip "r "
         line.erase(0, pos + 1);
 
+         pos = line.find(';');
+        double h =  std::stoi(line.substr(0, pos).substr(2)); // skip "r "
+        std::cout<<"h "<<h<<std::endl;
+        line.erase(0, pos + 1);
+
+         pos = line.find(';');
+       // data.cells = std::stoi(line.substr(0, pos).substr(2)); // skip "r "
+        line.erase(0, pos + 1);
+
+
         // Parse `p_degree`
         pos = line.find(';');
         data.p_degree = std::stoi(line.substr(0, pos).substr(2)); // skip "p "
         line.erase(0, pos + 1);
-
+std::cout<<"data.p_degree  "<<data.p_degree <<std::endl;
         // Parse `U`
         pos = line.find(';');
         data.U = std::stod(line.substr(2, pos)); // skip "U "
@@ -132,14 +142,14 @@ int main(int argc, char *argv[]) {
 
     fs::path input_directory = argv[1];
     std::vector<ResultData> combined_results;
-
+std::cout<<"traverse"<<std::endl;
     // Traverse directory and read each csvfile_unsrtd
     for (const auto &entry : fs::directory_iterator(input_directory)) {
         if (entry.is_regular_file() && entry.path().string().find("cvg_res_unsrtd") != std::string::npos) {
             read_csvfile_unsrtd(entry.path(), combined_results);
         }
     }
-
+    std::cout<<"write combined resulst"<<std::endl;
     // Output combined results
     write_combined_results(combined_results, "combined_convergence_results.csv");
 
