@@ -13,10 +13,10 @@
 #include <numbers>
 // std::numbers::PI
 
-#define COUPLED 1//wenn coupled = 1, vessel muss = 0
+#define COUPLED  1 //wenn coupled = 1, vessel muss = 0
 #define VESSEL 0
 #define ONEDIM_GAP 1
-#define INTEGRAL_HULL 0
+#define INTEGRAL_HULL 1 
 
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
@@ -57,12 +57,12 @@ constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt si
 
 //Todo https://dealii.org/current/doxygen/deal.II/classNonMatching_1_1ImmersedSurfaceQuadrature.html
 
-const unsigned int refinement[4] = {1,2,3,4};//,7,8,9,10
-const unsigned int p_degree[1] = {1};
+const unsigned int refinement[7] = {1,2,3,4,5,6,7};//,7,8,9,10
+const unsigned int p_degree[3] = {0,1,2};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;
-const double radii[n_r] = {0.05};//0.4   0.2 //0.5
+const double radii[n_r] = {0.05}; //0.4   0.2 //0.5
 const double D = 1;
 const double penalty_sigma = 5;//10
 
@@ -1323,4 +1323,55 @@ equidistant_points_on_circle(const Point<dim> &center, double radius,
     return cells_and_points;
   }
 
+
+namespace FunctionsOwn
+{
+  namespace SignedDistanceOwn
+  {
+    template <int dim>
+    class Cylinder : public Function<dim>
+    {
+    public:
+      Cylinder(const Point<dim> &point_on_axis,
+               const Tensor<1, dim> &axis_direction,
+               const double radius)
+        : Function<dim>(1)
+        , center(point_on_axis)
+        , axis(unit_vector(axis_direction))
+        , radius(radius)
+      {}
+
+      virtual double
+      value(const Point<dim> &p,
+            const unsigned int component = 0) const override
+      {
+        AssertIndexRange(component, 1);
+
+        // vector from axis point to query point
+        Tensor<1, dim> d = p - center;
+
+        // projection onto cylinder axis
+        const double axial_distance = d * axis;
+
+        // closest point on axis
+        Tensor<1, dim> radial =
+          d - axial_distance * axis;
+
+        // signed distance
+        return radial.norm() - radius;
+      }
+
+    private:
+      Tensor<1, dim>
+      unit_vector(const Tensor<1, dim> &v) const
+      {
+        return v / v.norm();
+      }
+
+      const Point<dim> center;
+      const Tensor<1, dim> axis;
+      const double radius;
+    };
+  }
+}
 
