@@ -8,9 +8,19 @@ import math
 #with open("convergence_results_test_coupled_25_05_finalResults_cons_sol_3_geoconfig_2_gradedMesh_true_coupled_true_paper_solution_true_solution_linear_1_vessel_false_omegaonface_true_LA_false_rad_0.001000_D_1.000000_penalty_10.000000.txt", "r") as f:
 #with open("convergence_results_test_coupled_21_05_finalResults_cons_sol_3_geoconfig_2_gradedMesh_true_coupled_true_paper_solution_true_solution_linear_1_vessel_false_omegaonface_true_LA_false_rad_0.001000_D_1.000000_penalty_10.000000.txt", "r") as f:
 #with open("convergence_results_test_coupled_22_05_finalResults_cons_sol_1_geoconfig_2_gradedMesh_true_coupled_true_paper_solution_true_solution_linear_2_vessel_false_omegaonface_true_LA_false_rad_0.001000_D_1.000000_penalty_10.000000.txt", "r") as f:
-with open("convergence_results_uncoupled_12_05_finalResults_cons_sol_3_geoconfig_0_gradedMesh_false_coupled_false_paper_solution_true_solution_linear_3_vessel_true_omegaonface_true_LA_false_rad_0.250000_D_0.100000_penalty_5.000000_onedim_gap_true.txt", "r") as f:
 
+
+#with open("convergence_results_uncoupled_12_05_finalResults_cons_sol_3_geoconfig_0_gradedMesh_false_coupled_false_paper_solution_true_solution_linear_3_vessel_true_omegaonface_true_LA_false_rad_0.250000_D_0.100000_penalty_5.000000_onedim_gap_true.txt", "r") as f:
+name = "convergence_results_uncoupled_12_05_finalResults_cons_sol_3_geoconfig_0_gradedMesh_false_coupled_false_paper_solution_true_solution_linear_3_vessel_true_omegaonface_true_LA_false_rad_0.250000_D_0.100000_penalty_5.000000_onedim_gap_true.txt"
+#name = "convergence_results_test_coupled_16_05_finalResults_cons_sol_3_geoconfig_2_gradedMesh_false_coupled_true_paper_solution_true_solution_linear_3_vessel_false_omegaonface_true_LA_false_rad_0.050000_D_1.000000_penalty_5.000000_onedim_gap_true.txt"
+match = re.search(r'geoconfig_(\d+)', name)
+
+geocfg = int(match.group(1))
+#print("Number after geoconfig:", geocfg)
+
+with open(name, "r") as f:
     content = f.read()
+
 
 # Split by sections
 sections = content.strip().split("\n\n")
@@ -26,6 +36,7 @@ for section in sections:
         #print(i,p)
         h_array, error_array = [], []
         for j,line in enumerate(lines[2:]):
+            
             p_parts = line.split(",")
         
             part = p_parts[i]
@@ -44,23 +55,32 @@ for section in sections:
                 print("j")
                 err = np.nan
             #if(p != 2 or j !=4):
+
+            if(err == 0):
+                #print(j)
+                break
             h_array.append(h)
             error_array.append(err)
+
+        #print(np.array(error_array))            
         if(i == 0):
             data_dict[title]={"h_p" + str(int(p)): np.array(h_array), "error_p"+ str(int(p)): np.array(error_array)}
         else:
             data_dict[title].update({"h_p" + str(int(p)): np.array(h_array), "error_p"+ str(int(p)): np.array(error_array)})
         #print(error_array)
 # Plotting setup
-#fig, axs = plt.subplots(2, 2, figsize=(9, 7))
-fig, axs = plt.subplots(1, 2, figsize=(9, 3.5))
+if(geocfg == 2):
+    fig, axs = plt.subplots(2, 2, figsize=(9, 7))
+else:
+    fig, axs = plt.subplots(1, 2, figsize=(9, 3.5))
 axs = axs.flatten()
 
 colors = ['orangered', 'orange', 'blue', 'purple']
 titles = list(data_dict.keys())
 #print(titles)
-titles.pop()
-titles.pop()
+if(geocfg == 0):
+    titles.pop()
+    titles.pop()
 titles.remove('U_star_Omega')
 for i, key in enumerate(titles):
     ax = axs[i]
@@ -75,6 +95,10 @@ for i, key in enumerate(titles):
         ax.set_title(r"$\Vert U_h-U \Vert_{L^2(\Omega)}$", fontsize=12)
     elif (key == "Q_Omega"):
         ax.set_title(r"$\Vert \mathbf{Q}_h-\mathbf{Q} \Vert_{L^2(\Omega)}$", fontsize=12)
+    elif(key== "u_omega"):
+        ax.set_title(r"$\Vert u_h-u \Vert_{L^2(\omega)}$", fontsize=12)
+    elif (key == "q_omega"):
+        ax.set_title(r"$\Vert \mathbf{q}_h-\mathbf{q} \Vert_{L^2(\omega)}$", fontsize=12)
     else:
         ax.set_title(key, fontsize=12)
 
@@ -98,7 +122,7 @@ for i, key in enumerate(titles):
 
     # Draw a triangle showing the slope visually
 # Triangle base from x1 to x2
-    if(key == "U_Omega" or key == "Q_Omega" or key == "u_omega"):
+    if(key == "U_Omega" or key == "Q_Omega" or key == "u_omega" or key == "q_omega"):
         d = data_dict[key]
         diffx = abs(math.log10(d["h_p0"][-2]) - math.log10(d["h_p0"][-3]))
         
@@ -108,9 +132,9 @@ for i, key in enumerate(titles):
         y1_exponent = math.log10(d["error_p1"][-2])#math.log10(d["error_p0"][-2]) - abs(math.log10(d["error_p0"][-2])-math.log10(d["error_p1"][-2]))/2
         y1 = pow(10, y1_exponent) #pow(10,-8)
         con_ord = 1
-        if (key == "U_Omega"):
+        if (key == "U_Omega" or key == "u_omega"):
             con_ord = 2
-        elif(key == "Q_Omega"):
+        elif(key == "Q_Omega" or key == "q_omega" ):
             con_ord = 1
         else:
             con_ord = 1
@@ -140,7 +164,7 @@ for i, key in enumerate(titles):
         #print("Inkreismittelpunkt:", ix, iy)
 
 
-        ax.text(x2, y2, rf"$\sim h^{con_ord}$", fontsize=12)
+        ax.text(x1, y2, rf"$\sim h^{con_ord}$", fontsize=12)
     else:
         x1 = pow(10,-1.5)
         x2 = pow(10,-1.25)

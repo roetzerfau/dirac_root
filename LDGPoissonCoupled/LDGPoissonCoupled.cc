@@ -819,11 +819,12 @@ grid_out.write_vtk(triangulation, out);
 
   Point<dim> corner1, corner2;
 double margin = 1.0;
-double h = minimal_cell_diameter * 2;
+double h = minimal_cell_diameter;
 if(dim == 3)
 {
 corner1 =  Point<dim>(0, - (margin*radius + h), - (margin*radius + h));//2*radius
-corner2 =  Point<dim>(2 * half_length_along_omega,  (margin*radius + h),  (margin*radius + h));//radius
+corner2 =  Point<dim>(2* half_length_along_omega,  (margin*radius + h),  (margin*radius + h));//radius
+std::cout<<"Corners "<<corner1<< " "<<corner2<<std::endl;
 }
 if (dim == 2 && geo_conf== GeometryConfiguration::TwoD_ZeroD )
 {
@@ -930,7 +931,7 @@ if( is_repartioned)
     cell_number++;
   }
   max_diameter = GridTools::maximal_cell_diameter(triangulation);
-  pcout<<" is_cell_inside_box "<<cells_inside_box.size()<<std::endl;//TODOD einfach zu viele Einträge um in Sparsity matrix reinzumachen
+  pcout<<" cells_inside_box "<<cells_inside_box.size()<<"cells in total "<< global_active_cells<<std::endl;//TODOD einfach zu viele Einträge um in Sparsity matrix reinzumachen
 if(is_repartioned)
 {
   pcout<<"Cell connection graph "<<std::endl;
@@ -998,6 +999,45 @@ if(is_repartioned)
  //GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),cell_connection_graph,triangulation, SparsityTools::Partitioner::zoltan );
  GridTools::partition_triangulation(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD), cell_connection_graph,triangulation, SparsityTools::Partitioner::zoltan );
  //GridTools::partition_triangulation_zorder(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD),triangulation);
+
+
+
+
+
+
+ const unsigned int my_rank = rank_mpi;
+
+  // Create a copy because GridOut writes material/subdomain ids
+  // from the triangulation object.
+  Triangulation<dim> tria_copy;
+  tria_copy.copy_triangulation(triangulation);
+
+  // Mark each active cell with its subdomain id
+  for (const auto &cell : tria_copy.active_cell_iterators())
+    {
+      // If you used GridTools::partition_triangulation(),
+      // subdomain_id() already stores the partition.
+      cell->set_material_id(cell->subdomain_id());
+    }
+
+  GridOut grid_out;
+
+  // VTU output: easiest to visualize in ParaView
+  {
+    std::ofstream out("partitioning_rank_" +
+                      Utilities::int_to_string(my_rank, 4) + ".vtu");
+
+    grid_out.write_vtu(tria_copy, out);
+  }
+
+
+
+
+
+
+
+
+
  }  
 
 
@@ -1271,16 +1311,17 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
   U  1
   
   */
+
   Table< 2, DoFTools::Coupling >	cell_integrals_mask_Omega(dim +1, dim +1);
   for (unsigned int c = 0; c < dim + 1; c++)
   {
     for (unsigned int d = 0; d < dim + 1; d++)
     {
-       if ((c < dim && (c == d  || d == dim)) || (c == dim && d < dim)) //coupling between scalar values with its test functions (for dimension coupling)  
-        //if(c == d)  
+       //if(c == d)
+       if ((c < dim && (c == d  || d == dim)) || (c == dim && d < dim)) //coupling between scalar values with its test functions (for dimension coupling)    
            cell_integrals_mask_Omega[c][d] = DoFTools::nonzero; //coupling between each entry of vector values and with pressure
-        //else
-        // cell_integrals_mask_Omega[c][d] = DoFTools::none;
+        else
+          cell_integrals_mask_Omega[c][d] = DoFTools::none;
         pcout<<cell_integrals_mask_Omega[c][d]<< " ";
     }
     pcout<<std::endl;
@@ -1292,9 +1333,9 @@ TrilinosWrappers::BlockSparsityPattern sp_block=  TrilinosWrappers::BlockSparsit
     for (unsigned int d = 0; d < dim + 1; ++d)
     {
         if (c == dim || d == dim ) //coupling between scalar values with its test functions (for dimension coupling) and with vector values
-         face_integrals_mask_Omega[c][d] = DoFTools::nonzero; 
-        //else
-         //face_integrals_mask_Omega[c][d] = DoFTools::none;
+           face_integrals_mask_Omega[c][d] = DoFTools::nonzero; 
+        else
+           face_integrals_mask_Omega[c][d] = DoFTools::none;
         pcout<<face_integrals_mask_Omega[c][d]<< " ";
     }
   pcout<<std::endl;
@@ -1412,7 +1453,8 @@ mesh_classifier.reclassify();
 for (const auto &cell_test : dof_handler_Omega.active_cell_iterators())
 {
 
-
+  if (cell_test->is_locally_owned())
+  {
         cell_test->get_dof_indices(local_dof_indices_test);
 
 
@@ -1562,6 +1604,7 @@ for (const auto &cell_test : dof_handler_Omega.active_cell_iterators())
              } // for (const unsigned int q : surface_fe_values->quadrature_point_indices())
               
             }// if (surface_fe_values)
+    }//if (cell_test->is_locally_owned())
 }//for (const auto &cell_test : dof_handler_Omega.active_cell_iterators())
 
 //coupling in omega
@@ -2133,19 +2176,24 @@ for (const auto &cell_test : dof_handler_Omega.active_cell_iterators())
 #endif
 #endif //INTEGRAL_HULL 
   }
-
-
   #endif
  MPI_Allreduce(&error_flag, &global_error_flag, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
-if (global_error_flag) {
+
+std::cout<<"global_error_flag "<<global_error_flag<<std::endl;
+ if (global_error_flag) {
        // printf("Process exiting function due to global error.\n");
+      // MPI_Abort(MPI_COMM_WORLD, 1);
         throw std::runtime_error("cell coupling error");
+        
   }
   pcout<<"start to compress"<<std::endl;
 
 
   sp_block.compress();
-  
+  uint64_t zz_spblock = uint64_t (sp_block.n_rows());
+  pcout<<"Size  spBlock"  <<sp_block.n_rows()<<"x"<<sp_block.n_cols()<<"="<<zz_spblock * zz_spblock<<" n_nonzero_elements " <<sp_block.n_nonzero_elements()<<" (perc) "
+   <<(float)sp_block.n_nonzero_elements()/(zz_spblock * zz_spblock)<<std::endl;
+
  std::ofstream out("sparsity_pattern2" +std::to_string(n_refine)+ ".txt");
  //sp_block.block(0,0).print(out);
 
@@ -2159,6 +2207,7 @@ if (global_error_flag) {
    //pcout<<"start reinit"<<std::endl;
   // memory_consumption("before system_matrix reinit");
   system_matrix.reinit(sp_block);
+
 #if MEMORY_CONSUMPTION
   std::cout<<"mpi_rank "<<rank_mpi<<" memory system_matrix "<<system_matrix.memory_consumption()/(1024*1024)<<" MB"<<std::endl;
 #endif
@@ -3389,7 +3438,8 @@ mesh_classifier.reclassify();
 for (const auto &cell_test : dof_handler_Omega.active_cell_iterators())
 {
 
-
+ if(cell_test->is_locally_owned())
+ {
         cell_test->get_dof_indices(local_dof_indices_test);
 
 
@@ -3751,6 +3801,7 @@ for (const auto &cell_test : dof_handler_Omega.active_cell_iterators())
                  // constraints.distribute_local_to_global(
                  // local_vector, local_dof_indices_test, system_rhs);
             }// if (surface_fe_values)
+          } // if(cell_test->is_locally_owned())  
 }//for (const auto &cell_test : dof_handler_Omega.active_cell_iterators())
 
 
@@ -5763,8 +5814,8 @@ void LDGPoissonProblem<dim, dim_omega>::memory_consumption(std::string _name) {
 template <int dim, int dim_omega>
 std::array<double, 5> LDGPoissonProblem<dim, dim_omega>::run() {
   pcout << "******************* REFINE " << n_refine << "  DEGREE  " << degree << " ***********************" <<std::endl;
-  std::cout<<"testing "<<std::log(0)<<std::endl;
-  std::cout<<"testing2 "<<std::numeric_limits<double >::max()<<std::endl;
+  //std::cout<<"testing "<<std::log(0)<<std::endl;
+  //std::cout<<"testing2 "<<std::numeric_limits<double >::max()<<std::endl;
   dimension_gap = dim - dim_omega;
   pcout << "geometric configuration "<<geo_conf <<"<< dim_Omega: "<< dim <<", dim_omega: "<<dim_omega<< " -> dimension_gap "<<dimension_gap<<std::endl; 
 rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
@@ -5787,20 +5838,20 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
   
 
-  double errorU_postprocessed = post_process<dim>(triangulation, degree, update_flags, fe_Omega, dof_handler_Omega, solution.block(0),
-  VectorField, Potential,
-  alpha, radius, h_min);
-
+ // double errorU_postprocessed = post_process<dim>(triangulation, degree, update_flags, fe_Omega, dof_handler_Omega, solution.block(0), VectorField, Potential, alpha, radius, h_min);
+// std::cout<<"post process rank "<<rank_mpi<<std::endl;
 
 
 
   std::array<double, 4> results_array = compute_errors();
+
  std::array<double, 5> results_array_post;
   //results_array[0] = errorU_postprocessed;
-  output_results();
+  if(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD) == 1)
+     output_results();
   //std::array<double, 4> results_array;
 results_array_post[0] = results_array[0];
-results_array_post[1] = errorU_postprocessed;
+results_array_post[1] = 0 ;//errorU_postprocessed;
 results_array_post[2] = results_array[1];
 results_array_post[3] = results_array[2];
 results_array_post[4] = results_array[3];

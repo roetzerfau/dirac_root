@@ -16,12 +16,12 @@
 #define COUPLED  1 //wenn coupled = 1, vessel muss = 0
 #define VESSEL 0
 #define ONEDIM_GAP 1
-#define INTEGRAL_HULL 1 
+#define INTEGRAL_HULL 1
 
 #define TEST 1
 #define SOLVE_BLOCKWISE 1
 #define GRADEDMESH 0
-#define MEMORY_CONSUMPTION 1
+#define MEMORY_CONSUMPTION 0
 
 #define USE_MPI_ASSEMBLE 1
 #define FASTER 1 //nur verfügbar bei der aktuellsten dealii version
@@ -57,8 +57,8 @@ constexpr unsigned int constructed_solution{3};   // 1:sin cos (Kopplung hebt si
 
 //Todo https://dealii.org/current/doxygen/deal.II/classNonMatching_1_1ImmersedSurfaceQuadrature.html
 
-const unsigned int refinement[7] = {1,2,3,4,5,6,7};//,7,8,9,10
-const unsigned int p_degree[3] = {0,1,2};
+const unsigned int refinement[3] = {6,7,8};//,7,8,9,10
+const unsigned int p_degree[3] = {1,2,3};
 
 const unsigned int n_r = 1;
 const unsigned int n_LA = 1;

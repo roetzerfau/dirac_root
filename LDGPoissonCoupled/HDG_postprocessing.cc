@@ -225,7 +225,7 @@ std::vector<double> u_star_values(quadrature_formula.size());
 
 
     //solution_u_star.print(std::cout);
-
+std::cout<<"fertig "<<Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)<<std::endl;
     const QTrapezoid<1> q_trapez;
     const QIterated<dim> quadrature(q_trapez, degree + 3);
 
