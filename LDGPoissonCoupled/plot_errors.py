@@ -12,7 +12,7 @@ import math
 
 #with open("convergence_results_uncoupled_12_05_finalResults_cons_sol_3_geoconfig_0_gradedMesh_false_coupled_false_paper_solution_true_solution_linear_3_vessel_true_omegaonface_true_LA_false_rad_0.250000_D_0.100000_penalty_5.000000_onedim_gap_true.txt", "r") as f:
 name = "convergence_results_uncoupled_12_05_finalResults_cons_sol_3_geoconfig_0_gradedMesh_false_coupled_false_paper_solution_true_solution_linear_3_vessel_true_omegaonface_true_LA_false_rad_0.250000_D_0.100000_penalty_5.000000_onedim_gap_true.txt"
-#name = "convergence_results_test_coupled_16_05_finalResults_cons_sol_3_geoconfig_2_gradedMesh_false_coupled_true_paper_solution_true_solution_linear_3_vessel_false_omegaonface_true_LA_false_rad_0.050000_D_1.000000_penalty_5.000000_onedim_gap_true.txt"
+name = "convergence_results_test_coupled_16_05_finalResults_cons_sol_3_geoconfig_2_gradedMesh_false_coupled_true_paper_solution_true_solution_linear_3_vessel_false_omegaonface_true_LA_false_rad_0.050000_D_1.000000_penalty_5.000000_onedim_gap_true_modified.txt"
 match = re.search(r'geoconfig_(\d+)', name)
 
 geocfg = int(match.group(1))
@@ -132,10 +132,14 @@ for i, key in enumerate(titles):
         y1_exponent = math.log10(d["error_p1"][-2])#math.log10(d["error_p0"][-2]) - abs(math.log10(d["error_p0"][-2])-math.log10(d["error_p1"][-2]))/2
         y1 = pow(10, y1_exponent) #pow(10,-8)
         con_ord = 1
-        if (key == "U_Omega" or key == "u_omega"):
+        if ((key == "U_Omega" and geocfg == 2 ) or key == "u_omega"):
             con_ord = 2
-        elif(key == "Q_Omega" or key == "q_omega" ):
+        elif ((key == "U_Omega" and geocfg == 0 ) or key == "u_omega"):
+            con_ord = 1.5
+        elif((key == "Q_Omega" and geocfg == 2 )or key == "q_omega" ):
             con_ord = 1
+        elif((key == "Q_Omega" and geocfg == 0 )or key == "q_omega" ):
+            con_ord = 0.5
         else:
             con_ord = 1
 
@@ -163,8 +167,12 @@ for i, key in enumerate(titles):
 
         #print("Inkreismittelpunkt:", ix, iy)
 
-
-        ax.text(x1, y2, rf"$\sim h^{con_ord}$", fontsize=12)
+        if(key == "U_Omega" and geocfg == 0 ):
+            ax.text(x1, y2, rf"$\sim h^{{3/2}}$", fontsize=12)
+        elif(key == "Q_Omega" and geocfg == 0 ):
+            ax.text(x1, y2, rf"$\sim h^{{1/2}}$", fontsize=12)
+        else:
+            ax.text(x1, y2, rf"$\sim h^{con_ord}$", fontsize=12)
     else:
         x1 = pow(10,-1.5)
         x2 = pow(10,-1.25)
