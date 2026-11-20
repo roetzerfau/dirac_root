@@ -128,6 +128,9 @@
 #include <sys/resource.h>
 #include <numeric> 
 
+#include <ctime>
+#include <iomanip>
+
 #include "Functions.cc"
 #include "HDG_postprocessing.cc"
 
@@ -913,14 +916,22 @@ if( is_repartioned)
       if (cell->face(face_no)->at_boundary()) {
        double error = 0.000001;
          
-        if((std::abs(p[0] - 0)< error || std::abs(p[0] - 2 * half_length_along_omega)<error) && (geo_conf == GeometryConfiguration::ThreeD_OneD || geo_conf == GeometryConfiguration::TwoD_OneD )&& (constructed_solution >= 2)) {//
-        cell->face(face_no)->set_boundary_id(Neumann);
+#if NEUMANN
+        if((std::abs(p[0] - 0)< error || std::abs(p[0] - 2 * half_length_along_omega)<error) && (geo_conf == GeometryConfiguration::ThreeD_OneD || geo_conf == GeometryConfiguration::TwoD_OneD )&& (constructed_solution >= 2)) 
+        {
+         cell->face(face_no)->set_boundary_id(Neumann);
          //pcout<<"Neumann"<<std::endl;
         }
-        else{
+        else
+        {
+
            cell->face(face_no)->set_boundary_id(Dirichlet);
        //pcout<<"Dirichlet"<<std::endl;
         }
+#else
+         cell->face(face_no)->set_boundary_id(Dirichlet);
+#endif
+
        
       }
        
@@ -1087,9 +1098,6 @@ if(is_repartioned)
         cell_omega->face(face_no)->set_boundary_id(Dirichlet);
         else
        cell_omega->face(face_no)->set_boundary_id(NotDefined);
-
-        //cell_omega->face(face_no)->set_boundary_id(Dirichlet);
-        //cell_omega->face(face_no)->set_boundary_id(Neumann);
       }
 
     }
@@ -1424,7 +1432,10 @@ const FE_Q<dim> fe_level_set(1);
     level_set.reinit(dof_handler_Omega.n_dofs());
  std::array< double, dim > radii_ell = {radii[0],radii[0]};
 
-    const FunctionsOwn::SignedDistanceOwn::Cylinder<dim> signed_distance_cylinder(Point<3>(0,0,0), Tensor<1,3>({1,0,0}),radii[0]);
+    Point<dim> point = Point<dim>();
+    Tensor<1, dim> direction = Tensor<1, dim>();
+    direction[0] = 1.0;
+    const FunctionsOwn::SignedDistanceOwn::Cylinder<dim> signed_distance_cylinder(point, direction,radii[0]);
 
     VectorTools::interpolate(dof_handler_Omega_level_set,
                              signed_distance_cylinder,
@@ -3403,7 +3414,10 @@ const FE_Q<dim> fe_level_set(1);
  std::array< double, dim > radii_ell = {radii[0],radii[0]};
 
 
-  const FunctionsOwn::SignedDistanceOwn::Cylinder<dim> signed_distance_cylinder(Point<3>(0,0,0), Tensor<1,3>({1,0,0}),radii[0]);
+  Point<dim> point = Point<dim>();
+  Tensor<1, dim> direction = Tensor<1, dim>();
+  direction[0] = 1.0;
+  const FunctionsOwn::SignedDistanceOwn::Cylinder<dim> signed_distance_cylinder(point, direction,radii[0]);
 
    
     VectorTools::interpolate(dof_handler_Omega_level_set,
@@ -5838,20 +5852,20 @@ rank_mpi = dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
   
 
- // double errorU_postprocessed = post_process<dim>(triangulation, degree, update_flags, fe_Omega, dof_handler_Omega, solution.block(0), VectorField, Potential, alpha, radius, h_min);
-// std::cout<<"post process rank "<<rank_mpi<<std::endl;
+  double errorU_postprocessed = post_process<dim>(triangulation, degree, update_flags, fe_Omega, dof_handler_Omega, solution.block(0), VectorField, Potential, alpha, radius, h_min);
+  std::cout<<"post process rank "<<rank_mpi<<std::endl;
 
 
 
   std::array<double, 4> results_array = compute_errors();
 
  std::array<double, 5> results_array_post;
-  //results_array[0] = errorU_postprocessed;
+results_array[0] = errorU_postprocessed;
   if(dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD) == 1)
      output_results();
   //std::array<double, 4> results_array;
 results_array_post[0] = results_array[0];
-results_array_post[1] = 0 ;//errorU_postprocessed;
+results_array_post[1] = errorU_postprocessed;
 results_array_post[2] = results_array[1];
 results_array_post[3] = results_array[2];
 results_array_post[4] = results_array[3];
@@ -5916,7 +5930,17 @@ int main(int argc, char *argv[]) {
       std::string solution_linear_string = std::to_string(SOLUTION_SPACE);
       std::string onedim_gap_string = ONEDIM_GAP == 1 ? "true" : "false";;
 
-      std::string name =  "_16_05_finalResults_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
+  auto now = std::time(nullptr);
+    std::tm* today = std::localtime(&now);
+
+    std::ostringstream date;
+    date << std::put_time(today, "%d_%m");
+
+    std::string date_string = date.str();
+
+
+
+      std::string name =  "_"+ date_string +"_finalResults_cons_sol_" + std::to_string(constructed_solution) + "_geoconfig_" + std::to_string(geo_conf) + 
       "_gradedMesh_" + gradedMesh_string + "_coupled_" + coupled_string + "_paper_solution_" + paperSolution_string +"_solution_linear_" + solution_linear_string +
        "_vessel_" + vessel_string +  "_omegaonface_" + omega_on_face_string +  "_LA_" + LA_string + 
        "_rad_" + radius_string + "_D_" + D_string + "_penalty_" + std::to_string(penalty_sigma) + "_onedim_gap_"+ onedim_gap_string;
